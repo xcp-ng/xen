@@ -121,7 +121,12 @@ static inline unsigned long ns2ticks(unsigned long nsec, int shift,
     return (unsigned long) tmp;
 }
 
-static int hpet_next_event(unsigned long delta, int timer)
+/*
+ * Program an HPET channels counter relative to now.  'delta' is specified in
+ * ticks, and should be calculated with ns2ticks().  The channel lock should
+ * be taken and interrupts must be disabled.
+ */
+static int hpet_set_counter(struct hpet_event_channel *ch, unsigned long delta)
 {
     uint32_t cnt, cmp;
     unsigned long flags;
@@ -129,7 +134,7 @@ static int hpet_next_event(unsigned long delta, int timer)
     local_irq_save(flags);
     cnt = hpet_read32(HPET_COUNTER);
     cmp = cnt + delta;
-    hpet_write32(cmp, HPET_Tn_CMP(timer));
+    hpet_write32(cmp, HPET_Tn_CMP(ch->idx));
     cmp = hpet_read32(HPET_COUNTER);
     local_irq_restore(flags);
 
@@ -137,9 +142,12 @@ static int hpet_next_event(unsigned long delta, int timer)
     return ((cmp + 2 - cnt) > delta) ? -ETIME : 0;
 }
 
-static int reprogram_hpet_evt_channel(
-    struct hpet_event_channel *ch,
-    s_time_t expire, s_time_t now, int force)
+/*
+ * Set the time at which an HPET channel should fire.  The channel lock should
+ * be held.
+ */
+static int hpet_program_time(struct hpet_event_channel *ch,
+                             s_time_t expire, s_time_t now, int force)
 {
     int64_t delta;
     int ret;
@@ -170,11 +178,11 @@ static int reprogram_hpet_evt_channel(
     delta = max_t(int64_t, delta, MIN_DELTA_NS);
     delta = ns2ticks(delta, ch->shift, ch->mult);
 
-    ret = hpet_next_event(delta, ch->idx);
+    ret = hpet_set_counter(ch, delta);
     while ( ret && force )
     {
         delta += delta;
-        ret = hpet_next_event(delta, ch->idx);
+        ret = hpet_set_counter(ch, delta);
     }
 
     return ret;
@@ -230,7 +238,7 @@ again:
         spin_lock_irqsave(&ch->lock, flags);
 
         if ( next_event < ch->next_event &&
-             reprogram_hpet_evt_channel(ch, next_event, now, 0) )
+             hpet_program_time(ch, next_event, now, 0) )
             goto again;
 
         spin_unlock_irqrestore(&ch->lock, flags);
@@ -440,6 +448,8 @@ static void __init hpet_fsb_cap_lookup(void)
 
         if ( hpet_assign_irq(ch) == 0 )
             num_hpets_used++;
+        else
+            free_cpumask_var(ch->cpumask);
     }
 
     printk(XENLOG_INFO "HPET: %u timers usable for broadcast (%u total)\n",
@@ -597,6 +607,8 @@ void __init hpet_broadcast_init(void)
         cfg |= HPET_CFG_LEGACY;
         n = 1;
 
+        hpet_events->flags = HPET_EVT_LEGACY;
+
         if ( !force_hpet_broadcast )
             pv_rtc_handler = handle_rtc_once;
     }
@@ -629,9 +641,6 @@ void __init hpet_broadcast_init(void)
         hpet_events[i].msi.msi_attrib.maskbit = 1;
         hpet_events[i].msi.msi_attrib.pos = MSI_TYPE_HPET;
     }
-
-    if ( !num_hpets_used )
-        hpet_events->flags = HPET_EVT_LEGACY;
 }
 
 void hpet_broadcast_resume(void)
@@ -734,7 +743,7 @@ void cf_check hpet_broadcast_enter(void)
      * written by a remote cpu, so the value read earlier is still valid.
      */
     if ( deadline < ch->next_event )
-        reprogram_hpet_evt_channel(ch, deadline, NOW(), 1);
+        hpet_program_time(ch, deadline, NOW(), 1);
     spin_unlock(&ch->lock);
 }
 
