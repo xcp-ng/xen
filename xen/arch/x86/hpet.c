@@ -21,22 +21,22 @@
 #define MAX_DELTA_NS MILLISECS(10*1000)
 #define MIN_DELTA_NS MICROSECS(20)
 
-#define HPET_EVT_DISABLE_BIT 1
+#define HPET_EVT_DISABLE_BIT 0
 #define HPET_EVT_DISABLE    (1 << HPET_EVT_DISABLE_BIT)
-#define HPET_EVT_LEGACY_BIT  2
+#define HPET_EVT_LEGACY_BIT  1
 #define HPET_EVT_LEGACY     (1 << HPET_EVT_LEGACY_BIT)
 
 struct hpet_event_channel
 {
-    unsigned long mult;
-    int           shift;
-    s_time_t      next_event;
-    cpumask_var_t cpumask;
-    spinlock_t    lock;
-    unsigned int idx;   /* physical channel idx */
-    unsigned int cpu;   /* msi target */
-    struct msi_desc msi;/* msi state */
-    unsigned int flags; /* HPET_EVT_x */
+    unsigned long   mult;       /* tick <-> time conversion */
+    unsigned int    shift;      /* tick <-> time conversion */
+    unsigned int    flags;      /* HPET_EVT_x */
+    s_time_t        next_event; /* expected time of next interrupt */
+    unsigned int    idx;        /* HPET counter index */
+    unsigned int    cpu;        /* owner of channel (or -1) */
+    struct msi_desc msi;        /* msi state */
+    cpumask_var_t   cpumask;    /* cpus wishing to be woken */
+    spinlock_t      lock;
 } __cacheline_aligned;
 static struct hpet_event_channel *__read_mostly hpet_events;
 
@@ -135,14 +135,13 @@ static inline unsigned long ns2ticks(unsigned long nsec, int shift,
 static int hpet_set_counter(struct hpet_event_channel *ch, unsigned long delta)
 {
     uint32_t cnt, cmp;
-    unsigned long flags;
 
-    local_irq_save(flags);
+    ASSERT(!local_irq_is_enabled());
+
     cnt = hpet_read32(HPET_COUNTER);
     cmp = cnt + delta;
     hpet_write32(cmp, HPET_Tn_CMP(ch->idx));
     cmp = hpet_read32(HPET_COUNTER);
-    local_irq_restore(flags);
 
     /* Are we within two ticks of the deadline passing? Then we may miss. */
     return ((cmp + 2 - cnt) > delta) ? -ETIME : 0;
