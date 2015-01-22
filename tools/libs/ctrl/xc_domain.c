@@ -607,6 +607,7 @@ int xc_shadow_control(xc_interface *xch,
 {
     int rc;
     DECLARE_DOMCTL;
+    int retries = 10; /* Retry for approx 100 ms. */
 
     memset(&domctl, 0, sizeof(domctl));
 
@@ -616,7 +617,17 @@ int xc_shadow_control(xc_interface *xch,
     domctl.u.shadow_op.mb     = mb ? *mb : 0;
     domctl.u.shadow_op.mode   = mode;
 
-    rc = do_domctl(xch, &domctl);
+    for (;;) {
+        rc = do_domctl(xch, &domctl);
+        if ( rc >= 0 || errno != EBUSY )
+            break;
+
+        if ( --retries == 0 ) {
+            PERROR("Shadow op %u still busy", sop);
+            return rc;
+        }
+        usleep(10000);
+    }
 
     if ( mb )
         *mb = domctl.u.shadow_op.mb;
@@ -643,12 +654,23 @@ long long xc_logdirty_control(xc_interface *xch,
         }
     };
     DECLARE_HYPERCALL_BUFFER_ARGUMENT(dirty_bitmap);
+    int retries = 10; /* Retry for approx 100 ms. */
 
     if ( dirty_bitmap )
         set_xen_guest_handle(domctl.u.shadow_op.dirty_bitmap,
                                 dirty_bitmap);
 
-    rc = do_domctl(xch, &domctl);
+    for (;;) {
+        rc = do_domctl(xch, &domctl);
+        if ( rc >= 0 || errno != EBUSY )
+            break;
+
+        if ( --retries == 0 ) {
+            PERROR("Shadow op %u still busy", sop);
+            return rc;
+        }
+        usleep(10000);
+    }
 
     if ( stats )
         memcpy(stats, &domctl.u.shadow_op.stats,
