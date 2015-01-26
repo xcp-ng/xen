@@ -487,12 +487,6 @@ DO(vm_assist)(unsigned int cmd, unsigned int type)
 }
 #endif
 
-DO(ni_hypercall)(void)
-{
-    /* No-op hypercall. */
-    return -ENOSYS;
-}
-
 /*
  * Local variables:
  * mode: C
