@@ -5,7 +5,11 @@
 #include <xen/types.h>
 #endif
 
-extern const bool_t efi_enabled;
+/* If true then Xen runs on EFI platform. */
+extern bool_t efi_platform;
+
+/* If true then Xen was loaded by native EFI loader as PE application. */
+extern bool_t efi_loader;
 
 #define EFI_INVALID_TABLE_ADDR (~0UL)
 
