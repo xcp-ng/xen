@@ -8,6 +8,7 @@
 #include <asm/page.h>
 #include <asm/msr.h>
 #include <asm/cpufeature.h>
+#include <asm/processor.h>
 
         .text
         .code32
@@ -58,6 +59,9 @@ multiboot1_header_end:
         .long   .Lmultiboot2_info_req_end - .Lmultiboot2_info_req
         .long   MULTIBOOT2_TAG_TYPE_BASIC_MEMINFO
         .long   MULTIBOOT2_TAG_TYPE_MMAP
+        .long   MULTIBOOT2_TAG_TYPE_EFI_BS
+        .long   MULTIBOOT2_TAG_TYPE_EFI64
+        .long   MULTIBOOT2_TAG_TYPE_EFI64_IH
 .Lmultiboot2_info_req_end:
 
         .align  MULTIBOOT2_TAG_ALIGN
@@ -81,6 +85,19 @@ multiboot1_header_end:
         .long   0 /* Number of the lines - no preference. */
         .long   0 /* Number of bits per pixel - no preference. */
 
+        /* Do not disable EFI boot services. */
+        .align  MULTIBOOT2_TAG_ALIGN
+        .short  MULTIBOOT2_HEADER_TAG_EFI_BS
+        .short  MULTIBOOT2_HEADER_TAG_OPTIONAL
+        .long   8 /* Tag size. */
+
+        /* EFI64 entry point. */
+        .align  MULTIBOOT2_TAG_ALIGN
+        .short  MULTIBOOT2_HEADER_TAG_ENTRY_ADDRESS_EFI64
+        .short  MULTIBOOT2_HEADER_TAG_OPTIONAL
+        .long   12 /* Tag size. */
+        .long   sym_phys(__efi64_start)
+
         /* Multiboot2 header end tag. */
         .align  MULTIBOOT2_TAG_ALIGN
         .short  MULTIBOOT2_HEADER_TAG_END
@@ -95,6 +112,17 @@ multiboot1_header_end:
 gdt_boot_descr:
         .word   6*8-1
         .long   sym_phys(trampoline_gdt)
+        .long   0 /* Needed for 64-bit lgdt */
+
+cs32_switch_addr:
+        .long   sym_phys(cs32_switch)
+        .long   BOOT_CS32
+
+efi_st:
+        .quad   0
+
+efi_ih:
+        .quad   0
 
 .Lbad_cpu_msg: .asciz "ERR: Not a 64-bit CPU!"
 .Lbad_ldr_msg: .asciz "ERR: Not a Multiboot bootloader!"
@@ -125,6 +153,133 @@ print_err:
 .Lhalt: hlt
         jmp     .Lhalt
 
+        .code64
+
+__efi64_start:
+        cld
+
+        /* Bootloaders may set multiboot[12].mem_lower to a nonzero value */
+        xor     %edx,%edx
+
+        /* Check for Multiboot2 bootloader */
+        cmp     $MULTIBOOT2_BOOTLOADER_MAGIC,%eax
+        je      efi_multiboot2_proto
+
+        jmp     not_multiboot
+
+efi_multiboot2_proto:
+        /* Skip Multiboot2 information fixed part */
+        lea     MB2_fixed_sizeof(%ebx),%ecx
+
+0:
+        /* Get mem_lower from Multiboot2 information */
+        cmpl    $MULTIBOOT2_TAG_TYPE_BASIC_MEMINFO,(%ecx)
+        jne     1f
+
+        mov     MB2_mem_lower(%ecx),%edx
+        jmp     4f
+
+1:
+        /* Get EFI SystemTable address from Multiboot2 information */
+        cmpl    $MULTIBOOT2_TAG_TYPE_EFI64,(%ecx)
+        jne     2f
+
+        lea     MB2_efi64_st(%ecx),%esi
+        lea     efi_st(%rip),%edi
+        movsq
+
+        /* Do not go into real mode on EFI platform */
+        movb    $1,skip_realmode(%rip)
+
+        jmp     4f
+
+2:
+        /* Get EFI ImageHandle address from Multiboot2 information */
+        cmpl    $MULTIBOOT2_TAG_TYPE_EFI64_IH,(%ecx)
+        jne     3f
+
+        lea     MB2_efi64_ih(%ecx),%esi
+        lea     efi_ih(%rip),%edi
+        movsq
+        jmp     4f
+
+3:
+        /* Is it the end of Multiboot2 information? */
+        cmpl    $MULTIBOOT2_TAG_TYPE_END,(%ecx)
+        je      run_bs
+
+4:
+        /* Go to next Multiboot2 information tag */
+        add     MB2_tag_size(%ecx),%ecx
+        add     $(MULTIBOOT2_TAG_ALIGN-1),%ecx
+        and     $~(MULTIBOOT2_TAG_ALIGN-1),%ecx
+        jmp     0b
+
+run_bs:
+        push    %rax
+        push    %rdx
+
+        /* Initialize BSS (no nasty surprises!) */
+        lea     __bss_start(%rip),%rdi
+        lea     _end(%rip),%rcx
+        sub     %rdi,%rcx
+        xor     %rax,%rax
+        rep     stosb
+
+        mov     efi_ih(%rip),%rdi   /* EFI ImageHandle */
+        mov     efi_st(%rip),%rsi   /* EFI SystemTable */
+        call    efi_multiboot2
+
+        pop     %rcx
+        pop     %rax
+
+        shl     $10-4,%rcx          /* Convert multiboot2.mem_lower to bytes/16 */
+
+        cli
+
+        /* Initialise GDT */
+        lgdt    gdt_boot_descr(%rip)
+
+        /* Reload code selector */
+        ljmpl   *cs32_switch_addr(%rip)
+
+        .code32
+
+cs32_switch:
+        /* Initialise basic data segments */
+        mov     $BOOT_DS,%edx
+        mov     %edx,%ds
+        mov     %edx,%es
+        mov     %edx,%fs
+        mov     %edx,%gs
+        mov     %edx,%ss
+
+        mov     $sym_phys(cpu0_stack)+1024,%esp
+
+        /* Disable paging */
+        mov     %cr0,%edx
+        and     $(~X86_CR0_PG),%edx
+        mov     %edx,%cr0
+
+        push    %eax
+        push    %ecx
+
+        /* Disable Long Mode */
+        mov     $MSR_EFER,%ecx
+        rdmsr
+        and     $(~EFER_LME),%eax
+        wrmsr
+
+        pop     %ecx
+        pop     %eax
+
+        /* Turn off PAE */
+        mov     %cr4,%edx
+        and     $(~X86_CR4_PAE),%edx
+        mov     %edx,%cr4
+
+        jmp     trampoline_setup
+
 __start:
         cld
         cli
@@ -152,10 +307,10 @@ __start:
 multiboot1_proto:
         /* Get mem_lower from Multiboot information */
         testb   $MBI_MEMLIMITS,(%ebx)
-        jz      trampoline_setup    /* not available? BDA value will be fine */
+        jz      bios_platform       /* not available? BDA value will be fine */
 
         mov     MB_mem_lower(%ebx),%edx
-        jmp     trampoline_setup
+        jmp     bios_platform
 
 multiboot2_proto:
         /* Skip Multiboot2 information fixed part */
@@ -167,12 +322,12 @@ multiboot2_proto:
         jne     1f
 
         mov     MB2_mem_lower(%ecx),%edx
-        jmp     trampoline_setup
+        jmp     bios_platform
 
 1:
         /* Is it the end of Multiboot2 information? */
         cmpl    $MULTIBOOT2_TAG_TYPE_END,(%ecx)
-        je      trampoline_setup
+        je      bios_platform
 
         /* Go to next Multiboot2 information tag */
         add     MB2_tag_size(%ecx),%ecx
@@ -180,7 +335,7 @@ multiboot2_proto:
         and     $~(MULTIBOOT2_TAG_ALIGN-1),%ecx
         jmp     0b
 
-trampoline_setup:
+bios_platform:
         /* Set up trampoline segment 64k below EBDA */
         movzwl  0x40e,%ecx          /* EBDA segment */
         cmp     $0xa000,%ecx        /* sanity check (high) */
@@ -196,12 +351,13 @@ trampoline_setup:
          * multiboot structure (if available) and use the smallest.
          */
         cmp     $0x100,%edx         /* is the multiboot value too small? */
-        jb      2f                  /* if so, do not use it */
+        jb      trampoline_setup    /* if so, do not use it */
         shl     $10-4,%edx
         cmp     %ecx,%edx           /* compare with BDA value */
         cmovb   %edx,%ecx           /* and use the smaller */
 
-2:      /* Reserve 64kb for the trampoline */
+trampoline_setup:
+        /* Reserve 64kb for the trampoline */
         sub     $0x1000,%ecx
 
         /* From arch/x86/smpboot.c: start_eip had better be page-aligned! */
@@ -216,6 +372,9 @@ trampoline_setup:
         call    reloc               /* %ecx contains trampoline address */
         mov     %eax,sym_phys(multiboot_ptr)
 
+        cmpb    $1,sym_phys(skip_realmode)
+        je      1f
+
         /* Initialize BSS (no nasty surprises!) */
         mov     $sym_phys(__bss_start),%edi
         mov     $sym_phys(__bss_end),%ecx
@@ -223,6 +382,7 @@ trampoline_setup:
         xor     %eax,%eax
         rep     stosb
 
+1:
         /* Interrogate CPU extended features via CPUID. */
         mov     $0x80000000,%eax
         cpuid
