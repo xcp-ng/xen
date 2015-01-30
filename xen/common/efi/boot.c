@@ -1246,6 +1246,11 @@ void __init efi_init_memory(void)
     } *extra, *extra_head = NULL;
 #endif
 
+#ifndef CONFIG_ARM /* TODO - disabled until implemented on ARM */
+    if ( !efi_platform )
+        return;
+#endif
+
     printk(XENLOG_INFO "EFI memory map:%s\n",
            map_bs ? " (mapping BootServices)" : "");
     for ( i = 0; i < efi_memmap_size; i += efi_mdesc_size )
