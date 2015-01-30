@@ -1,6 +1,7 @@
 obj-bin-y += head.o
 
-RELOC_DEPS = $(BASEDIR)/include/asm-x86/config.h $(BASEDIR)/include/xen/multiboot.h
+RELOC_DEPS = $(BASEDIR)/include/asm-x86/config.h $(BASEDIR)/include/xen/compiler.h \
+	     $(BASEDIR)/include/xen/multiboot.h $(BASEDIR)/include/xen/multiboot2.h
 
 head.o: reloc.S
 
