@@ -243,6 +243,9 @@ static void *__init efi_arch_allocate_mmap_buffer(UINTN map_size)
 
 static void __init efi_arch_pre_exit_boot(void)
 {
+    if ( !efi_loader )
+        return;
+
     if ( !trampoline_phys )
     {
         if ( !cfg.addr )
@@ -681,6 +684,32 @@ static bool_t __init efi_arch_use_config_file(EFI_SYSTEM_TABLE *SystemTable)
 }
 
 static void __init efi_arch_flush_dcache_area(const void *vaddr, UINTN size) { }
+
+void __init efi_multiboot2(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
+{
+    EFI_GRAPHICS_OUTPUT_PROTOCOL *gop;
+    UINTN cols, gop_mode = ~0, rows;
+
+    efi_platform = 1;
+    efi_loader = 0;
+
+    efi_init(ImageHandle, SystemTable);
+
+    efi_console_set_mode();
+
+    if ( StdOut->QueryMode(StdOut, StdOut->Mode->Mode,
+                           &cols, &rows) == EFI_SUCCESS )
+        efi_arch_console_init(cols, rows);
+
+    gop = efi_get_gop();
+    gop_mode = efi_find_gop_mode(gop, 0, 0, 0);
+    efi_arch_edd();
+    efi_tables();
+    setup_efi_pci();
+    efi_variables();
+    efi_set_gop_mode(gop, gop_mode);
+    efi_exit_boot(ImageHandle, SystemTable);
+}
 
 /*
  * Local variables:

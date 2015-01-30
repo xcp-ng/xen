@@ -730,20 +730,23 @@ void __init noreturn __start_xen(unsigned long mbi_p)
     if ( !(mbi->flags & MBI_MODULES) || (mbi->mods_count == 0) )
         panic("dom0 kernel not specified. Check bootloader configuration.");
 
-    if ( efi_loader )
+    if ( efi_platform )
     {
-        set_pdx_range(xen_phys_start >> PAGE_SHIFT,
-                      (xen_phys_start + BOOTSTRAP_MAP_BASE) >> PAGE_SHIFT);
+        if ( efi_loader )
+        {
+            set_pdx_range(xen_phys_start >> PAGE_SHIFT,
+                          (xen_phys_start + BOOTSTRAP_MAP_BASE) >> PAGE_SHIFT);
 
-        /* Clean up boot loader identity mappings. */
-        destroy_xen_mappings(xen_phys_start,
-                             xen_phys_start + BOOTSTRAP_MAP_BASE);
+            /* Clean up boot loader identity mappings. */
+            destroy_xen_mappings(xen_phys_start,
+                                 xen_phys_start + BOOTSTRAP_MAP_BASE);
 
-        /* Make boot page tables match non-EFI boot. */
-        l3_bootmap[l3_table_offset(BOOTSTRAP_MAP_BASE)] =
-            l3e_from_paddr(__pa(l2_bootmap), __PAGE_HYPERVISOR);
+            /* Make boot page tables match non-EFI boot. */
+            l3_bootmap[l3_table_offset(BOOTSTRAP_MAP_BASE)] =
+                l3e_from_paddr(__pa(l2_bootmap), __PAGE_HYPERVISOR);
+        }
 
-        memmap_type = loader;
+        memmap_type = "EFI";
     }
     else if ( e820_raw_nr != 0 )
     {

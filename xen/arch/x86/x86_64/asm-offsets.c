@@ -180,6 +180,8 @@ void __dummy__(void)
     DEFINE(MB2_fixed_sizeof, sizeof(multiboot2_fixed_t));
     OFFSET(MB2_tag_size, multiboot2_tag_t, size);
     OFFSET(MB2_mem_lower, multiboot2_tag_basic_meminfo_t, mem_lower);
+    OFFSET(MB2_efi64_st, multiboot2_tag_efi64_t, pointer);
+    OFFSET(MB2_efi64_ih, multiboot2_tag_efi64_ih_t, pointer);
 
     OFFSET(DOMAIN_vm_assist, struct domain, vm_assist);
 }
