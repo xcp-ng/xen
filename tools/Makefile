@@ -286,3 +286,4 @@ endif
 
 
 SUBDIRS-y += xenguest
+SUBDIRS-y += vmdebug
