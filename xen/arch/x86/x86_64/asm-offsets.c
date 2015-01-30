@@ -13,6 +13,7 @@
 #include <asm/fixmap.h>
 #include <asm/hardirq.h>
 #include <xen/multiboot.h>
+#include <xen/multiboot2.h>
 
 #define DEFINE(_sym, _val)                                                 \
     asm volatile ("\n.ascii\"==>#define " #_sym " %0 /* " #_val " */<==\"" \
@@ -176,6 +177,11 @@ void __dummy__(void)
     OFFSET(MB_flags, multiboot_info_t, flags);
     OFFSET(MB_cmdline, multiboot_info_t, cmdline);
     OFFSET(MB_mem_lower, multiboot_info_t, mem_lower);
+    BLANK();
+
+    DEFINE(MB2_fixed_sizeof, sizeof(multiboot2_fixed_t));
+    OFFSET(MB2_tag_size, multiboot2_tag_t, size);
+    OFFSET(MB2_mem_lower, multiboot2_tag_basic_meminfo_t, mem_lower);
 
     OFFSET(DOMAIN_vm_assist, struct domain, vm_assist);
 }
