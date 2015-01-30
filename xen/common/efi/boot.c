@@ -934,6 +934,11 @@ efi_start(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     char *option_str;
     bool_t use_cfg_file;
 
+#ifndef CONFIG_ARM /* TODO - disabled until implemented on ARM */
+    efi_platform = 1;
+    efi_loader = 1;
+#endif
+
     efi_init(ImageHandle, SystemTable);
 
     use_cfg_file = efi_arch_use_config_file(SystemTable);
