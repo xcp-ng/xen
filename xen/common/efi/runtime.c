@@ -33,7 +33,8 @@ void efi_rs_leave(struct efi_rs_state *);
  * Currently runtime services are not implemented on ARM. To boot Xen with ACPI,
  * set efi_enabled to 1, so that Xen can get the ACPI root pointer from EFI.
  */
-const bool_t efi_enabled = 1;
+bool_t efi_platform = 0;
+bool_t efi_loader = 0;
 
 #ifndef CONFIG_ARM
 # include <asm/i387.h>

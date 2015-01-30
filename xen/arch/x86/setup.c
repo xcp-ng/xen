@@ -448,7 +448,7 @@ static void __init parse_video_info(void)
     struct boot_video_info *bvi = &bootsym(boot_vid_info);
 
     /* The EFI loader fills vga_console_info directly. */
-    if ( efi_enabled )
+    if ( efi_platform )
         return;
 
     if ( (bvi->orig_video_isVGA == 1) && (bvi->orig_video_mode == 3) )
@@ -745,7 +745,7 @@ void __init noreturn __start_xen(unsigned long mbi_p)
     if ( !(mbi->flags & MBI_MODULES) || (mbi->mods_count == 0) )
         panic("dom0 kernel not specified. Check bootloader configuration.");
 
-    if ( efi_enabled )
+    if ( efi_loader )
     {
         set_pdx_range(xen_phys_start >> PAGE_SHIFT,
                       (xen_phys_start + BOOTSTRAP_MAP_BASE) >> PAGE_SHIFT);
@@ -829,7 +829,7 @@ void __init noreturn __start_xen(unsigned long mbi_p)
     /* Sanitise the raw E820 map to produce a final clean version. */
     max_page = raw_max_page = init_e820(memmap_type, e820_raw, &e820_raw_nr);
 
-    if ( !efi_enabled )
+    if ( !efi_platform )
     {
         /*
          * Supplement the heuristics in l1tf_calculations() by assuming that
@@ -868,7 +868,7 @@ void __init noreturn __start_xen(unsigned long mbi_p)
      * we can relocate the dom0 kernel and other multiboot modules. Also, on
      * x86/64, we relocate Xen to higher memory.
      */
-    for ( i = 0; !efi_enabled && i < mbi->mods_count; i++ )
+    for ( i = 0; !efi_loader && i < mbi->mods_count; i++ )
     {
         if ( mod[i].mod_start & (PAGE_SIZE - 1) )
             panic("Bootloader didn't honor module alignment request.");
@@ -877,7 +877,7 @@ void __init noreturn __start_xen(unsigned long mbi_p)
         mod[i].reserved = 0;
     }
 
-    if ( efi_enabled )
+    if ( efi_loader )
     {
         /*
          * This needs to remain in sync with xen_in_range() and the
@@ -1070,7 +1070,7 @@ void __init noreturn __start_xen(unsigned long mbi_p)
 
             /* Don't overlap with other modules (or Xen itself). */
             end = consider_modules(s, e, size, mod,
-                                   mbi->mods_count + efi_enabled, j);
+                                   mbi->mods_count + efi_loader, j);
 
             if ( highmem_start && end > highmem_start )
                 continue;
@@ -1097,7 +1097,7 @@ void __init noreturn __start_xen(unsigned long mbi_p)
         {
             /* Don't overlap with modules. */
             e = consider_modules(s, e, PAGE_ALIGN(kexec_crash_area.size),
-                                 mod, mbi->mods_count + efi_enabled, -1);
+                                 mod, mbi->mods_count + efi_loader, -1);
             if ( s >= e )
                 break;
             if ( e > kexec_crash_area_limit )
@@ -1123,7 +1123,7 @@ void __init noreturn __start_xen(unsigned long mbi_p)
         panic("Not enough memory to relocate Xen.");
 
     /* This needs to remain in sync with xen_in_range(). */
-    reserve_e820_ram(&boot_e820, efi_enabled ? mbi->mem_upper : __pa(_stext),
+    reserve_e820_ram(&boot_e820, efi_loader ? mbi->mem_upper : __pa(_stext),
                      __pa(__2M_rwdata_end));
 
     /* Late kexec reservation (dynamic start address). */

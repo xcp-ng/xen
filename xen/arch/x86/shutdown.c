@@ -116,9 +116,9 @@ void machine_halt(void)
 static void default_reboot_type(void)
 {
     if ( reboot_type == BOOT_INVALID )
-        reboot_type = efi_enabled ? BOOT_EFI
-                                  : acpi_disabled ? BOOT_KBD
-                                                  : BOOT_ACPI;
+        reboot_type = efi_platform ? BOOT_EFI
+                                   : acpi_disabled ? BOOT_KBD
+                                                   : BOOT_ACPI;
 }
 
 static int __init override_reboot(struct dmi_system_id *d)

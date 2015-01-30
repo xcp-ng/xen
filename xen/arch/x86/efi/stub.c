@@ -4,8 +4,9 @@
 #include <xen/lib.h>
 #include <asm/page.h>
 
-#ifndef efi_enabled
-const bool_t efi_enabled = 0;
+#ifndef efi_platform
+bool_t efi_platform = 0;
+bool_t efi_loader = 0;
 #endif
 
 void __init efi_init_memory(void) { }
