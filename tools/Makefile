@@ -291,3 +291,4 @@ subtree-force-update-all:
 
 
 SUBDIRS-y += xenguest
+SUBDIRS-y += vmdebug
