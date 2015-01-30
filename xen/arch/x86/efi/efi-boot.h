@@ -119,9 +119,35 @@ static void __init relocate_trampoline(unsigned long phys)
         *(u16 *)(*trampoline_ptr + (long)trampoline_ptr) = phys >> 4;
 }
 
+#define __MALLOC_SIZE	65536
+
+static char __malloc_mem[__MALLOC_SIZE];
+static char *__malloc_free = NULL;
+
+static void __init *__malloc(size_t size)
+{
+    void *ptr;
+
+    /*
+     * Init __malloc_free on runtime. Static initialization
+     * will not work because it puts virtual address there.
+     */
+    if ( __malloc_free == NULL )
+        __malloc_free = __malloc_mem;
+
+    ptr = __malloc_free;
+
+    __malloc_free += size;
+
+    if ( __malloc_free - __malloc_mem > sizeof(__malloc_mem) )
+        blexit(L"Out of static memory\r\n");
+
+    return ptr;
+}
+
 static void __init place_string(u32 *addr, const char *s)
 {
-    static char *__initdata alloc = start;
+    char *alloc = NULL;
 
     if ( s && *s )
     {
@@ -129,7 +155,7 @@ static void __init place_string(u32 *addr, const char *s)
         const char *old = (char *)(long)*addr;
         size_t len2 = *addr ? strlen(old) + 1 : 0;
 
-        alloc -= len1 + len2;
+        alloc = __malloc(len1 + len2);
         /*
          * Insert new string before already existing one. This is needed
          * for options passed on the command line to override options from
@@ -212,12 +238,7 @@ static void __init efi_arch_process_memory_map(EFI_SYSTEM_TABLE *SystemTable,
 
 static void *__init efi_arch_allocate_mmap_buffer(UINTN map_size)
 {
-    place_string(&mbi.mem_upper, NULL);
-    mbi.mem_upper -= map_size;
-    mbi.mem_upper &= -__alignof__(EFI_MEMORY_DESCRIPTOR);
-    if ( mbi.mem_upper < xen_phys_start )
-        return NULL;
-    return (void *)(long)mbi.mem_upper;
+    return __malloc(map_size);
 }
 
 static void __init efi_arch_pre_exit_boot(void)
