@@ -195,6 +195,9 @@ int efi_get_info(uint32_t idx, union xenpf_efi_info *info)
 {
     unsigned int i, n;
 
+    if ( !efi_platform )
+        return -ENOSYS;
+
     switch ( idx )
     {
     case XEN_FW_EFI_VERSION:
@@ -329,6 +332,9 @@ int efi_runtime_call(struct xenpf_efi_runtime_call *op)
     unsigned long flags;
     EFI_STATUS status = EFI_NOT_STARTED;
     int rc = 0;
+
+    if ( !efi_platform )
+        return -ENOSYS;
 
     switch ( op->function )
     {
