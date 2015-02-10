@@ -511,6 +511,7 @@ static int hvm_ioreq_server_alloc_rangesets(struct hvm_ioreq_server *s,
 
     for ( i = 0; i < NR_IO_RANGE_TYPES; i++ )
     {
+        unsigned int flags = RANGESETF_prettyprint_hex;
         char *name;
 
         rc = asprintf(&name, "ioreq_server %d %s", s->id,
@@ -521,8 +522,10 @@ static int hvm_ioreq_server_alloc_rangesets(struct hvm_ioreq_server *s,
         if ( rc )
             goto fail;
 
-        s->range[i] = rangeset_new(s->domain, name,
-                                   RANGESETF_prettyprint_hex);
+        if ( i == XEN_DMOP_IO_RANGE_MEMORY )
+            flags |= RANGESETF_unlimited;
+
+        s->range[i] = rangeset_new(s->domain, name, flags);
 
         xfree(name);
 
