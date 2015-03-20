@@ -4,6 +4,7 @@
  * therefore can define arch specific global variables.
  */
 #include <xen/vga.h>
+#include <xen/multiboot2.h>
 #include <asm/e820.h>
 #include <asm/edd.h>
 #include <asm/msr.h>
@@ -709,6 +710,59 @@ void __init efi_multiboot2(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     efi_variables();
     efi_set_gop_mode(gop, gop_mode);
     efi_exit_boot(ImageHandle, SystemTable);
+}
+
+#define ALIGN_UP(addr, align) \
+                (((addr) + (typeof(addr))(align) - 1) & ~((typeof(addr))(align) - 1))
+
+#define get_mb2_data(tag, type, member) (((type *)(tag))->member)
+
+/* 64KB for the trampoline and 32KB for the multiboot2 header */
+#define RELOC_SPACE    0x18000
+
+/*
+ * Find memory below 1MB to use for relocating the trampoline and multiboot2
+ * header.
+ */
+u64 __init efi_multiboot2_find_memory(void *mbi_in)
+{
+    multiboot2_memory_map_t *mmap_src;
+    multiboot2_tag_t *tag;
+    int i;
+
+    /* Skip Multiboot2 information fixed part. */
+    tag = mbi_in + sizeof(multiboot2_fixed_t);
+
+    for ( ; ; )
+    {
+        if ( tag->type == MULTIBOOT2_TAG_TYPE_MMAP )
+        {
+            u32 len;
+
+            len = get_mb2_data(tag, multiboot2_tag_mmap_t, size);
+            len -= sizeof(multiboot2_tag_mmap_t);
+            len += sizeof(((multiboot2_tag_mmap_t){0}).entries);
+            len /= get_mb2_data(tag, multiboot2_tag_mmap_t, entry_size);
+            len *= sizeof(memory_map_t);
+
+            mmap_src = get_mb2_data(tag, multiboot2_tag_mmap_t, entries);
+
+            for ( i = 0; i < len / sizeof(memory_map_t); ++i )
+            {
+                /* Find enough space under 1MB and return an address in KB */
+                if ( mmap_src[i].addr + RELOC_SPACE <= 0x100000 &&
+                     mmap_src[i].type == MULTIBOOT2_MEMORY_AVAILABLE )
+                    return (mmap_src[i].addr + RELOC_SPACE) >> 10;
+            }
+        }
+        else if ( tag->type == MULTIBOOT2_TAG_TYPE_END )
+            break;
+
+        /* Go to next Multiboot2 information tag. */
+        tag = (multiboot2_tag_t *)(ALIGN_UP((u64)tag + tag->size, MULTIBOOT2_TAG_ALIGN));
+    }
+
+    return 0;
 }
 
 /*
