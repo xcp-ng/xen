@@ -144,6 +144,7 @@ static SIMPLE_TEXT_OUTPUT_INTERFACE *__initdata StdErr;
 
 static UINT32 __initdata mdesc_ver;
 static bool __initdata map_bs;
+static bool __initdata map_res = true;
 
 static struct file __initdata cfg;
 static struct file __initdata kernel;
@@ -1524,7 +1525,10 @@ void __init efi_init_memory(void)
              (!(desc->Attribute & EFI_MEMORY_RUNTIME) &&
               (!map_bs ||
                (desc->Type != EfiBootServicesCode &&
-                desc->Type != EfiBootServicesData))) )
+                desc->Type != EfiBootServicesData)) &&
+              (!map_res ||
+               desc->PhysicalStart >= GB(4) ||
+               desc->Type != EfiReservedMemoryType)) )
             continue;
 
         desc->VirtualStart = INVALID_VIRTUAL_ADDRESS;
