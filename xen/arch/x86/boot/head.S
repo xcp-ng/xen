@@ -233,7 +233,20 @@ run_bs:
         pop     %rcx
         pop     %rax
 
-        shl     $10-4,%rcx          /* Convert multiboot2.mem_lower to bytes/16 */
+        /*
+         * If multiboot2.mem_lower is 0, try find some memory below 1MB to use
+         * for the trampoline.
+         */
+        cmp     $0, %rcx
+        jne     0f
+
+        push    %rax
+        mov     %rbx,%rdi           /* Pass in Multiboot2 information */
+        call    efi_multiboot2_find_memory
+        mov     %rax,%rcx           /* Get new address address */
+        pop     %rax
+
+0:      shl     $10-4,%rcx          /* Convert multiboot2.mem_lower to bytes/16 */
 
         cli
 
