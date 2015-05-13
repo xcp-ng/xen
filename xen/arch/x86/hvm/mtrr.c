@@ -62,6 +62,8 @@ static const uint8_t mm_type_tbl[MTRR_NUM_TYPES][PAT_TYPE_NUMS] = {
 #undef RS
 };
 
+DEFINE_PER_CPU(bool, memory_type_changed_ignore);
+
 /*
  * Reverse lookup table, to find a pat type according to MTRR and effective
  * memory type. This table is dynamically generated.
@@ -796,6 +798,9 @@ HVM_REGISTER_SAVE_RESTORE(MTRR, hvm_save_mtrr_msr, hvm_load_mtrr_msr, 1,
 
 void memory_type_changed(struct domain *d)
 {
+    if ( this_cpu(memory_type_changed_ignore) )
+        return;
+
     if ( (is_iommu_enabled(d) || cache_flush_permitted(d)) &&
          d->vcpu && d->vcpu[0] )
     {

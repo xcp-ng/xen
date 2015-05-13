@@ -64,6 +64,15 @@ struct mtrr_state {
 };
 extern struct mtrr_state mtrr_state;
 
+/*
+ * The purpose of the memory_type_changed_ignore cpu flag is to
+ * avoid unecessary cache flushes when doing multiple memory type
+ * operations that may flush the cache. Code can set this flag, do
+ * several memory type operations, clear the flag and then call
+ * memory_type_changed() to flush the cache at the end.
+ */
+DECLARE_PER_CPU(bool, memory_type_changed_ignore);
+
 extern void cf_check mtrr_save_fixed_ranges(void *);
 extern void mtrr_save_state(void);
 extern int mtrr_add(unsigned long base, unsigned long size,
