@@ -319,6 +319,8 @@ int hvm_load(struct domain *d, bool real, hvm_domain_context_t *h)
     else if ( rc )
         return rc;
 
+    this_cpu(memory_type_changed_ignore) = true;
+
     for ( ; ; )
     {
         const char *name;
@@ -331,7 +333,8 @@ int hvm_load(struct domain *d, bool real, hvm_domain_context_t *h)
                    "HVM%d restore: save did not end with a null entry\n",
                    d->domain_id);
             ASSERT(!real);
-            return -ENODATA;
+            rc = -ENODATA;
+            goto out;
         }
 
         /* Read the typecode of the next entry  and check for the end-marker */
@@ -341,7 +344,7 @@ int hvm_load(struct domain *d, bool real, hvm_domain_context_t *h)
             /* Reset cursor for hvm_load(, true, ). */
             if ( !real )
                 h->cur = 0;
-            return 0;
+            goto out;
         }
 
         /* Find the handler for this entry */
@@ -352,7 +355,8 @@ int hvm_load(struct domain *d, bool real, hvm_domain_context_t *h)
             printk(XENLOG_G_ERR "HVM%d restore: unknown entry typecode %u\n",
                    d->domain_id, desc->typecode);
             ASSERT(!real);
-            return -EINVAL;
+            rc = -EINVAL;
+            goto out;
         }
 
         if ( real )
@@ -370,7 +374,10 @@ int hvm_load(struct domain *d, bool real, hvm_domain_context_t *h)
             if ( !check )
             {
                 if ( desc->length > h->size - h->cur - sizeof(*desc) )
-                    return -ENODATA;
+                {
+                    rc = -ENODATA;
+                    goto out;
+                }
                 h->cur += sizeof(*desc) + desc->length;
                 rc = 0;
             }
@@ -382,13 +389,18 @@ int hvm_load(struct domain *d, bool real, hvm_domain_context_t *h)
         {
             printk(XENLOG_G_ERR "HVM restore %pd: failed to %s %s:%u rc %d\n",
                    d, real ? "load" : "check", name, desc->instance, rc);
-            return rc;
+            goto out;
         }
 
         process_pending_softirqs();
     }
 
-    /* Not reached */
+    ASSERT_UNREACHABLE();
+
+ out:
+    this_cpu(memory_type_changed_ignore) = false;
+    memory_type_changed(d);
+    return rc;
 }
 
 int _hvm_init_entry(struct hvm_domain_context *h, uint16_t tc, uint16_t inst,
