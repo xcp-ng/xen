@@ -312,6 +312,8 @@ int hvm_load(struct domain *d, hvm_domain_context_t *h)
         if ( !test_and_set_bit(_VPF_down, &v->pause_flags) )
             vcpu_sleep_nosync(v);
 
+    this_cpu(memory_type_changed_ignore) = true;
+
     for ( ; ; )
     {
         if ( h->size - h->cur < sizeof(struct hvm_save_descriptor) )
@@ -320,13 +322,14 @@ int hvm_load(struct domain *d, hvm_domain_context_t *h)
             printk(XENLOG_G_ERR
                    "HVM%d restore: save did not end with a null entry\n",
                    d->domain_id);
-            return -ENODATA;
+            rc = -ENODATA;
+            goto out;
         }
 
         /* Read the typecode of the next entry  and check for the end-marker */
         desc = (struct hvm_save_descriptor *)(&h->data[h->cur]);
         if ( desc->typecode == 0 )
-            return 0;
+            goto out;
 
         /* Find the handler for this entry */
         if ( (desc->typecode > HVM_SAVE_CODE_MAX) ||
@@ -334,7 +337,8 @@ int hvm_load(struct domain *d, hvm_domain_context_t *h)
         {
             printk(XENLOG_G_ERR "HVM%d restore: unknown entry typecode %u\n",
                    d->domain_id, desc->typecode);
-            return -EINVAL;
+            rc = -EINVAL;
+            goto out;
         }
 
         /* Load the entry */
@@ -345,12 +349,17 @@ int hvm_load(struct domain *d, hvm_domain_context_t *h)
         {
             printk(XENLOG_G_ERR "HVM%d restore: failed to load entry %u/%u rc %d\n",
                    d->domain_id, desc->typecode, desc->instance, rc);
-            return rc;
+            goto out;
         }
         process_pending_softirqs();
     }
 
-    /* Not reached */
+    ASSERT_UNREACHABLE();
+
+ out:
+    this_cpu(memory_type_changed_ignore) = false;
+    memory_type_changed(d);
+    return rc;
 }
 
 int _hvm_init_entry(struct hvm_domain_context *h, uint16_t tc, uint16_t inst,
