@@ -1106,7 +1106,7 @@ out:
         }
     }
 
-    if (!starting)
+    if (!starting && type == LIBXL_DOMAIN_TYPE_PV)
         rc = libxl__device_pci_add_xenstore(gc, domid, pcidev, starting);
     else
         rc = 0;
