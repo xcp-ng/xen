@@ -1413,6 +1413,7 @@ static void pci_add_dm_done(libxl__egc *egc,
     STATE_AO_GC(pas->aodev->ao);
     libxl_ctx *ctx = libxl__gc_owner(gc);
     libxl_domid domid = pas->pci_domid;
+    libxl_domain_type type = libxl__domain_type(gc, domid);
     char *sysfs_path;
     FILE *f;
     unsigned long long start, end, flags, size;
@@ -1532,7 +1533,8 @@ out_no_irq:
         }
     }
 
-    if (!libxl_get_stubdom_id(CTX, domid))
+    if (!libxl_get_stubdom_id(CTX, domid) &&
+        type == LIBXL_DOMAIN_TYPE_PV)
         rc = libxl__device_pci_add_xenstore(gc, domid, pci, starting);
     else
         rc = 0;
