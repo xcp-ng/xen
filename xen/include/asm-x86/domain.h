@@ -415,6 +415,8 @@ struct arch_domain
 
     /* Emulated devices enabled bitmap. */
     uint32_t emulation_flags;
+
+    spinlock_t rexec_lock;
 } __cacheline_aligned;
 
 #ifdef CONFIG_HVM
@@ -605,6 +607,25 @@ struct arch_vcpu
 
     /* A secondary copy of the vcpu time info. */
     XEN_GUEST_HANDLE(vcpu_time_info_t) time_info_guest;
+
+    struct {
+        unsigned long eip;
+        unsigned long gla;
+    } sse_pg_dirty;
+
+#define REEXECUTION_MAX_DEPTH 8
+    struct rexec_context_t {
+        unsigned long gpa;
+        xenmem_access_t old_access;
+        xenmem_access_t cur_access;
+        bool_t old_single_step;
+    } rexec_context[REEXECUTION_MAX_DEPTH];
+
+    int rexec_level;
+
+    /* Will be true when the vcpu is in VMX root,
+     * false when it is not. */
+    bool_t in_host;
 
     struct arch_vm_event *vm_event;
 
