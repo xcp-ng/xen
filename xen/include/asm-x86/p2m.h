@@ -974,6 +974,10 @@ static inline unsigned int p2m_get_iommu_flags(p2m_type_t p2mt,
     return flags;
 }
 
+int vmx_start_reexecute_instruction(struct vcpu *v,
+                                    unsigned long gpa,
+                                    xenmem_access_t required_access);
+
 int p2m_set_ioreq_server(struct domain *d, unsigned int flags,
                          struct hvm_ioreq_server *s);
 struct hvm_ioreq_server *p2m_get_ioreq_server(struct domain *d,
