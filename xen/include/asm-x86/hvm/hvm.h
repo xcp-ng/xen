@@ -230,6 +230,8 @@ struct hvm_function_table {
     uint64_t (*get_reg)(struct vcpu *v, unsigned int reg);
     void (*set_reg)(struct vcpu *v, unsigned int reg, uint64_t val);
 
+    bool_t (*exited_by_nested_pagefault)(void);
+
     /*
      * Parameters and callbacks for hardware-assisted TSC scaling,
      * which are valid only when the hardware feature is available.
