@@ -851,6 +851,10 @@ static inline unsigned int p2m_get_iommu_flags(p2m_type_t p2mt)
     return flags;
 }
 
+int vmx_start_reexecute_instruction(struct vcpu *v,
+                                    unsigned long gpa,
+                                    xenmem_access_t required_access);
+
 #endif /* _XEN_P2M_H */
 
 /*

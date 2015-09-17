@@ -2231,6 +2231,21 @@ static bool_t vmx_vcpu_emulate_ve(struct vcpu *v)
     return rc;
 }
 
+static bool_t vmx_exited_by_nested_pagefault(void)
+{
+    unsigned long exit_qualification, exit_reason;
+
+    __vmread(VM_EXIT_REASON, &exit_reason);
+    ASSERT(exit_reason == EXIT_REASON_EPT_VIOLATION);
+
+    __vmread(EXIT_QUALIFICATION, &exit_qualification);
+
+    if ( (exit_qualification & EPT_GLA_FAULT) == 0 )
+        return 0;
+
+    return 1;
+}
+
 static int vmx_set_mode(struct vcpu *v, int mode)
 {
     unsigned long attr;
@@ -2334,6 +2349,7 @@ static struct hvm_function_table __initdata vmx_function_table = {
     .altp2m_vcpu_update_vmfunc_ve = vmx_vcpu_update_vmfunc_ve,
     .altp2m_vcpu_emulate_ve = vmx_vcpu_emulate_ve,
     .altp2m_vcpu_emulate_vmfunc = vmx_vcpu_emulate_vmfunc,
+    .exited_by_nested_pagefault = vmx_exited_by_nested_pagefault,
     .tsc_scaling = {
         .max_ratio = VMX_TSC_MULTIPLIER_MAX,
         .setup     = vmx_setup_tsc_scaling,
@@ -3504,11 +3520,61 @@ static int vmx_handle_apic_write(void)
     return vlapic_apicv_write(current, exit_qualification & 0xfff);
 }
 
+static int vmx_stop_reexecute_instruction(struct vcpu *v)
+{
+    int ret = 0, i;
+    struct vcpu *a;
+
+    if ( 0 == v->arch.rexec_level )
+        return 0;
+
+    /* Step 1: Restore original EPT access rights for each GPA. */
+    for ( i = v->arch.rexec_level - 1; i >= 0; i-- )
+    {
+        if ( 0 != p2m_set_mem_access(v->domain,
+                                     _gfn(v->arch.rexec_context[i].gpa >> PAGE_SHIFT),
+                                     1, 0, MEMOP_CMD_MASK, v->arch.rexec_context[i].old_access, 0) )
+        {
+            ret = -1;
+            return ret;
+        }
+
+        v->arch.rexec_context[i].gpa = 0;
+        v->arch.hvm_vcpu.single_step = v->arch.rexec_context[i].old_single_step;
+    }
+
+    spin_lock(&v->domain->arch.rexec_lock);
+
+    /* Step 2: Reset the nesting level to zero. */
+    v->arch.rexec_level = 0;
+
+    /* Step 3: Resume all other VCPUs. */
+    for_each_vcpu ( v->domain, a )
+    {
+        if ( a == v )
+            continue;
+
+        /* Unpause the VCPU. */
+        vcpu_unpause(a);
+    }
+
+    /* Step 4: Remove the MONITOR trap flag.
+     * - this is already done when handling the exit. */
+
+    /* Step 5: We're done! */
+
+    spin_unlock(&v->domain->arch.rexec_lock);
+
+    return ret;
+}
+
 void vmx_vmexit_handler(struct cpu_user_regs *regs)
 {
     unsigned long exit_qualification, exit_reason, idtv_info, intr_info = 0;
     unsigned int vector = 0, mode;
     struct vcpu *v = current;
+
+    v->arch.in_host = 1;
 
     __vmread(GUEST_RIP,    &regs->rip);
     __vmread(GUEST_RSP,    &regs->rsp);
@@ -4040,6 +4106,8 @@ void vmx_vmexit_handler(struct cpu_user_regs *regs)
     case EXIT_REASON_MONITOR_TRAP_FLAG:
         v->arch.hvm_vmx.exec_control &= ~CPU_BASED_MONITOR_TRAP_FLAG;
         vmx_update_cpu_exec_control(v);
+        if ( opt_introspection_extn )
+            vmx_stop_reexecute_instruction(v);
         if ( v->arch.hvm_vcpu.single_step )
         {
             hvm_event_breakpoint(regs->eip, HVM_EVENT_SINGLESTEP_BREAKPOINT);
@@ -4266,6 +4334,8 @@ bool vmx_vmenter_helper(const struct cpu_user_regs *regs)
  out:
     if ( unlikely(curr->arch.hvm_vmx.lbr_flags & LBR_FIXUP_MASK) )
         lbr_fixup();
+
+    curr->arch.in_host = 0;
 
     HVMTRACE_ND(VMENTRY, 0, 1/*cycles*/, 0, 0, 0, 0, 0, 0, 0);
 
