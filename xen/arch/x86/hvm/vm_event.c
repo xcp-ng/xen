@@ -23,6 +23,7 @@
 #include <xen/sched.h>
 #include <xen/vm_event.h>
 #include <asm/hvm/support.h>
+#include <asm/p2m.h>
 #include <asm/vm_event.h>
 
 static void hvm_vm_event_set_registers(const struct vcpu *v)
@@ -86,8 +87,13 @@ void hvm_vm_event_do_resume(struct vcpu *v)
                   VM_EVENT_FLAG_SET_EMUL_INSN_DATA )
             kind = EMUL_KIND_SET_CONTEXT_INSN;
 
-        hvm_emulate_one_vm_event(kind, TRAP_invalid_op,
-                                 X86_EVENT_NO_EC);
+        if ( opt_introspection_extn &&
+             kind == EMUL_KIND_NORMAL && v->arch.vm_event->insn_fetch )
+            vmx_start_reexecute_instruction(v, v->arch.vm_event->gpa,
+                                            XENMEM_access_x);
+        else
+            hvm_emulate_one_vm_event(kind, TRAP_invalid_op,
+                                     X86_EVENT_NO_EC);
 
         v->arch.vm_event->emulate_flags = 0;
     }
