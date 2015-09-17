@@ -278,6 +278,8 @@ struct domain *domain_create(domid_t domid,
 
     TRACE_1D(TRC_DOM0_DOM_ADD, d->domain_id);
 
+    spin_lock_init(&d->arch.rexec_lock);
+
     lock_profile_register_struct(LOCKPROF_TYPE_PERDOM, d, domid, "Domain");
 
     if ( (err = xsm_alloc_security_domain(d)) != 0 )
