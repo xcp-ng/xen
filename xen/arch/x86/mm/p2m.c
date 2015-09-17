@@ -27,6 +27,7 @@
 #include <xen/iommu.h>
 #include <xen/vm_event.h>
 #include <xen/event.h>
+#include <xen/hypercall.h>
 #include <public/vm_event.h>
 #include <asm/domain.h>
 #include <asm/page.h>
@@ -39,6 +40,7 @@
 #include <asm/hvm/svm/amd-iommu-proto.h>
 #include <asm/vm_event.h>
 #include <xsm/xsm.h>
+#include <asm/hvm/hvm.h>
 
 #include "mm-locks.h"
 
@@ -1638,6 +1640,201 @@ void p2m_altp2m_check(struct vcpu *v, uint16_t idx)
         p2m_switch_vcpu_altp2m_by_id(v, idx);
 }
 
+static void p2m_set_ad_bits(struct vcpu *v, struct p2m_domain *p2m,
+                            paddr_t ga)
+{
+    struct hvm_hw_cpu ctxt;
+    uint32_t pfec = 0;
+    const struct paging_mode *pg_mode = v->arch.paging.mode;
+
+    hvm_funcs.save_cpu_ctxt(v, &ctxt);
+
+    if ( guest_cpu_user_regs()->eip == v->arch.sse_pg_dirty.eip
+         && ga == v->arch.sse_pg_dirty.gla )
+    {
+        pfec = 2;
+        pg_mode->p2m_ga_to_gfn(v, p2m, ctxt.cr3, ga, &pfec, NULL);
+    }
+    else
+        pg_mode->p2m_ga_to_gfn(v, p2m, ctxt.cr3, ga, &pfec, NULL);
+
+    v->arch.sse_pg_dirty.eip = guest_cpu_user_regs()->eip;
+    v->arch.sse_pg_dirty.gla = ga;
+}
+
+int vmx_start_reexecute_instruction(struct vcpu *v,
+                                    unsigned long gpa,
+                                    xenmem_access_t required_access)
+{
+    /* NOTE: Some required_accesses may be invalid. For example, one
+     * cannot grant only write access on a given page; read/write
+     * access must be granted instead. These inconsistencies are NOT
+     * checked here. The caller must ensure that "required_access" is
+     * an allowed combination. */
+
+    int ret = 0, i, found = 0, r = 0, w = 0, x = 0, level = 0, leave = 0;
+    xenmem_access_t old_access, new_access;
+    struct vcpu *a;
+
+    spin_lock(&v->domain->arch.rexec_lock);
+
+    level = v->arch.rexec_level;
+
+    /* Step 1: Make sure someone else didn't get to start an
+     * instruction re-execution */
+    for_each_vcpu ( v->domain, a )
+    {
+        /* We're interested in pausing all the VCPUs except self/v. */
+        if ( a == v )
+            continue;
+
+        /* Check if "a" started an instruction re-execution. If so,
+         * return success, as we'll re-execute our instruction later. */
+        if ( 0 != a->arch.rexec_level )
+        {
+            /* We should be paused. */
+            ret = 0;
+            leave = 1;
+            goto release_and_exit;
+        }
+    }
+
+    /* Step 2: Make sure we're not exceeding the max re-execution depth. */
+    if ( level >= REEXECUTION_MAX_DEPTH )
+    {
+        ret = -1;
+        leave = 1;
+        goto release_and_exit;
+    }
+
+    /* Step 2: Pause all the VCPUs, except self. Note that we have to do
+     * this only if we're at nesting level 0; if we're at a higher level
+     * of nested re-exec, the vcpus are already paused. */
+    if ( 0 == level )
+    {
+        for_each_vcpu ( v->domain, a )
+        {
+            /* We're interested in pausing all the VCPUs except self/v. */
+            if ( a == v )
+                continue;
+
+            /* Pause, NO SYNC! We're gonna do our own syncing. */
+            vcpu_pause_nosync(a);
+        }
+
+        /* Step 3: Wait for all the paused VCPUs to actually leave the VMX
+         * non-root realm and enter VMX root. */
+        for_each_vcpu ( v->domain, a )
+        {
+            /* We're interested in pausing all the VCPUs except self/v. */
+            if ( a == v )
+                continue;
+
+            /* Pause, synced. */
+            while ( !a->arch.in_host )
+                cpu_relax();
+        }
+    }
+
+    /* Update the rexecution nexting level. */
+    v->arch.rexec_level++;
+
+release_and_exit:
+    spin_unlock(&v->domain->arch.rexec_lock);
+
+    /* If we've got errors so far, return. */
+    if ( leave )
+        return ret;
+
+    /* Step 4: Save the current gpa & old access rights. Also, check if this
+     * is a "double-fault" on the exact same GPA, in which case, we will
+     * promote the rights of this particular GPA, and try again. */
+    for ( i = 0; i < level; i++ )
+    {
+        if ( (v->arch.rexec_context[i].gpa >> PAGE_SHIFT) ==
+             (gpa >> PAGE_SHIFT) )
+        {
+            /* This GPA is already in the queue. */
+            found = 1;
+
+            switch (v->arch.rexec_context[i].cur_access) {
+                case XENMEM_access_r: r = 1; break;
+                case XENMEM_access_w: w = 1; break;
+                case XENMEM_access_x: x = 1; break;
+                case XENMEM_access_rx: r = x = 1; break;
+                case XENMEM_access_wx: w = x = 1;  break;
+                case XENMEM_access_rw: r = w = 1; break;
+                case XENMEM_access_rwx: r = w = x = 1; break;
+                default: break; /* We don't care about any other case. */
+            }
+        }
+    }
+
+    /* Get the current EPT access rights. They will be restored when we're done.
+     * Note that the restoration is done in reverse-order, in order to ensure
+     * that the original access rights are restore correctly. Otherwise, we may
+     * restore whatever access rights were modified by another re-execution
+     * request, and that would be bad. */
+    if ( 0 != p2m_get_mem_access(v->domain, _gfn(gpa >> PAGE_SHIFT), &old_access) )
+        return -1;
+
+    v->arch.rexec_context[level].gpa = gpa;
+    v->arch.rexec_context[level].old_access = old_access;
+    v->arch.rexec_context[level].old_single_step = v->arch.hvm_vcpu.single_step;
+
+    /* Step 5: Make the GPA with the required access, so we can re-execute
+     * the instruction. */
+    switch ( required_access )
+    {
+        case XENMEM_access_r: r = 1; break;
+        case XENMEM_access_w: w = 1; break;
+        case XENMEM_access_x: x = 1; break;
+        case XENMEM_access_rx: r = x = 1; break;
+        case XENMEM_access_wx: w = x = 1;  break;
+        case XENMEM_access_rw: r = w = 1; break;
+        case XENMEM_access_rwx: r = w = x = 1; break;
+        default: break; /* We don't care about any other case. */
+    }
+
+    /* Now transform our RWX values in a XENMEM_access_* constant. */
+    if ( 0 == r && 0 == w && 0 == x )
+        new_access = XENMEM_access_n;
+    else if ( 0 == r && 0 == w && 1 == x )
+        new_access = XENMEM_access_x;
+    else if ( 0 == r && 1 == w && 0 == x )
+        new_access = XENMEM_access_w;
+    else if ( 0 == r && 1 == w && 1 == x )
+        new_access = XENMEM_access_wx;
+    else if ( 1 == r && 0 == w && 0 == x )
+        new_access = XENMEM_access_r;
+    else if ( 1 == r && 0 == w && 1 == x )
+        new_access = XENMEM_access_rx;
+    else if ( 1 == r && 1 == w && 0 == x )
+        new_access = XENMEM_access_rw;
+    else if ( 1 == r && 1 == w && 1 == x )
+        new_access = XENMEM_access_rwx;
+    else
+        new_access = required_access; /* Should never get here. */
+
+    /* And save the current access rights. */
+    v->arch.rexec_context[level].cur_access = new_access;
+
+    /* Apply the changes inside the EPT. */
+    if ( 0 != p2m_set_mem_access(v->domain, _gfn(gpa >> PAGE_SHIFT),
+                                 1, 0, MEMOP_CMD_MASK, new_access, 0) )
+        return -1;
+
+    /* Step 6: Reconfigure the VMCS, so it suits our needs. We want a
+     * VM-exit to be generated after the instruction has been
+     * successfully re-executed. */
+    if ( 0 == level )
+        v->arch.hvm_vcpu.single_step = 1;
+
+    /* Step 8: We should be done! */
+
+    return ret;
+}
+
 bool_t p2m_mem_access_check(paddr_t gpa, unsigned long gla,
                             struct npfec npfec,
                             vm_event_request_t **req_ptr)
@@ -1709,11 +1906,27 @@ bool_t p2m_mem_access_check(paddr_t gpa, unsigned long gla,
         }
     }
 
+    if ( opt_introspection_extn &&
+         vm_event_check_ring(&d->vm_event->monitor) &&
+         hvm_funcs.exited_by_nested_pagefault &&
+         !hvm_funcs.exited_by_nested_pagefault() ) /* don't send a mem_event */
+    {
+        v->arch.vm_event->emulate_flags = 0;
+        if ( gpa == 0 )
+            p2m_set_ad_bits(v, p2m, gla);
+        else
+            vmx_start_reexecute_instruction(v, gpa, XENMEM_access_rw);
+        return 1;
+    }
+
     *req_ptr = NULL;
     req = xzalloc(vm_event_request_t);
     if ( req )
     {
         *req_ptr = req;
+
+        v->arch.vm_event->insn_fetch = npfec.insn_fetch;
+        v->arch.vm_event->gpa = gpa;
 
         /* Send request to mem event */
         req->reason = VM_EVENT_REASON_MEM_ACCESS;
