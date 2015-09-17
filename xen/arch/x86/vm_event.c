@@ -220,6 +220,7 @@ void vm_event_emulate_check(struct vcpu *v, vm_event_response_t *rsp)
         if ( rsp->flags & VM_EVENT_FLAG_SET_EMUL_READ_DATA )
             v->arch.vm_event->emul.read = rsp->data.emul.read;
         v->arch.vm_event->emulate_flags = rsp->flags;
+        v->arch.vm_event->insn_fetch = 0;
         break;
 
     default:
