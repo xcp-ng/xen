@@ -387,6 +387,7 @@ int arch_vcpu_create(struct vcpu *v)
     int rc;
 
     v->arch.flags = TF_kernel_mode;
+    v->arch.in_host = 1;
 
     rc = mapcache_vcpu_init(v);
     if ( rc )
