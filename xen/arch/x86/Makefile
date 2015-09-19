@@ -40,6 +40,7 @@ obj-y += hypercall.o
 obj-y += i387.o
 obj-y += i8259.o
 obj-y += io_apic.o
+obj-$(CONFIG_KEXEC) += kexec.o
 obj-$(CONFIG_LIVEPATCH) += livepatch.o
 obj-y += msi.o
 obj-y += msr.o

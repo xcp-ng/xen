@@ -56,15 +56,24 @@
 /*
  * Kexec supports two types of operation:
  * - kexec into a regular kernel, very similar to a standard reboot
- *   - KEXEC_TYPE_DEFAULT is used to specify this type
+ *   - KEXEC_TYPE_DEFAULT or KEXEC_TYPE_DEFAULT_EFI are used to specify
+ *     this type
+ *   - in case of KEXEC_TYPE_DEFAULT_EFI the first segment will
+ *     point to full kernel to load and entry point will point to
+ *     parameters
  * - kexec into a special "crash kernel", aka kexec-on-panic
- *   - KEXEC_TYPE_CRASH is used to specify this type
+ *   - KEXEC_TYPE_CRASH or KEXEC_TYPE_CRASH_EFI are used to specify this
+ *     type
+ *   - see above for differences between KEXEC_TYPE_CRASH and
+ *     KEXEC_TYPE_CRASH_EFI
  *   - parts of our system may be broken at kexec-on-panic time
  *     - the code should be kept as simple and self-contained as possible
  */
 
-#define KEXEC_TYPE_DEFAULT 0
-#define KEXEC_TYPE_CRASH   1
+#define KEXEC_TYPE_DEFAULT     0
+#define KEXEC_TYPE_CRASH       1
+#define KEXEC_TYPE_DEFAULT_EFI 2
+#define KEXEC_TYPE_CRASH_EFI   3
 
 
 /* The kexec implementation for Xen allows the user to load two
@@ -195,7 +204,11 @@ typedef struct xen_kexec_load {
         XEN_GUEST_HANDLE(xen_kexec_segment_t) h;
         uint64_t _pad;
     } segments;
-    uint64_t entry_maddr; /* image entry point machine address. */
+    /* image entry point machine address or parameters in case of EFI. */
+    union {
+        uint64_t entry_maddr;
+        uint64_t parameters;
+    };
 } xen_kexec_load_t;
 DEFINE_XEN_GUEST_HANDLE(xen_kexec_load_t);
 
@@ -223,6 +236,26 @@ typedef struct xen_kexec_status {
     uint8_t type;
 } xen_kexec_status_t;
 DEFINE_XEN_GUEST_HANDLE(xen_kexec_status_t);
+
+typedef struct xen_kexec_regs {
+        uint64_t rax;
+        uint64_t rbx;
+        uint64_t rcx;
+        uint64_t rdx;
+        uint64_t rsi;
+        uint64_t rdi;
+        uint64_t rsp;
+        uint64_t rbp;
+        uint64_t r8;
+        uint64_t r9;
+        uint64_t r10;
+        uint64_t r11;
+        uint64_t r12;
+        uint64_t r13;
+        uint64_t r14;
+        uint64_t r15;
+        uint64_t rip;
+} xen_kexec_regs_t;
 
 #else /* __XEN_INTERFACE_VERSION__ < 0x00040400 */
 

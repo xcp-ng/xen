@@ -19,9 +19,22 @@
 #include <xen/guest_access.h>
 #include <xen/mm.h>
 #include <xen/kexec.h>
+#include <xen/x86-linux.h>
 #include <xen/kimage.h>
+#include <xen/elfstructs.h>
+#include <xen/sha2.h>
+#include <xen/lib.h>
 
 #include <asm/page.h>
+
+#define KIMAGE_SHA256_REGIONS 16
+
+typedef struct
+{
+    uint64_t start;
+    uint64_t len;
+}
+sha256_region_t;
 
 /*
  * When kexec transitions to the new kernel there is a one-to-one
@@ -214,16 +227,11 @@ static int kimage_normal_alloc(struct kexec_image **rimage, paddr_t entry,
                            KEXEC_TYPE_DEFAULT);
 }
 
-static int kimage_crash_alloc(struct kexec_image **rimage, paddr_t entry,
-                              unsigned long nr_segments,
-                              xen_kexec_segment_t *segments)
+static int do_kimage_crash_alloc(struct kexec_image **rimage, paddr_t entry,
+                                 unsigned long nr_segments,
+                                 xen_kexec_segment_t *segments)
 {
     unsigned long i;
-
-    /* Verify we have a valid entry point */
-    if ( (entry < kexec_crash_area.start)
-         || (entry > kexec_crash_area.start + kexec_crash_area.size))
-        return -EADDRNOTAVAIL;
 
     /*
      * Verify we have good destination addresses.  Normally
@@ -252,6 +260,25 @@ static int kimage_crash_alloc(struct kexec_image **rimage, paddr_t entry,
     /* Allocate and initialize a controlling structure. */
     return do_kimage_alloc(rimage, entry, nr_segments, segments,
                            KEXEC_TYPE_CRASH);
+}
+
+static int kimage_crash_alloc(struct kexec_image **rimage, paddr_t entry,
+                              unsigned long nr_segments,
+                              xen_kexec_segment_t *segments)
+{
+    /* Verify we have a valid entry point */
+    if ( (entry < kexec_crash_area.start)
+         || (entry > kexec_crash_area.start + kexec_crash_area.size))
+        return -EADDRNOTAVAIL;
+
+    return do_kimage_crash_alloc(rimage, entry, nr_segments, segments);
+}
+
+static int kimage_crash_alloc_efi(struct kexec_image **rimage, paddr_t entry,
+                                  unsigned long nr_segments,
+                                  xen_kexec_segment_t *segments)
+{
+    return do_kimage_crash_alloc(rimage, entry, nr_segments, segments);
 }
 
 static int kimage_is_destination_range(struct kexec_image *image,
@@ -476,7 +503,7 @@ static void kimage_free_extra_pages(struct kexec_image *image)
     kimage_free_page_list(&image->unusable_pages);
 }
 
-static void kimage_terminate(struct kexec_image *image)
+void kimage_terminate(struct kexec_image *image)
 {
     kimage_entry_t *entries;
 
@@ -542,6 +569,8 @@ void kimage_free(struct kexec_image *image)
     kimage_free_all_entries(image);
     kimage_free_page_list(&image->control_pages);
     xfree(image->segments);
+    xfree(image->pi.buffer);
+    xfree(image->pi.sechdrs);
     xfree(image);
 }
 
@@ -802,10 +831,15 @@ int kimage_alloc(struct kexec_image **rimage, uint8_t type, uint16_t arch,
     switch( type )
     {
     case KEXEC_TYPE_DEFAULT:
+    case KEXEC_TYPE_DEFAULT_EFI:
         result = kimage_normal_alloc(rimage, entry_maddr, nr_segments, segment);
         break;
     case KEXEC_TYPE_CRASH:
         result = kimage_crash_alloc(rimage, entry_maddr, nr_segments, segment);
+        break;
+    case KEXEC_TYPE_CRASH_EFI:
+        result = kimage_crash_alloc_efi(rimage, entry_maddr,
+                                        nr_segments, segment);
         break;
     default:
         result = -EINVAL;
@@ -829,7 +863,6 @@ int kimage_load_segments(struct kexec_image *image)
         if ( result < 0 )
             return result;
     }
-    kimage_terminate(image);
     return 0;
 }
 
@@ -936,6 +969,573 @@ int kimage_build_ind(struct kexec_image *image, mfn_t ind_mfn,
 done:
     unmap_domain_page(page);
     return ret;
+}
+
+static int kimage_purgatory_alloc(struct kexec_image *image)
+{
+    const Elf_Ehdr *ehdr = (const Elf_Ehdr *)kexec_purgatory;
+    const Elf_Shdr *sechdrs;
+    unsigned long bss_align;
+    unsigned long bss_sz;
+    unsigned long align;
+    int i;
+    struct purgatory_info *pi = &image->pi;
+
+    dprintk(XENLOG_DEBUG, "purgatory_alloc 0x%lx 0x%lx %u\n",
+            (unsigned long)kexec_purgatory, (unsigned long)ehdr,
+            kexec_purgatory_size);
+
+    sechdrs = (void *)ehdr + ehdr->e_shoff;
+    pi->buf_align = bss_align = 1;
+    pi->bufsz = bss_sz = 0;
+
+    for ( i = 0; i < ehdr->e_shnum; i++ ) {
+        if ( !(sechdrs[i].sh_flags & SHF_ALLOC) )
+            continue;
+
+        align = sechdrs[i].sh_addralign;
+        if ( sechdrs[i].sh_type != SHT_NOBITS ) {
+            if ( pi->buf_align < align )
+                pi->buf_align = align;
+            pi->bufsz = ROUNDUP(pi->bufsz, align);
+            pi->bufsz += sechdrs[i].sh_size;
+        } else {
+            if ( bss_align < align )
+                bss_align = align;
+            bss_sz = ROUNDUP(bss_sz, align);
+            bss_sz += sechdrs[i].sh_size;
+        }
+    }
+    pi->bufsz = ROUNDUP(pi->bufsz, bss_align);
+    pi->memsz = pi->bufsz + bss_sz;
+    if ( pi->buf_align < bss_align )
+        pi->buf_align = bss_align;
+
+    pi->buffer = xzalloc_bytes(pi->bufsz);
+    if ( !pi->buffer )
+        return -ENOMEM;
+
+    return 0;
+}
+
+static int kimage_purgatory_copy(struct kexec_image *image)
+{
+    unsigned long bss_addr;
+    unsigned long offset;
+    unsigned long align;
+    size_t sechdrs_size;
+    Elf_Shdr *sechdrs;
+    int i;
+    struct purgatory_info *pi = &image->pi;
+    const Elf_Ehdr *ehdr = (const Elf_Ehdr *)kexec_purgatory;
+    const char *shstrtab;
+
+    /*
+     * The section headers in kexec_purgatory are read-only. In order to
+     * have them modifiable make a temporary copy.
+     */
+    sechdrs_size = sizeof(Elf_Shdr) * ehdr->e_shnum;
+    sechdrs = xmalloc_bytes(sechdrs_size);
+    if ( !sechdrs )
+        return -ENOMEM;
+
+    memcpy(sechdrs, (void *)ehdr + ehdr->e_shoff, sechdrs_size);
+    pi->sechdrs = sechdrs;
+
+    shstrtab = (char *)ehdr + sechdrs[ehdr->e_shstrndx].sh_offset;
+
+    offset = 0;
+    bss_addr = pi->dest + pi->bufsz;
+    image->entry_maddr = ehdr->e_entry;
+
+    for ( i = 0; i < ehdr->e_shnum; i++ ) {
+        if ( !(sechdrs[i].sh_flags & SHF_ALLOC) )
+            continue;
+
+        align = sechdrs[i].sh_addralign;
+        if ( sechdrs[i].sh_type == SHT_NOBITS ) {
+            bss_addr = ROUNDUP(bss_addr, align);
+            sechdrs[i].sh_addr = bss_addr;
+            bss_addr += sechdrs[i].sh_size;
+            continue;
+        }
+
+        offset = ROUNDUP(offset, align);
+
+        if ( sechdrs[i].sh_flags & SHF_EXECINSTR &&
+                ehdr->e_entry >= sechdrs[i].sh_addr &&
+                ehdr->e_entry < (sechdrs[i].sh_addr + sechdrs[i].sh_size) ) {
+            BUG_ON(image->entry_maddr != ehdr->e_entry);
+            image->entry_maddr -= sechdrs[i].sh_addr;
+            image->entry_maddr += pi->dest + offset;
+        }
+
+        memcpy(pi->buffer + offset,
+               (void *)ehdr + sechdrs[i].sh_offset,
+               sechdrs[i].sh_size);
+
+        sechdrs[i].sh_addr = pi->dest + offset;
+        sechdrs[i].sh_offset = offset;
+        offset += sechdrs[i].sh_size;
+
+        dprintk(XENLOG_DEBUG, "Load %s at 0x%08lx\n",
+                shstrtab + sechdrs[i].sh_name, sechdrs[i].sh_addr);
+    }
+
+    dprintk(XENLOG_DEBUG, "image entry maddr 0x%lx\n", image->entry_maddr);
+
+    return 0;
+}
+
+static int kimage_purgatory_apply_relocations(struct kexec_image *image)
+{
+    const Elf_Ehdr *ehdr = (const Elf_Ehdr *)kexec_purgatory;
+    int i, ret;
+    struct purgatory_info *pi = &image->pi;
+    const Elf_Shdr *sechdrs;
+
+    sechdrs = (void *)ehdr + ehdr->e_shoff;
+
+    for ( i = 0; i < ehdr->e_shnum; i++ ) {
+        const Elf_Shdr *relsec;
+        const Elf_Shdr *symtab;
+        Elf_Shdr *section;
+
+        relsec = sechdrs + i;
+
+        if ( relsec->sh_type != SHT_RELA &&
+                relsec->sh_type != SHT_REL )
+            continue;
+
+        /*
+         * For section of type SHT_RELA/SHT_REL,
+         * ->sh_link contains section header index of associated
+         * symbol table. And ->sh_info contains section header
+         * index of section to which relocations apply.
+         */
+        if ( relsec->sh_info >= ehdr->e_shnum ||
+                relsec->sh_link >= ehdr->e_shnum )
+            return -ENOEXEC;
+
+        section = pi->sechdrs + relsec->sh_info;
+        symtab = sechdrs + relsec->sh_link;
+
+        if ( !(section->sh_flags & SHF_ALLOC) )
+            continue;
+
+        /*
+         * symtab->sh_link contain section header index of associated
+         * string table.
+         */
+        if ( symtab->sh_link >= ehdr->e_shnum )
+            /* Invalid section number? */
+            continue;
+
+        /*
+         * Respective architecture needs to provide support for applying
+         * relocations of type SHT_RELA.
+         */
+        if ( relsec->sh_type == SHT_RELA )
+            ret = arch_kexec_apply_relocations_add(pi, section,
+                    relsec, symtab);
+        else if ( relsec->sh_type == SHT_REL )
+            ret = -ENOEXEC;
+        if ( ret )
+            return ret;
+    }
+
+    return 0;
+}
+
+static const Elf_Sym *kimage_purgatory_find_symbol(const char *name)
+{
+    const Elf_Shdr *sechdrs;
+    const Elf_Ehdr *ehdr = (const Elf_Ehdr *)kexec_purgatory;
+    const Elf_Sym *syms;
+    const char *strtab;
+    int i, k;
+
+    sechdrs = (void *)ehdr + ehdr->e_shoff;
+
+    for ( i = 0; i < ehdr->e_shnum; i++ ) {
+        if ( sechdrs[i].sh_type != SHT_SYMTAB )
+            continue;
+
+        if ( sechdrs[i].sh_link >= ehdr->e_shnum )
+            /* Invalid strtab section number */
+            continue;
+
+        strtab = (void *)ehdr + sechdrs[sechdrs[i].sh_link].sh_offset;
+        syms = (void *)ehdr + sechdrs[i].sh_offset;
+
+        /* Go through symbols for a match */
+        for ( k = 0; k < sechdrs[i].sh_size/sizeof(Elf_Sym); k++ ) {
+            if ( ELF_ST_BIND(syms[k].st_info) != STB_GLOBAL )
+                continue;
+
+            if ( strcmp(strtab + syms[k].st_name, name) != 0 )
+                continue;
+
+            if ( syms[k].st_shndx == SHN_UNDEF ||
+                    syms[k].st_shndx >= ehdr->e_shnum ) {
+                printk("Symbol: %s has bad section index %d.\n",
+                        name, syms[k].st_shndx);
+                return NULL;
+            }
+
+            /* Found the symbol we are looking for */
+            return &syms[k];
+        }
+    }
+
+    return NULL;
+}
+
+static int kimage_purgatory_get_symbol_addr(struct kexec_image *image,
+                                            const char *name, void **addr)
+{
+    struct purgatory_info *pi = &image->pi;
+    const Elf_Sym *sym;
+    Elf_Shdr *sechdr;
+
+    sym = kimage_purgatory_find_symbol(name);
+    if ( !sym )
+        return -EINVAL;
+
+    sechdr = &pi->sechdrs[sym->st_shndx];
+
+    /*
+     * Update addr with the address where symbol will finally be loaded after
+     * kimage_purgatory_move()
+     */
+    *addr = (void *)(sechdr->sh_addr + sym->st_value);
+    return 0;
+}
+
+/*
+ * Get or set value of a symbol. If "get_value" is true, symbol value is
+ * returned in buf otherwise symbol value is set based on value in buf.
+ */
+static int kimage_purgatory_get_set_symbol(struct kexec_image *image, const char *name,
+				   void *buf, unsigned int size, bool get_value)
+{
+    struct purgatory_info *pi = &image->pi;
+    const Elf_Sym *sym;
+    Elf_Shdr *sec;
+    char *sym_buf;
+
+    sym = kimage_purgatory_find_symbol(name);
+    if ( !sym )
+        return -EINVAL;
+
+    if ( sym->st_size != size ) {
+        printk("symbol %s size mismatch: expected %lu actual %u\n",
+                name, (unsigned long)sym->st_size, size);
+        return -EINVAL;
+    }
+
+    sec = pi->sechdrs + sym->st_shndx;
+
+    if ( sec->sh_type == SHT_NOBITS ) {
+        printk("symbol %s is in a bss section. Cannot %s\n", name,
+                get_value ? "get" : "set");
+        return -EINVAL;
+    }
+
+    sym_buf = (char *)pi->buffer + sec->sh_offset + sym->st_value;
+
+    if ( get_value )
+        memcpy((void *)buf, sym_buf, size);
+    else
+        memcpy((void *)sym_buf, buf, size);
+
+    return 0;
+}
+
+static int kimage_purgatory_find_hole(struct kexec_image *image)
+{
+    paddr_t hole_start, hole_end, mstart, mend;
+    struct purgatory_info *pi = &image->pi;
+    unsigned long i;
+
+    pi->dest = 0;
+    hole_start = PAGE_ALIGN(image->next_crash_page);
+    hole_end = hole_start + pi->memsz;
+    while ( hole_end <= kexec_crash_area.start + kexec_crash_area.size )
+    {
+        /* See if the hole overlaps any of the segments. */
+        for ( i = 0; i < image->nr_segments; i++ )
+        {
+            mstart = image->segments[i].dest_maddr;
+            mend   = mstart + image->segments[i].dest_size;
+            if ( (hole_end > mstart) && (hole_start < mend) )
+            {
+                /* Advance the hole to the end of the segment. */
+                hole_start = PAGE_ALIGN(mend);
+                hole_end = hole_start + pi->memsz;
+                break;
+            }
+        }
+
+        /* If the hole doesn't overlap any segments I have found my hole! */
+        if ( i == image->nr_segments &&
+             hole_end <= kexec_crash_area.start + kexec_crash_area.size )
+        {
+            pi->dest = hole_start;
+            image->next_crash_page = PAGE_ALIGN(hole_end);
+            break;
+        }
+    }
+
+    return pi->dest;
+}
+
+/* Load purgatory as an ELF binary and relocate it. */
+static int kimage_load_purgatory_image(struct kexec_image *image)
+{
+    int ret;
+
+    ret = kimage_purgatory_alloc(image);
+    if ( ret )
+        return ret;
+
+    ret = kimage_purgatory_find_hole(image);
+    if ( !ret )
+        return -ENOMEM;
+
+    ret = kimage_purgatory_copy(image);
+    if ( ret )
+        return ret;
+
+    ret = kimage_purgatory_apply_relocations(image);
+    if ( ret )
+        return ret;
+
+    return 0;
+}
+
+/*
+ * Update the loaded purgatory with the digest and locations of the segments.
+ */
+static int kimage_purgatory_calc_one_digest(struct sha2_256_state *ctx,
+                                            xen_kexec_segment_t *segment)
+{
+    paddr_t dest;
+    unsigned long sbytes;
+    int ret = 0;
+
+    sbytes = segment->buf_size;
+    dest = segment->dest_maddr;
+
+    while ( sbytes )
+    {
+        unsigned long dest_mfn;
+        void *dest_va;
+        size_t schunk, dchunk;
+
+        dest_mfn = dest >> PAGE_SHIFT;
+
+        dchunk = PAGE_SIZE;
+        schunk = min(dchunk, sbytes);
+
+        dest_va = map_domain_page(_mfn(dest_mfn));
+        if ( !dest_va )
+            return -EINVAL;
+
+        sha2_256_update(ctx, dest_va, schunk);
+
+        unmap_domain_page(dest_va);
+        if ( ret )
+            return -EFAULT;
+
+        sbytes -= schunk;
+        dest += dchunk;
+    }
+    return 0;
+}
+
+static int kimage_purgatory_calc_digest(struct kexec_image *image)
+{
+    int ret;
+    sha256_region_t regions[KIMAGE_SHA256_REGIONS] = {{0}};
+    struct sha2_256_state ctx;
+    uint8_t digest[SHA2_256_DIGEST_SIZE];
+    unsigned int s;
+
+    if ( image->nr_segments > KIMAGE_SHA256_REGIONS )
+    {
+        dprintk(XENLOG_DEBUG, "More segments than allocated SHA256 regions\n");
+        return -E2BIG;
+    }
+
+
+    sha2_256_init(&ctx);
+
+    for ( s = 0; s < image->nr_segments; s++ ) {
+        ret = kimage_purgatory_calc_one_digest(&ctx, &image->segments[s]);
+        if ( ret )
+            return ret;
+
+        regions[s].start = image->segments[s].dest_maddr;
+        regions[s].len = image->segments[s].buf_size;
+    }
+
+    sha2_256_final(&ctx, digest);
+
+    ret = kimage_purgatory_get_set_symbol(image, "sha256_regions",
+                                          regions, sizeof(regions), 0);
+    if ( ret )
+        return ret;
+
+    ret = kimage_purgatory_get_set_symbol(image, "sha256_digest",
+                                          digest, sizeof(digest), 0);
+    if ( ret )
+        return ret;
+
+    return 0;
+}
+
+/*
+ * Find the entry point to the new kernel, we need to map the crash region into
+ * memory in order to read the kernel header.
+ */
+#define KERNEL_SEGMENT_IDX 0
+static uint64_t kimage_find_kernel_entry_maddr(struct kexec_image *image)
+{
+    uint64_t alignment_addr;
+    uint32_t alignment;
+    unsigned long dest_mfn;
+    void *dest_va;
+
+    alignment_addr = image->segments[KERNEL_SEGMENT_IDX].dest_maddr +
+                         offsetof(struct setup_header, kernel_alignment);
+
+    dest_mfn = alignment_addr >> PAGE_SHIFT;
+    dest_va = map_domain_page(_mfn(dest_mfn));
+    if ( !dest_va )
+        return -EINVAL;
+
+    alignment = *((uint32_t *) ((uint8_t *) dest_va +
+                                                PAGE_OFFSET(alignment_addr)));
+
+    unmap_domain_page(dest_va);
+
+    /*
+     * Ensure the kernel alignment is a valid LOAD_PHYSICAL_ADDR,
+     * which ranges from 0x200000 (2MiB) to 0x1000000 (16Mib) on 64-bit systems
+     * as defined in the kernel x86 Kconfig
+     */
+    if ( alignment % 0x200000 != 0 ||
+         alignment < 0x200000 ||
+         alignment > 0x1000000 )
+        return -EINVAL;
+
+    return ROUNDUP(image->segments[KERNEL_SEGMENT_IDX].dest_maddr,
+                   alignment) +
+                   0x200;
+}
+
+/*
+ * Configure purgatory with the register values that will be set before jumping
+ * into the new kernel.
+ */
+static int kimage_purgatory_set_register_block(struct kexec_image *image, uint64_t parameters)
+{
+    int ret;
+    uint64_t rip;
+    void *stack;
+
+    rip = kimage_find_kernel_entry_maddr(image);
+    if ( rip < 0 )
+        return -EINVAL;
+
+    ret = kimage_purgatory_get_symbol_addr(image, "stack_end", &stack);
+    BUG_ON(ret < 0);
+
+    /* Clear the registers */
+    memset(&image->regs, 0, sizeof(image->regs));
+
+    image->regs.rsp = (uint64_t)stack;
+    image->regs.rsi = parameters;  // Kernel parameters
+    image->regs.rip = rip;
+
+    return kimage_purgatory_get_set_symbol(image, "entry64_regs",
+                                           &image->regs, sizeof(image->regs),
+                                           0);
+}
+
+/*
+ * Move the loaded purgatory into its final destination as an additional kimage
+ * segment.
+ */
+static int kimage_purgatory_move(struct kexec_image *image)
+{
+    struct purgatory_info *pi = &image->pi;
+    paddr_t dest;
+    unsigned long sbytes;
+    unsigned long src_offset = 0;
+    int result = 0;
+    paddr_t addr;
+
+    sbytes = pi->bufsz;
+    dest = pi->dest;
+
+    while ( dest < (pi->dest + pi->memsz) )
+    {
+        unsigned long dest_mfn;
+        void *dest_va;
+        size_t schunk, dchunk;
+
+        dest_mfn = dest >> PAGE_SHIFT;
+
+        dchunk = PAGE_SIZE;
+        schunk = min(dchunk, sbytes);
+
+        dest_va = map_domain_page(_mfn(dest_mfn));
+        if ( !dest_va )
+            return -EINVAL;
+
+        memcpy(dest_va, pi->buffer + src_offset, schunk);
+        memset(dest_va + schunk, 0, dchunk - schunk);
+
+        unmap_domain_page(dest_va);
+
+        sbytes -= schunk;
+        dest += dchunk;
+        src_offset += schunk;
+    }
+
+    for ( addr = pi->dest & PAGE_MASK;
+          addr < pi->dest + pi->memsz; addr += PAGE_SIZE ) {
+        result = machine_kexec_add_page(image, addr, addr);
+        if ( result < 0 )
+            break;
+    }
+
+    return result;
+}
+
+int kimage_setup_purgatory(struct kexec_image *image, uint64_t parameters)
+{
+    int ret;
+
+    ret = kimage_load_purgatory_image(image);
+    if ( ret )
+        return ret;
+
+    ret = kimage_purgatory_calc_digest(image);
+    if ( ret )
+        return ret;
+
+    ret = kimage_purgatory_set_register_block(image, parameters);
+    if ( ret )
+        return ret;
+
+    ret = kimage_purgatory_move(image);
+    if ( ret )
+        return ret;
+
+    return 0;
 }
 
 /*

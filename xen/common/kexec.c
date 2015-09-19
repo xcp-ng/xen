@@ -1132,6 +1132,16 @@ static int kexec_load(XEN_GUEST_HANDLE_PARAM(void) uarg)
     if ( ret < 0 )
         goto error;
 
+    if ( load.type == KEXEC_TYPE_DEFAULT_EFI ||
+         load.type == KEXEC_TYPE_CRASH_EFI )
+    {
+        ret = kimage_setup_purgatory(kimage, load.parameters);
+        if (ret)
+            return ret;
+    }
+
+    kimage_terminate(kimage);
+
     ret = kexec_load_slot(kimage);
     if ( ret < 0 )
         goto error;
