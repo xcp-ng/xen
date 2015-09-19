@@ -1,1 +1,11 @@
 .gitarchive-info export-subst
+
+.bk-to-hg export-ignore
+.hg-to-bk export-ignore
+.hgignore export-ignore
+.hgsigs export-ignore
+.hgtags export-ignore
+.rootkeys export-ignore
+.gitignore export-ignore
+.gitattributes export-ignore
+mk/ export-ignore
