@@ -484,6 +484,15 @@ static struct dmi_system_id __initdata reboot_dmi_table[] = {
             DMI_MATCH(DMI_PRODUCT_NAME, "OptiPlex 9020"),
         },
     },
+    {    /* Handle problems with rebooting on Intel PURLEY. */
+        .callback = override_reboot,
+        .driver_data = (void *)(long)BOOT_ACPI,
+        .ident = "Intel PURLEY",
+        .matches = {
+            DMI_MATCH(DMI_SYS_VENDOR, "Intel Corporation"),
+            DMI_MATCH(DMI_PRODUCT_NAME, "PURLEY"),
+        },
+    },
     {    /* Handle problems with rebooting on the Latitude E6320. */
         .callback = override_reboot,
         .driver_data = (void *)(long)BOOT_CF9,
