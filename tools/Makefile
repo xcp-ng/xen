@@ -282,3 +282,7 @@ endif
 ifeq ($(CONFIG_X86),y)
 	$(MAKE) -C firmware subtree-force-update
 endif
+
+
+
+SUBDIRS-y += xenguest
