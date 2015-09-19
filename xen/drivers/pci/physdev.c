@@ -103,17 +103,19 @@ ret_t pci_physdev_op(int cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
         }
 
         write_lock(&pdev->domain->pci_lock);
-        pcidevs_unlock();
         switch ( dev_reset.flags & PCI_DEVICE_RESET_MASK )
         {
         case PCI_DEVICE_RESET_COLD:
         case PCI_DEVICE_RESET_WARM:
         case PCI_DEVICE_RESET_HOT:
         case PCI_DEVICE_RESET_FLR:
+            pdev_invalidate_cache(pdev);
+            pcidevs_unlock();
             ret = vpci_reset_device(pdev);
             break;
 
         default:
+            pcidevs_unlock();
             ret = -EINVAL;
             break;
         }

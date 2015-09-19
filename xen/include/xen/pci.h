@@ -177,6 +177,19 @@ struct pci_dev {
     struct vpci *vpci;
 
     struct rangeset *config_writable;
+
+    struct bar {
+        uint64_t addr;
+        uint64_t size;
+        enum {
+            PCI_BAR_TYPE_EMPTY,
+            PCI_BAR_TYPE_IO,
+            PCI_BAR_TYPE_MEM32,
+            PCI_BAR_TYPE_MEM64_LO,
+            PCI_BAR_TYPE_MEM64_HI,
+            PCI_BAR_TYPE_ROM,
+        } type;
+    } bar[PCI_HEADER_NORMAL_NR_BARS + 1];
 };
 
 #define for_each_pdev(domain, pdev) \
@@ -297,5 +310,9 @@ static inline int arch_pci_clean_pirqs(struct domain *d)
 
 bool pdev_has_write_access(const struct pci_dev *pdev,
                            uint32_t pos, uint8_t size);
+static inline void pdev_invalidate_cache(struct pci_dev *pdev)
+{
+    memset(pdev->bar, 0, sizeof(pdev->bar));
+}
 
 #endif /* __XEN_PCI_H__ */

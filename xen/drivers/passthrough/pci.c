@@ -579,6 +579,82 @@ struct pci_dev *pci_get_pdev(const struct domain *d, pci_sbdf_t sbdf)
     return NULL;
 }
 
+static bool need_cache(const struct pci_dev *pdev, unsigned int num_bars)
+{
+    for ( unsigned int i = 0; i < num_bars; i++ )
+        if ( pdev->bar[i].type == PCI_BAR_TYPE_EMPTY )
+            return true;
+
+    return false;
+}
+
+static bool __maybe_unused cache_pdev(struct pci_dev *pdev)
+{
+    unsigned i;
+
+    if ( !need_cache(pdev, PCI_HEADER_NORMAL_NR_BARS) )
+        return true;
+
+    if ( (pci_conf_read8(pdev->sbdf, PCI_HEADER_TYPE) & 0x7f) !=
+         PCI_HEADER_TYPE_NORMAL )
+        return false;
+
+    for ( i = 0; i < PCI_HEADER_NORMAL_NR_BARS; ++i )
+    {
+        unsigned int idx = PCI_BASE_ADDRESS_0 + i * 4;
+        int rc;
+        uint32_t bar;
+
+        if ( pdev->bar[i].type != PCI_BAR_TYPE_EMPTY )
+            continue;
+
+        bar = pci_conf_read32(pdev->sbdf, idx);
+
+        if ( (bar & PCI_BASE_ADDRESS_SPACE) != PCI_BASE_ADDRESS_SPACE_MEMORY )
+        {
+            uint32_t size;
+
+            pci_conf_write32(pdev->sbdf, idx, ~0);
+            size = pci_conf_read32(pdev->sbdf, idx) & PCI_BASE_ADDRESS_IO_MASK;
+            size = ~size + 1;
+            pci_conf_write32(pdev->sbdf, idx, bar);
+
+            pdev->bar[i].addr = bar & PCI_BASE_ADDRESS_IO_MASK;
+            pdev->bar[i].size = size;
+            pdev->bar[i].type = PCI_BAR_TYPE_IO;
+            continue;
+        }
+
+        rc = pci_size_mem_bar(pdev->sbdf, idx,
+                              &pdev->bar[i].addr, &pdev->bar[i].size,
+                              (i == PCI_HEADER_NORMAL_NR_BARS - 1) ?
+                                  PCI_BAR_LAST : 0);
+        if ( rc == 2 )
+        {
+            pdev->bar[i].type = PCI_BAR_TYPE_MEM64_LO;
+            ++i;
+            pdev->bar[i].type = PCI_BAR_TYPE_MEM64_HI;
+            pdev->bar[i].addr = 0;
+            pdev->bar[i].size = 0;
+        }
+        else
+        {
+            pdev->bar[i].type = PCI_BAR_TYPE_MEM32;
+        }
+    }
+
+    /* Handle the ROM BAR */
+    i = PCI_HEADER_NORMAL_NR_BARS;
+    pdev->bar[i].type = PCI_BAR_TYPE_ROM;
+    pdev->bar[i].size = 0;
+    pdev->bar[i].addr = 0;
+    pci_size_mem_bar(pdev->sbdf, PCI_ROM_ADDRESS,
+                     &pdev->bar[i].addr, &pdev->bar[i].size,
+                     PCI_BAR_ROM);
+
+    return true;
+}
+
 /**
  * pci_enable_acs - enable ACS if hardware support it
  * @dev: the PCI device
