@@ -1366,6 +1366,14 @@ wait descriptor timed out', try increasing this value.
 **WARNING: This command line option is deprecated, and superseded by
 _dom0-iommu=map-inclusive_ - using both options in combination is undefined.**
 
+### introspection_extn
+> '= <boolean>'
+
+> Default: 'false'
+
+This parameter enables/disables the use of extra introspection extensions in
+addition to the existing ones.
+
 ### irq_ratelimit (x86)
 > `= <integer>`
 
