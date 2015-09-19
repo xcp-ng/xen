@@ -677,4 +677,12 @@ config PM_STATS
 	  Enable collection of performance management statistics to aid in
 	  analyzing and tuning power/performance characteristics of the system
 
+config LOCKDOWN_DEFAULT
+	bool "Enable lockdown mode by default"
+	default n
+	help
+	  Lockdown mode prevents attacks from a rogue dom0 userspace from
+	  compromising the system. This is automatically enabled when Secure
+	  Boot is enabled.
+
 endmenu
