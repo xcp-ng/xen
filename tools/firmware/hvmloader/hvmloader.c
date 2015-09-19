@@ -183,6 +183,18 @@ static void init_vm86_tss(void)
     printf("vm86 TSS at %08lx\n", virt_to_phys(tss));
 }
 
+/* Replace the 6 bytes at f000:ffea with a xenstore-supplied value */
+static void init_magic_oem_bytes(void)
+{
+    const char *s = xenstore_read("bios-strings/hp-rombios", NULL);
+    if (!s || *s == '\0')
+        return;
+
+    /* Even if the xenstore value isn't six bytes long, the buffer is
+     * safe to read from, so just copy over six bytes */
+    memcpy((void *) 0xfffea, s, 6);
+}
+
 static void apic_setup(void)
 {
     /* Set the IOAPIC ID to the static value used in the MP/ACPI tables. */
@@ -328,6 +340,7 @@ int main(void)
     init_vm86_tss();
 
     cmos_write_memory_size();
+    init_magic_oem_bytes();
 
     printf("BIOS map:\n");
     if ( SCRATCH_PHYSICAL_ADDRESS != scratch_start )
