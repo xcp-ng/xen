@@ -31,6 +31,8 @@ struct pv_iommu_info
 
 DEFINE_RCU_READ_LOCK(m2b_rcu);
 
+uint64_t **hwdom_premap_m2b;
+
 struct m2b_entry *lookup_m2b_entry(struct page_info *page, struct domain *d,
                                    ioservid_t ioserver, unsigned long bfn)
 {

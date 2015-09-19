@@ -46,6 +46,12 @@ int add_m2b_entry(struct page_info *page, struct domain *d,
 int del_m2b_entry(struct page_info *page, struct domain *d, ioservid_t ioserver,
                   unsigned long bfn);
 
+extern uint64_t **hwdom_premap_m2b;
+
+#define PREMAP_M2B_PAGE(x) ( pfn_to_pdx(x) / (PAGE_SIZE/sizeof(uint64_t) ) )
+#define PREMAP_M2B_IDX(x) ( pfn_to_pdx(x) % (PAGE_SIZE/sizeof(uint64_t) ) )
+#define PREMAP_M2B(x) hwdom_premap_m2b[PREMAP_M2B_PAGE(x)][PREMAP_M2B_IDX(x)]
+
 #endif
 
 /*
