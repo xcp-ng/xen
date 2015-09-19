@@ -21,5 +21,6 @@
 #define CONSOLED_IO_H
 
 void handle_io(void);
+void watch_logconsole(void);
 
 #endif
