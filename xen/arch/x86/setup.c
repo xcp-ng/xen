@@ -1605,6 +1605,9 @@ void __init noreturn __start_xen(unsigned long mbi_p)
 
     set_in_cr4(X86_CR4_OSFXSR | X86_CR4_OSXMMEXCPT);
 
+    if ( opt_pv32 == -1 )
+        opt_pv32 = pv_shim;
+
     /* Do not enable SMEP/SMAP in PV shim on AMD and Hygon by default */
     if ( opt_smep == -1 )
         opt_smep = !pv_shim || !(boot_cpu_data.x86_vendor &

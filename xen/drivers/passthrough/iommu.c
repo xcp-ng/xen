@@ -30,7 +30,7 @@ bool_t __initdata iommu_enable = 1;
 bool_t __read_mostly iommu_enabled;
 bool_t __read_mostly force_iommu;
 bool_t __read_mostly iommu_verbose;
-bool __read_mostly iommu_quarantine = true;
+bool __read_mostly iommu_quarantine = false;
 bool_t __read_mostly iommu_igfx = 1;
 bool_t __read_mostly iommu_snoop = 1;
 bool_t __read_mostly iommu_qinval = 1;

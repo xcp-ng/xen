@@ -220,20 +220,15 @@ static struct notifier_block x2apic_cpu_nfb = {
    .notifier_call = update_clusterinfo
 };
 
-static s8 __initdata x2apic_phys = -1; /* By default we use logical cluster mode. */
+static s8 __initdata x2apic_phys = -1; /* By default we use physical mode. */
 boolean_param("x2apic_phys", x2apic_phys);
 
 const struct genapic *__init apic_x2apic_probe(void)
 {
     if ( x2apic_phys < 0 )
     {
-        /*
-         * Force physical mode if there's no interrupt remapping support: The
-         * ID in clustered mode requires a 32 bit destination field due to
-         * the usage of the high 16 bits to hold the cluster ID.
-         */
-        x2apic_phys = !iommu_intremap ||
-                      (acpi_gbl_FADT.flags & ACPI_FADT_APIC_PHYSICAL);
+        /* Use physical mode by default unless requested in FADT. */
+        x2apic_phys = !(acpi_gbl_FADT.flags & ACPI_FADT_APIC_CLUSTER);
     }
     else if ( !x2apic_phys )
         switch ( iommu_intremap )
