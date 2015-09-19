@@ -481,6 +481,8 @@ struct domain
     spinlock_t runstate_lock;
     atomic_t runstate_missed_changes;
     domain_runstate_info_t runstate;
+
+    unsigned int cores_per_socket;
 };
 
 /* Protect updates/reads (resp.) of domain_list and domain_hash. */
