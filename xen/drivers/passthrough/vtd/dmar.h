@@ -130,5 +130,6 @@ do {                                                \
 int vtd_hw_check(void);
 void disable_pmr(struct iommu *iommu);
 int is_igd_drhd(struct acpi_drhd_unit *drhd);
+int rmrr_device_quirks(u16 seg, u8 bus, u8 dev, u8 func);
 
 #endif /* _DMAR_H_ */
