@@ -141,6 +141,8 @@ struct pci_dev {
     } fault;
     u64 vf_rlen[6];
 
+    bool memory_enabled;
+
     /* Data for vPCI. */
     struct vpci *vpci;
 };
