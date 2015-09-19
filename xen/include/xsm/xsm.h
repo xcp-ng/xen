@@ -119,6 +119,7 @@ struct xsm_ops {
                               uint8_t allow);
     int (*pci_config_permission)(struct domain *d, uint32_t machine_bdf,
                                  uint16_t start, uint16_t end, uint8_t access);
+    int (*iommu_control)(struct domain *d, unsigned long op);
 
 #if defined(CONFIG_HAS_PASSTHROUGH) && defined(CONFIG_HAS_PCI)
     int (*get_device_group)(uint32_t machine_bdf);
@@ -567,6 +568,11 @@ static inline int xsm_hvm_altp2mhvm_op(
 static inline int xsm_get_vnumainfo(xsm_default_t def, struct domain *d)
 {
     return alternative_call(xsm_ops.get_vnumainfo, d);
+}
+
+static inline int xsm_iommu_control(xsm_default_t def, struct domain *d, unsigned long op)
+{
+    return alternative_call(xsm_ops.iommu_control, d, op);
 }
 
 #ifdef CONFIG_VM_EVENT

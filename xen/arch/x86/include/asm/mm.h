@@ -83,19 +83,22 @@
 #define PGC_state_offlined  PG_mask(2, 6)
 #define PGC_state_free      PG_mask(3, 6)
 #define page_state_is(pg, st) (((pg)->count_info&PGC_state) == PGC_state_##st)
+/* Page has foreign mappings? */
+#define _PGC_foreign_map  PG_shift(7)
+#define PGC_foreign_map   PG_mask(1, 7)
 #ifdef CONFIG_SHADOW_PAGING
  /* Set when a page table page has been shadowed. */
-#define _PGC_shadowed_pt  PG_shift(7)
-#define PGC_shadowed_pt   PG_mask(1, 7)
+#define _PGC_shadowed_pt  PG_shift(8)
+#define PGC_shadowed_pt   PG_mask(1, 8)
 #else
 #define PGC_shadowed_pt   0
 #endif
 
 /* Count of references to this frame. */
 #if PGC_shadowed_pt
-#define PGC_count_width   PG_shift(7)
+#define PGC_count_width   PG_shift(8)
 #else
-#define PGC_count_width   PG_shift(6)
+#define PGC_count_width   PG_shift(7)
 #endif
 #define PGC_count_mask    ((1UL<<PGC_count_width)-1)
 
