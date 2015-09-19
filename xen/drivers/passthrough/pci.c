@@ -34,6 +34,7 @@
 #include <xen/tasklet.h>
 #include <xen/vpci.h>
 #include <xen/msi.h>
+#include <xen/lockdown.h>
 #include <xsm/xsm.h>
 #include "ats.h"
 
@@ -1584,6 +1585,9 @@ static int assign_device(struct domain *d, u16 seg, u8 bus, u8 devfn, u32 flag)
 
     if ( !arch_iommu_use_permitted(d) )
         return -EXDEV;
+
+    if ( is_locked_down() && d == hardware_domain )
+        return -EPERM;
 
     /* device_assigned() should already have cleared the device for assignment */
     ASSERT(pcidevs_locked());

@@ -21,6 +21,7 @@
 #include <xen/softirq.h>
 #include <xen/keyhandler.h>
 #include <xsm/xsm.h>
+#include <xen/lockdown.h>
 
 #ifdef CONFIG_X86
 #include <asm/e820.h>
@@ -551,6 +552,11 @@ int __init iommu_setup(void)
 {
     int rc = -ENODEV;
     bool force_intremap = force_iommu && iommu_intremap;
+
+#ifdef CONFIG_HAS_PCI
+    if ( is_locked_down() )
+        iommu_quarantine = IOMMU_quarantine_scratch_page;
+#endif
 
     if ( iommu_hwdom_strict )
         iommu_hwdom_passthrough = false;
