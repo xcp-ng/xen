@@ -4754,6 +4754,7 @@ static int hvm_allow_set_param(struct domain *d,
     {
     /* The following parameters can be set by the guest. */
     case HVM_PARAM_CALLBACK_IRQ:
+    case HVM_PARAM_32BIT:
     case HVM_PARAM_VM86_TSS:
     case HVM_PARAM_ACPI_IOPORTS_LOCATION:
     case HVM_PARAM_VM_GENERATION_ID_ADDR:
@@ -4991,6 +4992,7 @@ static int hvm_allow_get_param(struct domain *d,
     {
     /* The following parameters can be read by the guest. */
     case HVM_PARAM_CALLBACK_IRQ:
+    case HVM_PARAM_32BIT:
     case HVM_PARAM_VM86_TSS:
     case HVM_PARAM_ACPI_IOPORTS_LOCATION:
     case HVM_PARAM_VM_GENERATION_ID_ADDR:
