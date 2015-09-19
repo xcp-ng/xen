@@ -22,7 +22,11 @@
 #include <xen/guest_access.h>
 #include <xen/param.h>
 #include <public/pv-iommu.h>
+#include <xsm/xsm.h>
 
+#ifdef CONFIG_X86
+#include <asm/setup.h>
+#endif
 #define ret_t long
 
 /*
@@ -189,6 +193,214 @@ void do_iommu_sub_op(struct pv_iommu_op *op)
             op->status = 0;
             break;
         }
+#ifdef CONFIG_X86
+        case IOMMUOP_map_foreign_page:
+        {
+            mfn_t mfn, tmp;
+            unsigned int flags;
+            struct page_info *page = NULL;
+
+            /* Check if can create IOMMU mappings */
+            if ( !can_use_iommu_check(d) )
+            {
+                op->status = -EPERM;
+                goto finish;
+            }
+
+            rd = rcu_lock_domain_by_any_id(op->u.map_foreign_page.domid);
+            if ( !rd )
+            {
+                op->status = -ENXIO;
+                goto finish;
+            }
+
+            /* Only HVM domains can have their pages foreign mapped */
+            if ( is_pv_domain(rd) )
+            {
+                op->status = -EPERM;
+                goto finish;
+            }
+
+            if ( d->domain_id == op->u.map_foreign_page.domid ||
+                    op->u.map_foreign_page.domid == DOMID_SELF )
+            {
+                op->status = -EPERM;
+                goto finish;
+            }
+
+            /* Check for privilege over remote domain*/
+            if ( xsm_iommu_control(XSM_DM_PRIV, rd, op->subop_id) )
+            {
+                op->status = -EPERM;
+                goto finish;
+            }
+
+            /* Lookup page struct backing gfn */
+            if ( get_paged_frame(op->u.map_foreign_page.gfn, &mfn, &page, 0,
+                        rd) )
+            {
+                op->status = -ENXIO;
+                goto finish;
+            }
+
+            /* Check for existing mapping */
+            if ( test_bit(_PGC_foreign_map, &page->count_info) )
+            {
+                put_page(page);
+                op->status = 0;
+                goto finish;
+            }
+
+            if ( !mfn_valid(mfn) || xen_in_range(mfn_x(mfn)) ||
+                 is_xen_heap_page(page)  ||
+                 (page->count_info & PGC_allocated) ||
+                 ( (page->count_info & PGC_count_mask) < 2 ))
+            {
+                put_page(page);
+                op->status = -EPERM;
+                goto finish;
+            }
+
+            /* Check for conflict with existing BFN mapping */
+            if ( !iommu_lookup_page(d, _dfn(op->u.map_foreign_page.bfn), &tmp, &flags) )
+            {
+                put_page(page);
+                op->status = -EPERM;
+                goto finish;
+            }
+
+            flags = 0;
+
+            if ( op->flags & IOMMU_OP_readable )
+                flags |= IOMMUF_readable;
+
+            if ( op->flags & IOMMU_OP_writeable )
+                flags |= IOMMUF_writable;
+
+            if ( iommu_legacy_map(d, _dfn(op->u.map_foreign_page.bfn), mfn, 1,
+                                  flags) )
+            {
+                put_page(page);
+                op->status = -EIO;
+                goto finish;
+            }
+
+            set_bit(_PGC_foreign_map, &page->count_info);
+            op->status = 0;
+            break;
+        }
+        case IOMMUOP_lookup_foreign_page:
+        {
+            mfn_t mfn;
+            struct page_info *page = NULL;
+            int rc;
+
+            if ( d->domain_id == op->u.lookup_foreign_page.domid ||
+                 op->u.lookup_foreign_page.domid == DOMID_SELF )
+            {
+                op->status = -EPERM;
+                goto finish;
+            }
+
+            rd = rcu_lock_domain_by_any_id(op->u.lookup_foreign_page.domid);
+            if ( !rd )
+            {
+                op->status = -ENXIO;
+                goto finish;
+            }
+
+            /* Only HVM domains can have their pages foreign mapped */
+            if ( is_pv_domain(rd) )
+            {
+                op->status = -EPERM;
+                goto finish;
+            }
+
+            /* Check for privilege */
+            if ( xsm_iommu_control(XSM_DM_PRIV, rd, op->subop_id) )
+            {
+                op->status = -EPERM;
+                goto finish;
+            }
+
+            /* Lookup page struct backing gfn */
+            if ( (rc = get_paged_frame(op->u.lookup_foreign_page.gfn, &mfn, &page, 0,
+                                 rd)) )
+            {
+                op->status = -ENXIO; // Should this be something else?
+                goto finish;
+            }
+
+            /* Only create BFN mappings for guest mapped memory */
+            if ( !(page->count_info & PGC_allocated) ||
+                 ( (page->count_info & PGC_count_mask) < 2 ))
+            {
+                    put_page(page);
+                    op->status = -EPERM;
+                    goto finish;
+            }
+
+            if ( test_and_set_bit(_PGC_foreign_map, &page->count_info) )
+                put_page(page);
+
+            /* Check if IOMMU is disabled/bypassed */
+            if ( !can_use_iommu_check(d) )
+                op->u.lookup_foreign_page.bfn = mfn_x(mfn);
+            else
+                op->u.lookup_foreign_page.bfn = mfn_x(mfn) + bfn_foreign_offset;
+
+            op->status = 0;
+            break;
+        }
+        case IOMMUOP_unmap_foreign_page:
+        {
+            struct page_info *page;
+            mfn_t mfn;
+            unsigned int flags;
+
+            if ( !can_use_iommu_check(d) )
+            {
+                page = mfn_to_page(_mfn(op->u.unmap_foreign_page.bfn));
+            }
+            else
+            {
+                /* Check if there is a valid BFN mapping for this domain */
+                if ( iommu_lookup_page(d, _dfn(op->u.unmap_foreign_page.bfn), &mfn, &flags) )
+                {
+                   op->status = -ENOENT;
+                   goto finish;
+                }
+                /* Use MFN from B2M mapping to lookup page */
+                page = mfn_to_page(mfn);
+            }
+
+            if ( !page )
+            {
+               op->status = -ENOENT;
+               goto finish;
+            }
+
+            if ( !test_and_clear_bit(_PGC_foreign_map, &page->count_info) )
+            {
+               op->status = -ENOENT;
+               goto finish;
+            }
+
+            if ( !can_use_iommu_check(d) )
+                goto foreign_unmap_done;
+
+            if ( op->u.unmap_foreign_page.bfn == mfn_x(mfn) + bfn_foreign_offset )
+                goto foreign_unmap_done;
+
+            if ( iommu_legacy_unmap(d, _dfn(op->u.unmap_foreign_page.bfn), 1) )
+                domain_crash(d);
+foreign_unmap_done:
+            /* Remove the reference to the page */
+            put_page(page);
+            op->status = 0;
+        break;
+        }
+#endif
         default:
             op->status = -ENODEV;
             break;
