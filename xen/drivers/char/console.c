@@ -71,16 +71,16 @@ enum con_timestamp_mode
     TSM_BOOT           /* [SSSSSS.uuuuuu] */
 };
 
-static enum con_timestamp_mode __read_mostly opt_con_timestamp_mode = TSM_NONE;
+static enum con_timestamp_mode __read_mostly opt_con_timestamp_mode = TSM_BOOT;
 
 static int parse_console_timestamps(const char *s);
 custom_runtime_param("console_timestamps", parse_console_timestamps);
 
-/* conring_size: allows a large console ring than default (16kB). */
+/* conring_size: allows a large console ring than default (64kB). */
 static uint32_t __initdata opt_conring_size;
 size_param("conring_size", opt_conring_size);
 
-#define _CONRING_SIZE 16384
+#define _CONRING_SIZE 65536
 #define CONRING_IDX_MASK(i) ((i)&(conring_size-1))
 static char __initdata _conring[_CONRING_SIZE];
 static char *__read_mostly conring = _conring;
