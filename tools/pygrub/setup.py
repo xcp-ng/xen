@@ -25,5 +25,8 @@ setup(name='pygrub',
       package_dir={'grub': 'src', 'fsimage': 'src'},
       scripts = ["src/pygrub"],
       packages=pkgs,
-      ext_modules = [ fsimage ]
+      ext_modules = [ fsimage ],
+      data_files=[
+        ('/etc/pygrub/rules.d/', [])
+        ]
       )
