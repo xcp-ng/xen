@@ -305,7 +305,7 @@ void smp_send_stop(void)
     int timeout = 10;
 
     local_irq_disable();
-    fixup_irqs(cpumask_of(smp_processor_id()), 0);
+    fixup_irqs(cpumask_of(smp_processor_id()));
     local_irq_enable();
 
     smp_call_function(stop_this_cpu, NULL, 0);
