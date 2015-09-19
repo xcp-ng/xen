@@ -119,6 +119,7 @@ struct xsm_ops {
                          uint8_t allow);
     int (*pci_config_permission)(struct domain *d, uint32_t machine_bdf,
                                  uint16_t start, uint16_t end, uint8_t access);
+    int (*iommu_control)(struct domain *d, unsigned long op);
 
 #if defined(CONFIG_HAS_PASSTHROUGH) && defined(CONFIG_HAS_PCI)
     int (*get_device_group)(uint32_t machine_bdf);
@@ -630,6 +631,11 @@ static inline int xsm_vm_event_control(
     xsm_default_t def, struct domain *d, int mode, int op)
 {
     return alternative_call(xsm_ops.vm_event_control, d, mode, op);
+}
+
+static inline int xsm_iommu_control(xsm_default_t def, struct domain *d, unsigned long op)
+{
+    return alternative_call(xsm_ops.iommu_control, d, op);
 }
 
 #ifdef CONFIG_MEM_ACCESS
