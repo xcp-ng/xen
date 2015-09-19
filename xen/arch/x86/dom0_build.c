@@ -7,6 +7,7 @@
 #include <xen/init.h>
 #include <xen/iocap.h>
 #include <xen/libelf.h>
+#include <xen/lockdown.h>
 #include <xen/param.h>
 #include <xen/pfn.h>
 #include <xen/sched.h>
@@ -319,6 +320,42 @@ unsigned long __init dom0_paging_pages(const struct domain *d,
     return DIV_ROUND_UP(memkb, 1024) << (20 - PAGE_SHIFT);
 }
 
+
+int __init dom0_check_parms(
+    const struct elf_dom_parms *parms, bool is_pv_shim)
+{
+    if ( parms->elf_notes[XEN_ELFNOTE_SUPPORTED_FEATURES].type != XEN_ENT_NONE )
+    {
+        if ( !is_pv_shim && !test_bit(XENFEAT_dom0, parms->f_supported) )
+        {
+            printk("Kernel does not support Dom0 operation\n");
+            return -EINVAL;
+        }
+    }
+
+    if ( is_locked_down() )
+    {
+        uint64_t filter_version =
+            parms->xs_elf_notes[XS_ELFNOTE_PRIVCMD_FILTERING].data.num;
+
+        if ( filter_version == 0 )
+        {
+            printk(XENLOG_ERR
+                   "Kernel hypercall filtering version is missing\n");
+            return -EINVAL;
+        }
+        if ( filter_version != PRIVCMD_FILTERING_ABI_VERSION )
+        {
+            printk(XENLOG_ERR
+                   "Kernel hypercall filtering version %#" PRIx64
+                   " is not compatible with expected %#lx\n",
+                   filter_version, PRIVCMD_FILTERING_ABI_VERSION);
+            return -EINVAL;
+        }
+    }
+
+    return 0;
+}
 
 /*
  * If allocation isn't specified, reserve 1/16th of available memory for

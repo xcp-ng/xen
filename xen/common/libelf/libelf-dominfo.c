@@ -278,6 +278,7 @@ elf_errorstatus elf_xs_parse_note(struct elf_binary *elf,
         bool str;
     } note_desc[] = {
         [XS_ELFNOTE_PV_IOMMU] = { "XS_PV_IOMMU", 0},
+        [XS_ELFNOTE_PRIVCMD_FILTERING] = { "XS_PRIVCMD_FILTERING", 0},
     };
 /* *INDENT-ON* */
 
