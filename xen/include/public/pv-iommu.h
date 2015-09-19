@@ -26,6 +26,9 @@
 #define IOMMUOP_query_caps            1
 #define IOMMUOP_map_page              2
 #define IOMMUOP_unmap_page            3
+#define IOMMUOP_map_foreign_page      4
+#define IOMMUOP_lookup_foreign_page   5
+#define IOMMUOP_unmap_foreign_page    6
 
 struct pv_iommu_op {
     uint16_t subop_id;
@@ -53,6 +56,25 @@ struct pv_iommu_op {
         struct {
             uint64_t bfn;
         } unmap_page;
+
+        struct {
+            uint64_t bfn;
+            uint64_t gfn;
+            uint16_t domid;
+            uint16_t ioserver;
+        } map_foreign_page;
+
+        struct {
+            uint64_t bfn;
+            uint64_t gfn;
+            uint16_t domid;
+            uint16_t ioserver;
+        } lookup_foreign_page;
+
+        struct {
+            uint64_t bfn;
+            uint16_t ioserver;
+        } unmap_foreign_page;
     } u;
 };
 
