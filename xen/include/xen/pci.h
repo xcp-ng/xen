@@ -119,6 +119,8 @@ struct pci_dev {
     uint8_t msi_maxvec;
     uint8_t phantom_stride;
 
+    uint16_t sriov_pos;
+
     nodeid_t node; /* NUMA node */
 
     /* Device to be quarantined, don't automatically re-assign to dom0 */
@@ -172,6 +174,19 @@ struct pci_dev {
     struct vpci *vpci;
 
     struct rangeset *config_writable;
+
+    struct bar {
+        uint64_t addr;
+        uint64_t size;
+        enum {
+            PCI_BAR_TYPE_EMPTY,
+            PCI_BAR_TYPE_IO,
+            PCI_BAR_TYPE_MEM32,
+            PCI_BAR_TYPE_MEM64_LO,
+            PCI_BAR_TYPE_MEM64_HI,
+            PCI_BAR_TYPE_ROM,
+        } type;
+    } bar[PCI_HEADER_NORMAL_NR_BARS + 1];
 };
 
 #define for_each_pdev(domain, pdev) \
@@ -270,6 +285,9 @@ const char *parse_pci_seg(const char *s, unsigned int *seg_p,
 int check_ioport_access(const struct domain *d, unsigned int port_start,
                         unsigned int port_end);
 
+int check_iomem_access(const struct domain *d, xen_pfn_t mfn_start,
+                       xen_pfn_t mfn_end);
+
 #define PCI_BAR_VF      (1u << 0)
 #define PCI_BAR_LAST    (1u << 1)
 #define PCI_BAR_ROM     (1u << 2)
@@ -296,5 +314,9 @@ static inline int arch_pci_clean_pirqs(struct domain *d)
 
 bool pdev_has_write_access(const struct pci_dev *pdev,
                            uint32_t pos, uint8_t size);
+static inline void pdev_invalidate_cache(struct pci_dev *pdev)
+{
+    memset(pdev->bar, 0, sizeof(pdev->bar));
+}
 
 #endif /* __XEN_PCI_H__ */
