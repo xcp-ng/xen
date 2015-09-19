@@ -373,6 +373,29 @@ int iommu_legacy_unmap(struct domain *d, unsigned long gfn,
     return rc;
 }
 
+int iommu_lookup_page(struct domain *d, unsigned long bfn, unsigned long *mfn)
+{
+    struct domain_iommu *hd = dom_iommu(d);
+
+    /* BFN maps 1:1 to MFN when iommu passthrough is enabled */
+    if ( iommu_passthrough && is_hardware_domain(d) ) {
+        *mfn = bfn;
+        return 0;
+    }
+
+    /* Do not support domains with shared PT */
+    if ( iommu_use_hap_pt(d) )
+    {
+        return -ENOMEM;
+    }
+
+    if ( !iommu_enabled || !hd->platform_ops ||
+            !hd->platform_ops->lookup_page )
+        return -ENOMEM;
+
+    return hd->platform_ops->lookup_page(d, bfn, mfn);
+}
+
 static void iommu_free_pagetables(unsigned long unused)
 {
     do {
