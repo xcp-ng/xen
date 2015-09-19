@@ -242,6 +242,13 @@ struct xen_add_to_physmap {
 
     unsigned int space; /* => enum phys_map_space */
 
+    /* Legacy Windows compat spaces. Read patch comment for info. */
+#define XENMAPSPAEC_vlapic_compat        3 /* Compat per-vcpu vlapic regs page */
+#define XENMAPSPACE_shared_info_old_xs   4 /* shared info page. */
+#define XENMAPSPACE_vlapic      0x80000000 /* per-vcpu vlapic regs page */
+#define XENMAPSPACE_physical    0x80000001 /* Remap a page from one PFN to another. */
+
+
 #define XENMAPIDX_grant_table_status 0x80000000
 
     /* Index into space being mapped. */
