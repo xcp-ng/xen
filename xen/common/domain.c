@@ -1181,6 +1181,50 @@ int domain_unpause_by_systemcontroller(struct domain *d)
     return 0;
 }
 
+int domain_pause_by_introspector(struct domain *d)
+{
+    int old, new, prev = d->introspection_pause_count;
+
+    do
+    {
+        old = prev;
+        new = old + 1;
+
+        /*
+         * Limit the toolstack pause count to an arbitrary 255 to prevent the
+         * toolstack overflowing d->pause_count with many repeated hypercalls.
+         */
+        if ( new > 255 )
+            return -EOVERFLOW;
+
+        prev = cmpxchg(&d->introspection_pause_count, old, new);
+    } while ( prev != old );
+
+    domain_pause(d);
+
+    return 0;
+}
+
+int domain_unpause_by_introspector(struct domain *d)
+{
+    int old, new, prev = d->introspection_pause_count;
+
+    do
+    {
+        old = prev;
+        new = old - 1;
+
+        if ( new < 0 )
+            return -EINVAL;
+
+        prev = cmpxchg(&d->introspection_pause_count, old, new);
+    } while ( prev != old );
+
+    domain_unpause(d);
+
+    return 0;
+}
+
 int domain_pause_except_self(struct domain *d)
 {
     struct vcpu *v, *curr = current;

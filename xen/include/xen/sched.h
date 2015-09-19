@@ -407,6 +407,8 @@ struct domain
 
     /* Domain is paused by controller software? */
     int              controller_pause_count;
+    /* Domain is paused by introspection software? */
+    int              introspection_pause_count;
 
     int64_t          time_offset_seconds;
 
@@ -890,6 +892,9 @@ static inline int domain_pause_by_systemcontroller_nosync(struct domain *d)
 {
     return __domain_pause_by_systemcontroller(d, domain_pause_nosync);
 }
+
+int domain_pause_by_introspector(struct domain *d);
+int domain_unpause_by_introspector(struct domain *d);
 
 /* domain_pause() but safe against trying to pause current. */
 int __must_check domain_pause_except_self(struct domain *d);
