@@ -138,8 +138,15 @@ static int __init parse_params(
                 continue;
             }
 
-            rctmp = 0;
             found = true;
+
+            if ( !param->is_lockdown_safe && is_locked_down() )
+            {
+                printk("Ignoring cmdline option '%s' in lockdown mode\n", param->name);
+                break;
+            }
+
+            rctmp = 0;
             switch ( param->type )
             {
             case OPT_STR:

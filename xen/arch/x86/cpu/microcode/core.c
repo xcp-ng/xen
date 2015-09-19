@@ -28,6 +28,7 @@
 #include <xen/err.h>
 #include <xen/guest_access.h>
 #include <xen/init.h>
+#include <xen/lockdown.h>
 #include <xen/param.h>
 #include <xen/spinlock.h>
 #include <xen/stop_machine.h>
@@ -132,7 +133,12 @@ static int __init cf_check parse_ucode(const char *s)
         if ( (val = parse_boolean("nmi", s, ss)) >= 0 )
             ucode_in_nmi = val;
         else if ( (val = parse_boolean("digest-check", s, ss)) >= 0 )
-            opt_digest_check = val;
+        {
+            if ( is_locked_down() && !val )
+                lockdown_ignore("ucode", s, ss);
+            else
+                opt_digest_check = val;
+        }
         else if ( !ucode_mod_forced ) /* Not forced by EFI */
         {
             if ( (val = parse_boolean("scan", s, ss)) >= 0 )
@@ -160,7 +166,7 @@ static int __init cf_check parse_ucode(const char *s)
 
     return rc;
 }
-custom_param("ucode", parse_ucode);
+custom_secure_param("ucode", parse_ucode);
 
 static struct microcode_ops __ro_after_init ucode_ops;
 

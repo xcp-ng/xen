@@ -48,7 +48,7 @@ void (*video_puts)(const char *s, size_t nr) = vga_noop_puts;
  * control of the console to domain 0.
  */
 static char __initdata opt_vga[30] = "";
-string_param("vga", opt_vga);
+string_secure_param("vga", opt_vga);
 
 /* VGA text-mode definitions. */
 static unsigned int columns, lines;

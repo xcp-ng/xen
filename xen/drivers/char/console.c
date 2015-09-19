@@ -68,7 +68,7 @@ static void console_send(const char *str, size_t len, unsigned int flags);
 
 /* console: comma-separated list of console outputs. */
 static char __initdata opt_console[30] = OPT_CONSOLE_STR;
-string_param("console", opt_console);
+string_secure_param("console", opt_console);
 
 /* conswitch: a character pair controlling console switching. */
 /* Char 1: CTRL+<char1> is used to switch console input between Xen and DOM0 */

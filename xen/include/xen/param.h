@@ -25,6 +25,7 @@ struct kernel_param {
         void *var;
         int (*func)(const char *s);
     } par;
+    bool is_lockdown_safe;
 };
 
 /* Maximum length of a single parameter string. */
@@ -44,46 +45,72 @@ extern const struct kernel_param __setup_start[], __setup_end[];
 #define _TEMP_NAME(base, line) __TEMP_NAME(base, line)
 #define TEMP_NAME(base) _TEMP_NAME(base, __LINE__)
 
-#define custom_param(_name, _var) \
+#define custom_param_(_name, _var, _sec) \
     __setup_str __setup_str_##_var[] = (_name); \
     __kparam __setup_##_var = \
         { .name = __setup_str_##_var, \
           .type = OPT_CUSTOM, \
-          .par.func = (_var) }
-#define boolean_param(_name, _var) \
+          .par.func = (_var), \
+          .is_lockdown_safe = (_sec) }
+#define custom_param(_name, _var) \
+    custom_param_(_name, _var, false)
+#define custom_secure_param(_name, _var) \
+    custom_param_(_name, _var, true)
+#define boolean_param_(_name, _var, _sec) \
     __setup_str __setup_str_##_var[] = (_name); \
     __kparam __setup_##_var = \
         { .name = __setup_str_##_var, \
           .type = OPT_BOOL, \
           .len = sizeof(_var) + \
                  BUILD_BUG_ON_ZERO(sizeof(_var) != sizeof(bool)), \
-          .par.var = &(_var) }
-#define integer_param(_name, _var) \
+          .par.var = &(_var), \
+          .is_lockdown_safe = (_sec) }
+#define boolean_param(_name, _var) \
+    boolean_param_(_name, _var, false)
+#define boolean_secure_param(_name, _var) \
+    boolean_param_(_name, _var, true)
+#define integer_param_(_name, _var, _sec) \
     __setup_str __setup_str_##_var[] = (_name); \
     __kparam __setup_##_var = \
         { .name = __setup_str_##_var, \
           .type = OPT_UINT, \
           .len = sizeof(_var), \
-          .par.var = &(_var) }
-#define size_param(_name, _var) \
+          .par.var = &(_var), \
+          .is_lockdown_safe = (_sec) }
+#define integer_param(_name, _var) \
+    integer_param_(_name, _var, false)
+#define integer_secure_param(_name, _var) \
+    integer_param_(_name, _var, true)
+#define size_param_(_name, _var, _sec) \
     __setup_str __setup_str_##_var[] = (_name); \
     __kparam __setup_##_var = \
         { .name = __setup_str_##_var, \
           .type = OPT_SIZE, \
           .len = sizeof(_var), \
-          .par.var = &(_var) }
-#define string_param(_name, _var) \
+          .par.var = &(_var), \
+          .is_lockdown_safe = (_sec) }
+#define size_param(_name, _var) \
+    size_param_(_name, _var, false)
+#define size_secure_param(_name, _var) \
+    size_param_(_name, _var, true)
+#define string_param_(_name, _var, _sec) \
     __setup_str __setup_str_##_var[] = (_name); \
     __kparam __setup_##_var = \
         { .name = __setup_str_##_var, \
           .type = OPT_STR, \
           .len = sizeof(_var), \
-          .par.var = &(_var) }
+          .par.var = &(_var), \
+          .is_lockdown_safe = (_sec) }
+#define string_param(_name, _var) \
+  string_param_(_name, _var, false)
+#define string_secure_param(_name, _var) \
+  string_param_(_name, _var, true)
 #define ignore_param(_name)                 \
     __setup_str TEMP_NAME(__setup_str_ign)[] = (_name);  \
     __kparam TEMP_NAME(__setup_ign) =                    \
         { .name = TEMP_NAME(__setup_str_ign),            \
-          .type = OPT_IGNORE }
+          .type = OPT_IGNORE,                            \
+          .is_lockdown_safe = true }
 
 #ifdef CONFIG_HYPFS
 
@@ -194,6 +221,23 @@ static inline void no_config_param(const char *cfg, const char *param,
 
     printk(XENLOG_INFO "CONFIG_%s disabled - ignoring '%s=%.*s' setting\n",
            cfg, param, len, s);
+}
+
+static inline void lockdown_ignore(const char *param, const char *s,
+                                   const char *e)
+{
+    int len = e ? ({ ASSERT(e >= s); e - s; }) : strlen(s);
+
+    printk(XENLOG_INFO "Lockdown active - ignoring '%s=%.*s' setting\n",
+           param, len, s);
+}
+
+static inline void lockdown_ignore_namevalue(const char *param,
+                                             const char *key,
+                                             const char *val)
+{
+    printk(XENLOG_INFO "Lockdown active - ignoring '%s=%s=%s' setting\n",
+           param, key, val);
 }
 
 #endif /* _XEN_PARAM_H */

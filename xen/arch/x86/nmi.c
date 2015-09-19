@@ -73,7 +73,7 @@ static int __init cf_check parse_watchdog(const char *s)
 
     return 0;
 }
-custom_param("watchdog", parse_watchdog);
+custom_secure_param("watchdog", parse_watchdog);
 
 /* opt_watchdog_timeout: Number of seconds to wait before panic. */
 static unsigned int opt_watchdog_timeout = 5;

@@ -69,7 +69,7 @@
 #endif
 
 static __initdata bool opt_mwait_idle = true;
-boolean_param("mwait-idle", opt_mwait_idle);
+boolean_secure_param("mwait-idle", opt_mwait_idle);
 
 static unsigned int mwait_substates;
 
@@ -84,7 +84,7 @@ static unsigned int mwait_substates;
  */
 static unsigned int __ro_after_init preferred_states_mask;
 static char __initdata preferred_states[64];
-string_param("preferred-cstates", preferred_states);
+string_secure_param("preferred-cstates", preferred_states);
 
 #define LAPIC_TIMER_ALWAYS_RELIABLE 0xFFFFFFFF
 /* Reliable LAPIC Timer States, bit 1 for C1 etc. Default to only C1. */

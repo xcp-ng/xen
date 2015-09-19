@@ -67,7 +67,7 @@
 
 /* opt_nosmp: If true, secondary processors are ignored. */
 static bool __initdata opt_nosmp;
-boolean_param("nosmp", opt_nosmp);
+boolean_secure_param("nosmp", opt_nosmp);
 
 /* maxcpus: maximum number of CPUs to activate. */
 static unsigned int __initdata max_cpus;
@@ -98,7 +98,7 @@ boolean_param("noapic", skip_ioapic_setup);
 /* **** Linux config option: propagated to domain0. */
 /* xen_cpuidle: xen control cstate. */
 int8_t __read_mostly xen_cpuidle = -1;
-boolean_param("cpuidle", xen_cpuidle);
+boolean_secure_param("cpuidle", xen_cpuidle);
 
 #ifndef NDEBUG
 unsigned long __initdata highmem_start;
