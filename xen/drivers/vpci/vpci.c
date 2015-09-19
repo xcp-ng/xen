@@ -123,7 +123,7 @@ static uint32_t cf_check vpci_ignored_read(
 }
 
 static void cf_check vpci_ignored_write(
-    const struct pci_dev *pdev, unsigned int reg, uint32_t val, void *data)
+    struct pci_dev *pdev, unsigned int reg, uint32_t val, void *data)
 {
 }
 
@@ -402,7 +402,7 @@ uint32_t vpci_read(pci_sbdf_t sbdf, unsigned int reg, unsigned int size)
  * the logic in vpci_write will have to be expanded in order to correctly
  * deal with them.
  */
-static void vpci_write_helper(const struct pci_dev *pdev,
+static void vpci_write_helper(struct pci_dev *pdev,
                               const struct vpci_register *r, unsigned int size,
                               unsigned int offset, uint32_t data)
 {
@@ -424,7 +424,7 @@ void vpci_write(pci_sbdf_t sbdf, unsigned int reg, unsigned int size,
                 uint32_t data)
 {
     const struct domain *d = current->domain;
-    const struct pci_dev *pdev;
+    struct pci_dev *pdev;
     const struct vpci_register *r;
     unsigned int data_offset = 0;
     const unsigned long *ro_map = pci_get_ro_map(sbdf.seg);
