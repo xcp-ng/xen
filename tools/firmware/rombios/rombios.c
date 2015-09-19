@@ -11659,6 +11659,8 @@ int08_store_ticks:
 
 .org 0xfef3 ; Initial Interrupt Vector Offsets Loaded by POST
 
+.org 0xffea ;; OEM string
+.ascii "______"
 
 .org 0xff00
 .ascii BIOS_COPYRIGHT_STRING
