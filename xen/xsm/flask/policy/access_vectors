@@ -254,6 +254,8 @@ class domain2
     set_gnttab_limits
 # XENMEM_resource_map
     resource_map
+# XEN_DOMCTL_get_runstate_info
+    get_runstate_info
 }
 
 # Similar to class domain, but primarily contains domctls related to HVM domains
