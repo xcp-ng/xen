@@ -91,6 +91,8 @@
 !	reserved_device_memory_map	memory.h
 ?	vmemrange			memory.h
 !	vnuma_topology_info		memory.h
+!	translate_gpfn_list             memory.h
+!	release_mfn_list                memory.h
 ?	physdev_eoi			physdev.h
 ?	physdev_get_free_pirq		physdev.h
 ?	physdev_irq			physdev.h

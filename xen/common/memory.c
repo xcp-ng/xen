@@ -992,6 +992,164 @@ static unsigned int _quirks_transform_space(struct domain *d, unsigned int space
     }
 }
 
+static long translate_gpfn_list(
+    XEN_GUEST_HANDLE(xen_translate_gpfn_list_t) uop, unsigned long *progress)
+{
+    struct xen_translate_gpfn_list op;
+    unsigned long i, j;
+    xen_pfn_t gpfn;
+    xen_pfn_t mfn;
+    struct domain *d;
+    struct page_info *page;
+    int rc = 0;
+
+    if ( copy_from_guest(&op, uop, 1) )
+        return -EFAULT;
+
+    /* Is size too large for us to encode a continuation? */
+    if ( op.nr_gpfns > (ULONG_MAX >> MEMOP_EXTENT_SHIFT) )
+        return -EINVAL;
+
+    if ( !guest_handle_subrange_okay(op.gpfn_list, *progress, op.nr_gpfns-1) ||
+         !guest_handle_subrange_okay(op.mfn_list, *progress, op.nr_gpfns-1) )
+        return -EFAULT;
+
+    d = rcu_lock_domain_by_any_id(op.domid);
+    if ( d == NULL )
+        return -ESRCH;
+
+    if ( !paging_mode_translate(d) )
+    {
+        rcu_unlock_domain(d);
+        return -EINVAL;
+    }
+
+    for ( i = *progress; i < op.nr_gpfns; i++ )
+    {
+#ifdef CONFIG_X86
+        p2m_type_t p2mt;
+#endif
+
+        if ( hypercall_preempt_check() )
+        {
+            rcu_unlock_domain(d);
+            *progress = i;
+            return -EAGAIN;
+        }
+
+        if ( unlikely(__copy_from_guest_offset(&gpfn, op.gpfn_list, i, 1)) )
+            goto fail;
+
+#ifdef CONFIG_X86
+        mfn = mfn_x(get_gfn_unshare(d, gpfn, &p2mt));
+        if ( p2m_is_shared(p2mt) )
+        {
+            put_gfn(d, gpfn);
+            goto fail;
+        }
+#else /* !CONFIG_X86 */
+        mfn = gmfn_to_mfn(d, gpfn);
+#endif
+        if ( unlikely(!mfn_valid(mfn)) )
+        {
+            put_gfn(d, gpfn);
+            goto fail;
+        }
+
+        if ( unlikely(__copy_to_guest_offset(op.mfn_list, i, &mfn, 1)) ) {
+            put_gfn(d, gpfn);
+            goto fail;
+        }
+
+        page = mfn_to_page(mfn);
+        if (!test_and_set_bit(_PGC_pinned_by_tools, &page->count_info))
+        {
+            if ( unlikely(!get_page(page, d)) )
+            {
+                clear_bit(_PGC_pinned_by_tools, &page->count_info);
+                put_gfn(d, gpfn);
+                goto fail;
+            }
+        }
+
+        put_gfn(d, gpfn);
+    }
+
+    goto done;
+
+fail:
+    rc = -EFAULT;
+    /* Release all previous translated GPFNs */
+    for (j = 0; j < i && i != 0; j++) {
+
+        if ( unlikely(__copy_from_guest_offset(&mfn, op.mfn_list, j, 1)))
+            goto done;
+
+        page = mfn_to_page(mfn);
+        if (test_and_clear_bit(_PGC_pinned_by_tools, &page->count_info))
+            put_page(page);
+    }
+
+done:
+    rcu_unlock_domain(d);
+    return rc;
+}
+
+static long release_mfn_list(
+    XEN_GUEST_HANDLE(xen_release_mfn_list_t) uop, unsigned long *progress)
+{
+    struct xen_release_mfn_list op;
+    unsigned long i;
+    xen_pfn_t mfn;
+    struct domain *d;
+    struct page_info *page;
+
+    if ( copy_from_guest(&op, uop, 1) )
+        return -EFAULT;
+
+    /* Is size too large for us to encode a continuation? */
+    if ( op.nr_mfns > (ULONG_MAX >> MEMOP_EXTENT_SHIFT) )
+        return -EINVAL;
+
+    if ( !guest_handle_subrange_okay(op.mfn_list, *progress, op.nr_mfns-1) )
+        return -EFAULT;
+
+    d = rcu_lock_domain_by_any_id(op.domid);
+    if ( d == NULL )
+        return -ESRCH;
+
+    if ( !paging_mode_translate(d) )
+    {
+        rcu_unlock_domain(d);
+        return -EINVAL;
+    }
+
+    for ( i = *progress; i < op.nr_mfns; i++ )
+    {
+        if ( hypercall_preempt_check() )
+        {
+            rcu_unlock_domain(d);
+            *progress = i;
+            return -EAGAIN;
+        }
+
+        if ( unlikely(__copy_from_guest_offset(&mfn, op.mfn_list, i, 1)) )
+        {
+            rcu_unlock_domain(d);
+            return -EFAULT;
+        }
+
+        page = mfn_to_page(mfn);
+        if (test_bit(_PGC_pinned_by_tools, &page->count_info)) {
+            put_page(page);
+            clear_bit(_PGC_pinned_by_tools, &page->count_info);
+        }
+    }
+
+    rcu_unlock_domain(d);
+    return 0;
+}
+
 long do_memory_op(unsigned long cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
 {
     struct domain *d;
@@ -1437,6 +1595,24 @@ long do_memory_op(unsigned long cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
         break;
     }
 #endif
+
+    case XENMEM_translate_gpfn_list:
+        rc = translate_gpfn_list(guest_handle_cast(arg, xen_translate_gpfn_list_t),
+                                 &start_extent);
+        if ( rc == -EAGAIN )
+            return hypercall_create_continuation(
+                __HYPERVISOR_memory_op, "lh",
+                op | (start_extent << MEMOP_EXTENT_SHIFT), arg);
+        break;
+
+    case XENMEM_release_mfn_list:
+        rc = release_mfn_list(guest_handle_cast(arg, xen_release_mfn_list_t),
+                              &start_extent);
+        if ( rc == -EAGAIN )
+            return hypercall_create_continuation(
+                    __HYPERVISOR_memory_op, "lh",
+                    op | (start_extent << MEMOP_EXTENT_SHIFT), arg);
+        break;
 
     default:
         rc = arch_memory_op(cmd, arg);

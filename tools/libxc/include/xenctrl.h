@@ -1393,6 +1393,17 @@ int xc_domain_get_pod_target(xc_interface *xch,
                              uint64_t *pod_cache_pages,
                              uint64_t *pod_entries);
 
+int xc_domain_memory_translate_gpfn_list(xc_interface *xch,
+                                         uint32_t domid,
+                                         unsigned long nr_gpfns,
+                                         xen_pfn_t *gpfn_list,
+                                         xen_pfn_t *mfn_list);
+
+int xc_domain_memory_release_mfn_list(xc_interface *xch,
+                                      uint32_t domid,
+                                      unsigned long nr_mfns,
+                                      xen_pfn_t *mfn_list);
+
 #define XENCTRL_HAS_GET_RUNSTATE_INFO 1
 int xc_get_runstate_info(xc_interface *xch,
 			 uint32_t domid,

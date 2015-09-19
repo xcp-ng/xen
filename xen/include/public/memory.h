@@ -317,9 +317,6 @@ struct xen_remove_from_physmap {
 typedef struct xen_remove_from_physmap xen_remove_from_physmap_t;
 DEFINE_XEN_GUEST_HANDLE(xen_remove_from_physmap_t);
 
-/*** REMOVED ***/
-/*#define XENMEM_translate_gpfn_list  8*/
-
 /*
  * Returns the pseudo-physical memory map as it was when the domain
  * was started (specified by XENMEM_set_memory_map).
@@ -646,6 +643,56 @@ typedef struct xen_vnuma_topology_info xen_vnuma_topology_info_t;
 DEFINE_XEN_GUEST_HANDLE(xen_vnuma_topology_info_t);
 
 /* Next available subop number is 28 */
+
+/*
+ * MEMOPs can only be 6 bits wide (see hypercall.h). Set the top bit to
+ * lessen the likelihood of clashing with upstream.
+ */
+
+#define MEMOP_TOP_BIT (1 << 5)
+
+/*
+ * Translates a list of domain-specific GPFNs into MFNs and increases
+ * their ref count. Returns a -ve error code on failure. This call only
+ * works for auto-translated guests.
+ */
+#define XENMEM_translate_gpfn_list  (0x08 | MEMOP_TOP_BIT)
+struct xen_translate_gpfn_list {
+    /* Which domain to translate for? */
+    domid_t domid;
+
+    /* Length of list. */
+    xen_ulong_t nr_gpfns;
+
+    /* List of GPFNs to translate. */
+    XEN_GUEST_HANDLE(xen_pfn_t) gpfn_list;
+
+    /*
+     * Output list to contain MFN translations. May be the same as the input
+     * list (in which case each input GPFN is overwritten with the output MFN).
+     */
+    XEN_GUEST_HANDLE(xen_pfn_t) mfn_list;
+};
+typedef struct xen_translate_gpfn_list xen_translate_gpfn_list_t;
+DEFINE_XEN_GUEST_HANDLE(xen_translate_gpfn_list_t);
+
+/*
+ * Decrement the ref count of a list of mfns (previously incremented with
+ * XENMEM_translate_gpfn_list).
+ */
+#define XENMEM_release_mfn_list (0x19 | MEMOP_TOP_BIT)
+struct xen_release_mfn_list {
+    /* Which domain to release for? */
+    domid_t domid;
+    /* Length of list. */
+    xen_ulong_t nr_mfns;
+
+    /* List of GPFNs to release. */
+    XEN_GUEST_HANDLE(xen_pfn_t) mfn_list;
+};
+
+typedef struct xen_release_mfn_list xen_release_mfn_list_t;
+DEFINE_XEN_GUEST_HANDLE(xen_release_mfn_list_t);
 
 #endif /* __XEN_PUBLIC_MEMORY_H__ */
 

@@ -71,6 +71,8 @@ int compat_memory_op(unsigned int cmd, XEN_GUEST_HANDLE_PARAM(void) compat)
             struct xen_remove_from_physmap *xrfp;
             struct xen_vnuma_topology_info *vnuma;
             struct xen_mem_access_op *mao;
+            struct xen_translate_gpfn_list *xlat;
+            struct xen_release_mfn_list *xrel;
         } nat;
         union {
             struct compat_memory_reservation rsrv;
@@ -79,6 +81,8 @@ int compat_memory_op(unsigned int cmd, XEN_GUEST_HANDLE_PARAM(void) compat)
             struct compat_add_to_physmap_batch atpb;
             struct compat_vnuma_topology_info vnuma;
             struct compat_mem_access_op mao;
+            struct compat_translate_gpfn_list xlat;
+            struct compat_release_mfn_list xrel;
         } cmp;
 
         set_xen_guest_handle(nat.hnd, COMPAT_ARG_XLAT_VIRT_BASE);
@@ -227,6 +231,90 @@ int compat_memory_op(unsigned int cmd, XEN_GUEST_HANDLE_PARAM(void) compat)
 
             break;
         }
+
+        case XENMEM_translate_gpfn_list:
+            if ( copy_from_guest(&cmp.xlat, compat, 1) )
+                return -EFAULT;
+
+            /* Is size too large for us to encode a continuation? */
+            if ( cmp.xlat.nr_gpfns > (UINT_MAX >> MEMOP_EXTENT_SHIFT) )
+                return -EINVAL;
+
+            if ( !compat_handle_okay(cmp.xlat.gpfn_list, cmp.xlat.nr_gpfns) ||
+                 !compat_handle_okay(cmp.xlat.mfn_list,  cmp.xlat.nr_gpfns) )
+                return -EFAULT;
+
+            end_extent = start_extent + (COMPAT_ARG_XLAT_SIZE - sizeof(*nat.xlat)) /
+                                        sizeof(*space);
+            if ( end_extent > cmp.xlat.nr_gpfns )
+                end_extent = cmp.xlat.nr_gpfns;
+
+            space = (xen_pfn_t *)(nat.xlat + 1);
+            /* Code below depends upon .gpfn_list preceding .mfn_list. */
+            BUILD_BUG_ON(offsetof(xen_translate_gpfn_list_t, gpfn_list) > offsetof(xen_translate_gpfn_list_t, mfn_list));
+#define XLAT_translate_gpfn_list_HNDL_gpfn_list(_d_, _s_) \
+            do \
+            { \
+                set_xen_guest_handle((_d_)->gpfn_list, space - start_extent); \
+                for ( i = start_extent; i < end_extent; ++i ) \
+                { \
+                    compat_pfn_t pfn; \
+                    if ( __copy_from_compat_offset(&pfn, (_s_)->gpfn_list, i, 1) ) \
+                        return -EFAULT; \
+                    *space++ = pfn; \
+                } \
+            } while (0)
+#define XLAT_translate_gpfn_list_HNDL_mfn_list(_d_, _s_) \
+            (_d_)->mfn_list = (_d_)->gpfn_list
+            XLAT_translate_gpfn_list(nat.xlat, &cmp.xlat);
+#undef XLAT_translate_gpfn_list_HNDL_mfn_list
+#undef XLAT_translate_gpfn_list_HNDL_gpfn_list
+
+            if ( end_extent < cmp.xlat.nr_gpfns )
+            {
+                nat.xlat->nr_gpfns = end_extent;
+                ++split;
+            }
+            break;
+
+        case XENMEM_release_mfn_list:
+            if ( copy_from_guest(&cmp.xrel, compat, 1) )
+                return -EFAULT;
+
+            /* Is size too large for us to encode a continuation? */
+            if ( cmp.xrel.nr_mfns > (UINT_MAX >> MEMOP_EXTENT_SHIFT) )
+                return -EINVAL;
+
+            if ( !compat_handle_okay(cmp.xrel.mfn_list, cmp.xrel.nr_mfns) )
+                return -EFAULT;
+
+            end_extent = start_extent + (COMPAT_ARG_XLAT_SIZE - sizeof(*nat.xrel)) /
+                                        sizeof(*space);
+            if ( end_extent > cmp.xrel.nr_mfns )
+                end_extent = cmp.xrel.nr_mfns;
+
+            space = (xen_pfn_t *)(nat.xrel + 1);
+#define XLAT_release_mfn_list_HNDL_mfn_list(_d_, _s_) \
+            do \
+            { \
+                set_xen_guest_handle((_d_)->mfn_list, space - start_extent); \
+                for ( i = start_extent; i < end_extent; ++i ) \
+                { \
+                    compat_pfn_t pfn; \
+                    if ( __copy_from_compat_offset(&pfn, (_s_)->mfn_list, i, 1) ) \
+                        return -EFAULT; \
+                    *space++ = pfn; \
+                } \
+            } while (0)
+            XLAT_release_mfn_list(nat.xrel, &cmp.xrel);
+#undef XLAT_release_mfn_list_HNDL_mfn_list
+
+            if ( end_extent < cmp.xrel.nr_mfns )
+            {
+                nat.xrel->nr_mfns = end_extent;
+                ++split;
+            }
+            break;
 
         case XENMEM_current_reservation:
         case XENMEM_maximum_reservation:
@@ -516,6 +604,48 @@ int compat_memory_op(unsigned int cmd, XEN_GUEST_HANDLE_PARAM(void) compat)
 
         case XENMEM_add_to_physmap_batch:
             start_extent = end_extent;
+            break;
+
+        case XENMEM_translate_gpfn_list:
+            if ( split < 0 )
+                end_extent = cmd >> MEMOP_EXTENT_SHIFT;
+            else
+                BUG_ON(rc);
+
+            for ( ; start_extent < end_extent; ++start_extent )
+            {
+                compat_pfn_t pfn = nat.xlat->mfn_list.p[start_extent];
+
+                BUG_ON(pfn != nat.xlat->mfn_list.p[start_extent]);
+                if ( __copy_to_compat_offset(cmp.xlat.mfn_list, start_extent, &pfn, 1) )
+                {
+                    if ( split < 0 )
+                        /* Cannot cancel the continuation... */
+                        domain_crash(current->domain);
+                    return -EFAULT;
+                }
+            }
+            break;
+
+        case XENMEM_release_mfn_list:
+            if ( split < 0 )
+                end_extent = cmd >> MEMOP_EXTENT_SHIFT;
+            else
+                BUG_ON(rc);
+
+            for ( ; start_extent < end_extent; ++start_extent )
+            {
+                compat_pfn_t pfn = nat.xrel->mfn_list.p[start_extent];
+
+                BUG_ON(pfn != nat.xrel->mfn_list.p[start_extent]);
+                if ( __copy_to_compat_offset(cmp.xrel.mfn_list, start_extent, &pfn, 1) )
+                {
+                    if ( split < 0 )
+                        /* Cannot cancel the continuation... */
+                        domain_crash(current->domain);
+                    return -EFAULT;
+                }
+            }
             break;
 
         case XENMEM_maximum_ram_page:

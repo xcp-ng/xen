@@ -2488,6 +2488,9 @@ static int relinquish_memory(
             continue;
         }
 
+        if ( test_and_clear_bit(_PGC_pinned_by_tools, &page->count_info) )
+            put_page(page);
+
         if ( test_and_clear_bit(_PGT_pinned, &page->u.inuse.type_info) )
             ret = put_page_and_type_preemptible(page);
         switch ( ret )

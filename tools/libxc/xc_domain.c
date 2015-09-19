@@ -1210,6 +1210,81 @@ int xc_domain_get_pod_target(xc_interface *xch,
 }
 #endif
 
+int xc_domain_memory_translate_gpfn_list(xc_interface *xch,
+                                        uint32_t domid,
+                                        unsigned long nr_gpfns,
+                                        xen_pfn_t *gpfn_list,
+                                        xen_pfn_t *mfn_list)
+{
+    int err = - 1;
+    DECLARE_HYPERCALL_BOUNCE(gpfn_list, nr_gpfns*sizeof(*gpfn_list), XC_HYPERCALL_BUFFER_BOUNCE_IN);
+    DECLARE_HYPERCALL_BOUNCE(mfn_list, nr_gpfns*sizeof(*mfn_list), XC_HYPERCALL_BUFFER_BOUNCE_OUT);
+    struct xen_translate_gpfn_list translate_gpfn_list = {
+        .domid    = domid,
+        .nr_gpfns = nr_gpfns,
+    };
+
+    if ( xc_hypercall_bounce_pre(xch, gpfn_list) ||
+         xc_hypercall_bounce_pre(xch, mfn_list))
+    {
+        PERROR("Could not bounce memory for XENMEM_translate_gpfn_list hypercall");
+        return -1;
+    }
+
+    set_xen_guest_handle(translate_gpfn_list.gpfn_list, gpfn_list);
+    set_xen_guest_handle(translate_gpfn_list.mfn_list, mfn_list);
+
+    err = do_memory_op(xch, XENMEM_translate_gpfn_list,
+                       &translate_gpfn_list, sizeof(translate_gpfn_list));
+
+    if ( err != 0 )
+    {
+        errno = -err;
+        err = -1;
+    }
+
+    xc_hypercall_bounce_post(xch, gpfn_list);
+    xc_hypercall_bounce_post(xch, mfn_list);
+
+    return err;
+}
+
+int xc_domain_memory_release_mfn_list(xc_interface *xch,
+                                      uint32_t domid,
+                                      unsigned long nr_mfns,
+                                      xen_pfn_t *mfn_list)
+{
+    int err;
+    DECLARE_HYPERCALL_BOUNCE(mfn_list, nr_mfns*sizeof(*mfn_list), XC_HYPERCALL_BUFFER_BOUNCE_IN);
+    struct xen_release_mfn_list release_mfn_list = {
+        .domid    = domid,
+        .nr_mfns = nr_mfns,
+    };
+
+    if (xc_hypercall_bounce_pre(xch, mfn_list))
+    {
+        PERROR("Could not bounce memory for XENMEM_release_mfn_list hypercall");
+        return -1;
+    }
+
+    set_xen_guest_handle(release_mfn_list.mfn_list, mfn_list);
+
+    err = do_memory_op(xch, XENMEM_release_mfn_list,
+                       &release_mfn_list, sizeof(release_mfn_list));
+
+    if ( err != 0 )
+    {
+        DPRINTF("Failed mfns release for dom %d (%ld MFNs)\n",
+                domid, nr_mfns);
+        errno = -err;
+        err = -1;
+    }
+
+    xc_hypercall_bounce_post(xch, mfn_list);
+
+    return err;
+}
+
 int xc_domain_max_vcpus(xc_interface *xch, uint32_t domid, unsigned int max)
 {
     DECLARE_DOMCTL;
