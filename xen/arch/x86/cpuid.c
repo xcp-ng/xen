@@ -641,6 +641,7 @@ void guest_cpuid(const struct vcpu *v, uint32_t leaf,
 {
     const struct domain *d = v->domain;
     const struct cpuid_policy *p = d->arch.cpuid;
+    unsigned int cps = d->cores_per_socket;
 
     *res = EMPTY_LEAF;
 
@@ -764,6 +765,24 @@ void guest_cpuid(const struct vcpu *v, uint32_t leaf,
             /* OSXSAVE clear in policy.  Fast-forward CR4 back in. */
             if ( v->arch.hvm.guest_cr[4] & X86_CR4_OSXSAVE )
                 res->c |= cpufeat_mask(X86_FEATURE_OSXSAVE);
+
+            if ( cps > 0 )
+            {
+                /* to fake out #vcpus per socket first force on HT/MC */
+                res->d |= cpufeat_mask(X86_FEATURE_HTT);
+                /* fake out #vcpus and inform guest of #cores per package */
+                res->b &= 0xFF00FFFF;
+                /*
+                 * This (cps * 2) is wrong, and contrary to the statement in the
+                 * AMD manual.  However, Xen unconditionally offers Intel-style
+                 * APIC IDs (odd IDs for hyperthreads) which breaks the AMD APIC
+                 * Enumeration Requirements.
+                 *
+                 * Fake up cores-per-socket as a socket with twice as many cores
+                 * as expected, with every odd core offline.
+                 */
+                res->b |= (((cps * 2) & 0xFF) << 16);
+            }
         }
         else /* PV domain */
         {
@@ -876,6 +895,15 @@ void guest_cpuid(const struct vcpu *v, uint32_t leaf,
         }
         goto common_leaf1_adjustments;
 
+    case 0x4:
+        if ( is_hvm_domain(d) && p->x86_vendor == X86_VENDOR_INTEL && cps > 0 )
+        {
+            /* fake out cores per socket */
+            res->a &= 0x3FFF; /* one thread, one core */
+            res->a |= (((cps * 2) - 1) << 26);
+        }
+        break;
+
     case 0x5:
         /*
          * Leak the hardware MONITOR leaf under the same conditions that the
@@ -962,6 +990,9 @@ void guest_cpuid(const struct vcpu *v, uint32_t leaf,
              is_hvm_domain(d) && !hvm_long_mode_active(v) )
             res->d &= ~cpufeat_mask(X86_FEATURE_SYSCALL);
 
+        if ( p->x86_vendor == X86_VENDOR_AMD && cps > 0 && is_hvm_domain(d) )
+            res->c |= cpufeat_mask(X86_FEATURE_CMP_LEGACY);
+
     common_leaf1_adjustments:
         if ( is_hvm_domain(d) )
         {
@@ -1001,6 +1032,23 @@ void guest_cpuid(const struct vcpu *v, uint32_t leaf,
             if ( is_hardware_domain(d) && cpu_has_mtrr &&
                  guest_kernel_mode(v, guest_cpu_user_regs()) )
                 res->d |= cpufeat_mask(X86_FEATURE_MTRR);
+        }
+        break;
+
+    case 0x80000008:
+        if ( p->x86_vendor == X86_VENDOR_AMD && cps > 0 )
+        {
+            res->c &= 0xFFFF0F00;
+            /*
+             * This (cps * 2) is wrong, and contrary to the statement in the
+             * AMD manual.  However, Xen unconditionally offers Intel-style
+             * APIC IDs (odd IDs for hyperthreads) which breaks the AMD APIC
+             * Enumeration Requirements.
+             *
+             * Fake up cores-per-socket as a socket with twice as many cores
+             * as expected, with every odd core offline.
+             */
+            res->c |= ((cps * 2) - 1) & 0xFF;
         }
         break;
     }

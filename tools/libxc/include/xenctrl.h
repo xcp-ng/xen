@@ -1359,6 +1359,10 @@ int xc_domain_disable_migrate(xc_interface *xch, uint32_t domid);
 int xc_domain_query_disable_migrate(xc_interface *xch, uint32_t domid,
                                     bool *migration_disabled);
 
+int xc_domain_set_cores_per_socket(xc_interface *xch,
+                                   uint32_t domid,
+                                   uint32_t cores_per_socket);
+
 int xc_domain_maximum_gpfn(xc_interface *xch, uint32_t domid, xen_pfn_t *gpfns);
 
 int xc_domain_nr_gpfns(xc_interface *xch, uint32_t domid, xen_pfn_t *gpfns);
