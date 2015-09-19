@@ -5249,6 +5249,11 @@ int xenmem_add_to_physmap_one(
         }
         case XENMAPSPACE_gmfn_foreign:
             return p2m_add_foreign(d, idx, gpfn, extra.foreign_domid);
+        case XENMAPSPACE_vlapic:
+            /* Legacy vlapic map space is not implemented any more now there
+             * is a fastpath for LAPIC VMEXITs which avoid the general MMIO
+             * emulation path, but still crutially needed to trigger quirks
+             * mode for legacy windows drivers on migrate. */
         default:
             break;
     }
