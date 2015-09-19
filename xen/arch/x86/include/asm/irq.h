@@ -137,7 +137,7 @@ int map_domain_emuirq_pirq(struct domain *d, int pirq, int irq);
 int unmap_domain_pirq_emuirq(struct domain *d, int pirq);
 
 /* Evacuate interrupts assigned to CPUs not present in the input CPU mask. */
-void fixup_irqs(const cpumask_t *mask, bool verbose);
+void fixup_irqs(const cpumask_t *mask);
 void fixup_eoi(void);
 
 int  init_irq_data(void);
