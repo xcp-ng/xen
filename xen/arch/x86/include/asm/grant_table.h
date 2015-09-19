@@ -25,11 +25,11 @@ static inline int create_grant_host_mapping(uint64_t addr, mfn_t frame,
 
 static inline int replace_grant_host_mapping(uint64_t addr, mfn_t frame,
                                              uint64_t new_addr,
-                                             unsigned int flags)
+                                             unsigned int flags, int *page_accessed)
 {
     if ( paging_mode_external(current->domain) )
         return replace_grant_p2m_mapping(addr, frame, new_addr, flags);
-    return replace_grant_pv_mapping(addr, frame, new_addr, flags);
+    return replace_grant_pv_mapping(addr, frame, new_addr, flags, page_accessed);
 }
 
 #define gnttab_set_frame_gfn(gt, st, idx, gfn, mfn)                      \
