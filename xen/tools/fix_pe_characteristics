@@ -1,0 +1,104 @@
+#!/usr/bin/env python3
+
+import struct
+import os
+import sys
+
+DOS_HEADER_PE_POINTER = 0x3c
+
+FILE_HEADER_LEN = 20
+FILE_HEADER_NO_SECTIONS = 0x6
+FILE_HEADER_SIZEOF_OPTIONAL_HEADERS = 0x14
+
+OPTIONAL_HEADERS_CHECKSUM_OFFSET = 64
+
+SECTION_LEN = 0x28
+SECTION_CHARACTERISTICS_OFFSET = 0x24
+
+# section flags
+IMAGE_SCN_CNT_CODE = 0x20
+IMAGE_SCN_CNT_INITIALIZED_DATA = 0x40
+IMAGE_SCN_MEM_DISCARDABLE = 0x2000000
+IMAGE_SCN_MEM_EXECUTE = 0x20000000
+IMAGE_SCN_MEM_READ = 0x40000000
+IMAGE_SCN_MEM_WRITE = 0x80000000
+
+if len(sys.argv) != 2:
+	print('Script accepts a single argument, PE file name to be fixed', file=sys.stderr)
+	sys.exit(1)
+
+fn = sys.argv[1]
+with open(fn, 'rb') as f:
+	data = bytearray(f.read())
+
+def checksum(data):
+	sum = 0
+	left = len(data) % 8
+	if left != 0:
+		data_left = data[len(data) - left:] + b'\0' * (8 - left)
+		sum = struct.unpack('<Q', data_left)[0]
+		data = data[:len(data)-left]
+	for x in struct.iter_unpack('<Q', data):
+		sum += x[0]
+	sum = (sum & 0xffffffffffffffff) + (sum >> 64)
+	sum = (sum & 0xffffffff) + (sum >> 32)
+	sum = (sum & 0xffffffff) + (sum >> 32)
+	sum = (sum & 0xffff) + (sum >> 16)
+	sum = (sum & 0xffff) + (sum >> 16)
+	sum = (sum & 0xffff) + (sum >> 16)
+	return sum
+
+pe_offset = struct.unpack_from('<I', data, DOS_HEADER_PE_POINTER)[0]
+checksum_offset = pe_offset + 4 + FILE_HEADER_LEN + OPTIONAL_HEADERS_CHECKSUM_OFFSET
+file_checksum = struct.unpack_from('<I', data, checksum_offset)[0]
+
+def pe_checksum(data):
+	pe_offset = struct.unpack_from('<I', data, DOS_HEADER_PE_POINTER)[0]
+	checksum_offset = pe_offset + 4 + FILE_HEADER_LEN + OPTIONAL_HEADERS_CHECKSUM_OFFSET
+	sum = checksum(data[0:checksum_offset]) + checksum(data[checksum_offset+4:])
+	sum = (sum & 0xffff) + (sum >> 16)
+	sum = (sum & 0xffff) + (sum >> 16)
+	return sum + len(data)
+
+computed_checksum = pe_checksum(data)
+if file_checksum != computed_checksum:
+	print('Wrong checksum in PE file, computed %#x for file has %#x' % (computed_checksum, file_checksum),
+	      file=sys.stderr)
+	sys.exit(1)
+
+characteristics = []
+num_sections = struct.unpack_from('<H', data, pe_offset + FILE_HEADER_NO_SECTIONS)[0]
+sections_offset = pe_offset + 4 + FILE_HEADER_LEN + struct.unpack_from('<H', data, pe_offset + FILE_HEADER_SIZEOF_OPTIONAL_HEADERS)[0]
+for section_index in range(num_sections):
+	section_offset = sections_offset + section_index * SECTION_LEN
+	flags_offset = section_offset + SECTION_CHARACTERISTICS_OFFSET
+	name = struct.unpack_from('8s', data, section_offset)[0]
+	flags = struct.unpack_from('<I', data, flags_offset)[0]
+	original_flags = flags
+	# fix relocation sections, should not be discardable
+	# otherwise we won't be able to undo relocations for EFI
+	if name == b'.reloc\0\0':
+		flags &= ~IMAGE_SCN_MEM_DISCARDABLE
+	# fix main code section, shoud not be writeable
+	# otherwise UEFI memory mitigation requirements won't be met
+	if name == b'.text\0\0\0':
+		assert (flags & IMAGE_SCN_MEM_WRITE) == 0, ".text section should not be writeable"
+		assert (flags & IMAGE_SCN_CNT_INITIALIZED_DATA) == 0, ".text section should not contain data"
+		assert (flags & IMAGE_SCN_CNT_CODE) != 0, ".text section should contain code"
+	# make sure read-only data section is writeable,
+	# during initialisation part of it is written
+	if name == b'.rodata\0':
+		flags |= IMAGE_SCN_MEM_WRITE
+	if original_flags != flags:
+			characteristics.append((flags_offset, flags))
+
+if len(characteristics) != 0:
+	with open(fn, 'rb+') as f:
+		for (flags_offset, flags) in characteristics:
+			struct.pack_into('<I', data, flags_offset, flags)
+			f.seek(flags_offset)
+			f.write(struct.pack('<I', flags))
+
+		sum = pe_checksum(data)
+		f.seek(checksum_offset)
+		f.write(struct.pack('<I', sum))
