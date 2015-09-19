@@ -126,6 +126,12 @@ endif
 $(BASEDIR)/common/symbols-dummy.o:
 	$(MAKE) -f $(BASEDIR)/Rules.mk -C $(BASEDIR)/common symbols-dummy.o
 
+ifdef CONFIG_LIVEPATCH
+SYMBOLSFLAGS += --error-dup
+else
+SYMBOLSFLAGS += --warn-dup
+endif
+
 $(TARGET)-syms: prelink.o xen.lds $(BASEDIR)/common/symbols-dummy.o efi/relocs-dummy.o
 	$(LD) $(LDFLAGS) -T xen.lds -N prelink.o $(build_id_linker) efi/relocs-dummy.o \
 	    $(BASEDIR)/common/symbols-dummy.o -o $(@D)/.$(@F).0
@@ -136,7 +142,7 @@ $(TARGET)-syms: prelink.o xen.lds $(BASEDIR)/common/symbols-dummy.o efi/relocs-d
 	$(LD) $(LDFLAGS) -T xen.lds -N prelink.o $(build_id_linker) efi/relocs-dummy.o \
 	    $(@D)/.$(@F).0.o -o $(@D)/.$(@F).1
 	$(NM) -pa --format=sysv $(@D)/.$(@F).1 \
-		| $(BASEDIR)/tools/symbols $(all_symbols) --sysv --sort --warn-dup \
+		| $(BASEDIR)/tools/symbols $(all_symbols) --sysv --sort $(SYMBOLSFLAGS) \
 		>$(@D)/.$(@F).1.S
 	$(MAKE) -f $(BASEDIR)/Rules.mk $(@D)/.$(@F).1.o
 	$(LD) $(LDFLAGS) -T xen.lds -N prelink.o $(build_id_linker) efi/relocs-dummy.o \
