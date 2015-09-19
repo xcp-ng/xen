@@ -71,7 +71,7 @@ static void update_entry(struct vpci_msix_entry *entry,
 }
 
 static void cf_check control_write(
-    const struct pci_dev *pdev, unsigned int reg, uint32_t val, void *data)
+    struct pci_dev *pdev, unsigned int reg, uint32_t val, void *data)
 {
     struct vpci_msix *msix = data;
     bool new_masked = val & PCI_MSIX_FLAGS_MASKALL;

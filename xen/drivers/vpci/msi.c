@@ -35,7 +35,7 @@ static uint32_t cf_check control_read(
 }
 
 static void cf_check control_write(
-    const struct pci_dev *pdev, unsigned int reg, uint32_t val, void *data)
+    struct pci_dev *pdev, unsigned int reg, uint32_t val, void *data)
 {
     struct vpci_msi *msi = data;
     unsigned int vectors = min_t(uint8_t,
@@ -98,7 +98,7 @@ static uint32_t cf_check address_read(
 }
 
 static void cf_check address_write(
-    const struct pci_dev *pdev, unsigned int reg, uint32_t val, void *data)
+    struct pci_dev *pdev, unsigned int reg, uint32_t val, void *data)
 {
     struct vpci_msi *msi = data;
 
@@ -119,7 +119,7 @@ static uint32_t cf_check address_hi_read(
 }
 
 static void cf_check address_hi_write(
-    const struct pci_dev *pdev, unsigned int reg, uint32_t val, void *data)
+    struct pci_dev *pdev, unsigned int reg, uint32_t val, void *data)
 {
     struct vpci_msi *msi = data;
 
@@ -140,7 +140,7 @@ static uint32_t cf_check data_read(
 }
 
 static void cf_check data_write(
-    const struct pci_dev *pdev, unsigned int reg, uint32_t val, void *data)
+    struct pci_dev *pdev, unsigned int reg, uint32_t val, void *data)
 {
     struct vpci_msi *msi = data;
 
@@ -159,7 +159,7 @@ static uint32_t cf_check mask_read(
 }
 
 static void cf_check mask_write(
-    const struct pci_dev *pdev, unsigned int reg, uint32_t val, void *data)
+    struct pci_dev *pdev, unsigned int reg, uint32_t val, void *data)
 {
     struct vpci_msi *msi = data;
     uint32_t dmask = msi->mask ^ val;
