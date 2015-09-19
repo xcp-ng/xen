@@ -759,7 +759,8 @@ static void __init ibpb_calculations(void)
     if ( opt_ibpb_entry_pv == -1 )
         opt_ibpb_entry_pv = (IS_ENABLED(CONFIG_PV) &&
                              boot_cpu_has(X86_FEATURE_IBPB) &&
-                             !boot_cpu_has(X86_FEATURE_BTC_NO));
+                             !boot_cpu_has(X86_FEATURE_BTC_NO) &&
+                             pv_shim);
     if ( opt_ibpb_entry_hvm == -1 )
         opt_ibpb_entry_hvm = (IS_ENABLED(CONFIG_HVM) &&
                               boot_cpu_has(X86_FEATURE_IBPB) &&
@@ -1042,7 +1043,7 @@ void spec_ctrl_init_domain(struct domain *d)
     bool pv = is_pv_domain(d);
 
     bool verw = ((pv ? opt_md_clear_pv : opt_md_clear_hvm) ||
-                 (opt_fb_clear_mmio && is_iommu_enabled(d)));
+                 (opt_fb_clear_mmio && is_iommu_enabled(d) && !is_hardware_domain(d)));
 
     bool ibpb = ((pv ? opt_ibpb_entry_pv : opt_ibpb_entry_hvm) &&
                  (d->domain_id != 0 || opt_ibpb_entry_dom0));
