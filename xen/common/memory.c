@@ -917,6 +917,81 @@ static long xatp_permission_check(struct domain *d, unsigned int space)
     return xsm_add_to_physmap(XSM_TARGET, current->domain, d);
 }
 
+/* Set quirks mode, using the quirks mode flag to one-time print a
+ * message indicating that decided to enable quirks mode, based on
+ * heuristics.
+ */
+static void _set_quirks_mode(struct domain *d, const char *reason)
+{
+    if ( d->arch.hvm_domain._win_legacy_quirks == 0 )
+        gdprintk(XENLOG_INFO, "Heuristically enabling legacy windows quirks mode. (%s)\n", reason);
+    d->arch.hvm_domain._win_legacy_quirks = 1;
+}
+
+/* Transform the requested XENMAPSPACE_* based on the quirks mode of the
+ * HVM guest, to allow legacy windows drivers to continue to work
+ * despite upstream xen diverging in an binary incompatible manner. */
+static unsigned int _quirks_transform_space(struct domain *d, unsigned int space)
+{
+    switch ( space )
+    {
+        /* Space 3 - Shared between XENMAPSPACE_gmfn_range and
+         * XENMAPSPACE_vlapic_compat.  If we have already detected that
+         * this domain is in quirks mode, we know that the PV drivers
+         * know nothing of _gmfn_range, so transform back to
+         * XENMAPSPACE_vlapic.
+         *
+         * If we have not detected quirks mode, then we must not
+         * transform the space, to avoid breaking HVM domains which know
+         * and use _gmfn_range.
+         *
+         * This leaves a possibility of ancient drivers which have not
+         * been detected, which are expecting vlapic, but get
+         * gmfn_range.  In this case, the domain triple faults very
+         * shortly later.
+         */
+    case XENMAPSPACE_gmfn_range:
+        if ( d->arch.hvm_domain._win_legacy_quirks )
+            return XENMAPSPACE_vlapic;
+        else
+            return XENMAPSPACE_gmfn_range;
+
+
+        /* Space 4 - Shared between XENMAPSPACE_shared_info_old_xs and
+         * XENMAPSPACE_gmfn_foreign, although XENMAPSPACE_gmfn_foreign is
+         * currently defined as "XENMEM_add_to_physmap_range only".  This is
+         * because a foreign domid cannot be inserted into basic
+         * XENMEM_add_to_physmap structure.  Therefore, we will not see the
+         * binary incompatibility here from anything other than the legacy
+         * drivers.
+         */
+    case XENMAPSPACE_shared_info_old_xs:
+        _set_quirks_mode(d, "XENMAPSPACE_shared_info_old_xs");
+        return XENMAPSPACE_shared_info;
+
+        /* Space 0x80000000, unaliased upstream.  Exists only in our
+         * patch queue, but only used by the legacy drivers so we can
+         * take the opportunity to latch quirks mode.  This space is
+         * implemented in the parent, so don't actually transform the
+         * space.
+         */
+    case XENMAPSPACE_vlapic:
+        _set_quirks_mode(d, "XENMAPSPACE_vlapic");
+        return XENMAPSPACE_vlapic;
+
+        /* Space 0x80000001, unaliased upstream.  Same meaning as
+         * XENMAPSPACE_gmfn upstream.
+         */
+    case XENMAPSPACE_physical:
+        _set_quirks_mode(d, "XENMAPSPACE_physical");
+        return XENMAPSPACE_gmfn;
+
+        /* Default is fall-through without transform. */
+    default:
+        return space;
+    }
+}
+
 long do_memory_op(unsigned long cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
 {
     struct domain *d;
@@ -1060,8 +1135,12 @@ long do_memory_op(unsigned long cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
             return -EFAULT;
 
         /* Foreign mapping is only possible via add_to_physmap_batch. */
-        if ( xatp.space == XENMAPSPACE_gmfn_foreign )
-            return -ENOSYS;
+        /* if ( xatp.space == XENMAPSPACE_gmfn_foreign ) */
+        /*     return -ENOSYS; */
+
+        /* XenServer legacy win quirks.  This should be -ENOSYS, but the
+         * legacy windows drivers use this ABI.  _quirks_transform_space()
+         * will deal with fixing it up correctly. */
 
         d = rcu_lock_domain_by_any_id(xatp.domid);
         if ( d == NULL )
@@ -1074,6 +1153,7 @@ long do_memory_op(unsigned long cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
             return rc;
         }
 
+        xatp.space = _quirks_transform_space(d, xatp.space);
         rc = xenmem_add_to_physmap(d, &xatp, start_extent);
 
         rcu_unlock_domain(d);
