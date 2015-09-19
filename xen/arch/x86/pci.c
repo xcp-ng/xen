@@ -85,14 +85,22 @@ int pci_conf_write_intercept(unsigned int seg, unsigned int bdf,
      * Avoid expensive operations when no hook is going to do anything
      * for the access anyway.
      */
-    if ( reg < 64 || reg >= 256 )
+    if ( reg != PCI_COMMAND && (reg < 64 || reg >= 256) )
         return 0;
 
     pcidevs_lock();
 
     pdev = pci_get_pdev(NULL, PCI_SBDF(seg, bdf));
     if ( pdev )
-        rc = pci_msi_conf_write_intercept(pdev, reg, size, data);
+    {
+        if ( reg == PCI_COMMAND )
+        {
+            pdev->memory_enabled = !!(*data & PCI_COMMAND_MEMORY);
+            rc = 1;
+        }
+        else
+            rc = pci_msi_conf_write_intercept(pdev, reg, size, data);
+    }
 
     pcidevs_unlock();
 
