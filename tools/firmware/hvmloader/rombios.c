@@ -104,9 +104,11 @@ static void rombios_load_roms(void)
                                           etherboot_phys_addr,
                                           ipxe_module_addr);
 
-        option_rom_phys_addr = etherboot_phys_addr + etherboot_sz;
-        option_rom_sz = pci_load_option_roms(OPTIONROM_PHYSICAL_END,
-                                             option_rom_phys_addr);
+        if ( !strncmp(xenstore_read("platform/pci_load_option_rom", "0"), "1", 1) )
+            option_rom_sz = pci_load_option_roms(OPTIONROM_PHYSICAL_END,
+                                                 option_rom_phys_addr);
+        else
+            option_rom_sz = 0;
     }
 
     printf("Option ROMs:\n");
