@@ -276,9 +276,6 @@ int iommu_map(struct domain *d, unsigned long gfn, unsigned long mfn,
     if ( !iommu_enabled || !hd->platform_ops )
         return 0;
 
-    ASSERT(IS_ALIGNED(gfn, (1ul << page_order)));
-    ASSERT(IS_ALIGNED(mfn, (1ul << page_order)));
-
     for ( i = 0; i < (1ul << page_order); i++ )
     {
         rc = hd->platform_ops->map_page(d, gfn + i, mfn + i, flags,
@@ -332,8 +329,6 @@ int iommu_unmap(struct domain *d, unsigned long gfn,
 
     if ( !iommu_enabled || !hd->platform_ops )
         return 0;
-
-    ASSERT(IS_ALIGNED(gfn, (1ul << page_order)));
 
     for ( i = 0; i < (1ul << page_order); i++ )
     {
