@@ -1410,6 +1410,35 @@ int xc_domain_ioport_permission(xc_interface *xch,
     return do_domctl(xch, &domctl);
 }
 
+int xc_domain_pci_access(xc_interface *xch,
+                         domid_t domid, uint16_t segment, uint8_t bus,
+                         uint8_t device, uint8_t func, uint8_t size,
+                         uint8_t dir, uint32_t pos, uint64_t *pcidata)
+{
+    int rc;
+    struct xen_domctl domctl = {};
+    xen_domctl_pci_access_t *op = &domctl.u.pci_access;
+
+    domctl.cmd = XEN_DOMCTL_pci_access;
+    domctl.domain = domid;
+
+    op->seg = segment;
+    op->bus = bus;
+    op->dev = device;
+
+    op->func = func;
+    op->size = size;
+    op->direction = dir;
+    op->pos = pos;
+
+    op->data = *pcidata;
+
+    rc = do_domctl(xch, &domctl);
+
+    *pcidata = op->data;
+    return rc;
+}
+
 int xc_availheap(xc_interface *xch,
                  int min_width,
                  int max_width,

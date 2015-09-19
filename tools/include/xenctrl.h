@@ -1375,6 +1375,25 @@ int xc_domain_ioport_permission(xc_interface *xch,
                                 uint32_t nr_ports,
                                 uint32_t allow_access);
 
+/**
+ * Read or Write the PCI config for the given pci device.
+ * @parm xch a handle to an open xenctrl interface.
+ * @parm domid the domain id to be serviced
+ * @parm segment the PCI segment number of the emulated device
+ * @parm bus the PCI bus number of the emulated device
+ * @parm device the PCI device number of the emulated device
+ * @parm func PCI function number of the emulated device
+ * @parm size number of bytes to be access, 1 to 8.
+ * @parm dir if to read (1), write (2) or both (3)
+ * @parm pos the position within the config to access
+ * @parm a pointer to the data to be read or written
+ * @return 0 on success, -1 on failure.
+ */
+int xc_domain_pci_access(xc_interface *xch,
+                         domid_t domid, uint16_t segment, uint8_t bus,
+                         uint8_t device, uint8_t func, uint8_t size,
+                         uint8_t dir, uint32_t pos, uint64_t *pcidata);
+
 int xc_domain_irq_permission(xc_interface *xch,
                              uint32_t domid,
                              uint32_t pirq,
