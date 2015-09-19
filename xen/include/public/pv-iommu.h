@@ -40,6 +40,8 @@ struct pv_iommu_op {
 #define IOMMU_OP_readable (1 << 0)
 #define IOMMU_OP_writeable (1 << 1)
 #define IOMMU_MAP_OP_no_ref_cnt (1 << 2)
+#define IOMMU_MAP_OP_add_m2b (1 << 3)
+#define IOMMU_UNMAP_OP_remove_m2b (1 << 0)
     uint16_t flags;
     int32_t status;
 
