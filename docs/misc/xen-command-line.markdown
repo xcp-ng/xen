@@ -1247,6 +1247,14 @@ Rather than only mapping RAM pages for IOMMU accesses for Dom0, with this
 option all pages not marked as unusable in the E820 table will get a mapping
 established.
 
+### introspection\_extn
+> '= <boolean>'
+
+> Default: 'false'
+
+This parameter enables/disables the use of extra introspection extensions in
+addition to the existing ones.
+
 ### irq\_ratelimit (x86)
 > `= <integer>`
 
