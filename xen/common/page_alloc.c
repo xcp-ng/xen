@@ -222,7 +222,7 @@ static unsigned long __initdata opt_bootscrub_chunk = MB(128);
 size_param("bootscrub_chunk", opt_bootscrub_chunk);
 
  /* scrub-domheap -> Domheap pages are scrubbed when freed */
-static bool __read_mostly opt_scrub_domheap;
+static bool __read_mostly opt_scrub_domheap = true;
 boolean_param("scrub-domheap", opt_scrub_domheap);
 
 #ifdef CONFIG_SCRUB_DEBUG
