@@ -20,6 +20,20 @@
 #define XSM_NO_WRAPPERS
 #include <xsm/dummy.h>
 
+#define DRIVER_DOMAIN_SSID 123000
+
+static int silo_domain_create(struct domain *d, uint32_t ssidref)
+{
+    d->silo_magic = ssidref;
+
+    return 0;
+}
+
+static bool is_backend_domain(const struct domain *d)
+{
+    return is_control_domain(d) || d->silo_magic == DRIVER_DOMAIN_SSID;
+}
+
 /*
  * Check if inter-domain communication is allowed.
  * Return true when pass check.
@@ -29,8 +43,8 @@ static bool silo_mode_dom_check(const struct domain *ldom,
 {
     const struct domain *currd = current->domain;
 
-    return (is_control_domain(currd) || is_control_domain(ldom) ||
-            is_control_domain(rdom) || ldom == rdom);
+    return (is_backend_domain(currd) || is_backend_domain(ldom) ||
+            is_backend_domain(rdom) || ldom == rdom);
 }
 
 static int silo_evtchn_unbound(struct domain *d1, struct evtchn *chn,
@@ -81,12 +95,20 @@ static int silo_grant_copy(struct domain *d1, struct domain *d2)
     return -EPERM;
 }
 
+static void silo_security_domaininfo(struct domain *d,
+                                     struct xen_domctl_getdomaininfo *info)
+{
+    info->ssidref = d->silo_magic;
+}
+
 static struct xsm_operations silo_xsm_ops = {
+    .domain_create = silo_domain_create,
     .evtchn_unbound = silo_evtchn_unbound,
     .evtchn_interdomain = silo_evtchn_interdomain,
     .grant_mapref = silo_grant_mapref,
     .grant_transfer = silo_grant_transfer,
     .grant_copy = silo_grant_copy,
+    .security_domaininfo = silo_security_domaininfo
 };
 
 void __init silo_init(void)
