@@ -2,6 +2,7 @@ VERS_1.0 {
 	global:
 		xencall_open;
 		xencall_close;
+		xencall_restrict;
 
 		xencall0;
 		xencall1;

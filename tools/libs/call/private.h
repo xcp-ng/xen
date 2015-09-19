@@ -47,6 +47,7 @@ struct xencall_handle {
 
 int osdep_xencall_open(xencall_handle *xcall);
 int osdep_xencall_close(xencall_handle *xcall);
+int osdep_xencall_restrict(xencall_handle *xcall, uint32_t dom);
 
 int osdep_hypercall(xencall_handle *xcall, privcmd_hypercall_t *hypercall);
 

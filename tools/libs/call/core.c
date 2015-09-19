@@ -81,6 +81,11 @@ int xencall_close(xencall_handle *xcall)
     return rc;
 }
 
+int xencall_restrict(xencall_handle *xcall, uint32_t dom)
+{
+    return osdep_xencall_restrict(xcall, dom);
+}
+
 int xencall0(xencall_handle *xcall, unsigned int op)
 {
     privcmd_hypercall_t call = {

@@ -183,6 +183,11 @@ enum xc_open_flags {
  */
 int xc_interface_close(xc_interface *xch);
 
+/**
+ * Restrict interface to a given domain
+ */
+int xc_interface_restrict(xc_interface *xch, uint32_t domid);
+
 /*
  * HYPERCALL SAFE MEMORY BUFFER
  *

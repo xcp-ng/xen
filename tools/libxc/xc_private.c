@@ -104,6 +104,12 @@ int xc_interface_close(xc_interface *xch)
     return rc;
 }
 
+int xc_interface_restrict(xc_interface *xch, uint32_t domid)
+{
+    return xencall_restrict(xch->xcall, domid) ?:
+        xenforeignmemory_restrict(xch->fmem, domid);
+}
+
 static pthread_key_t errbuf_pkey;
 static pthread_once_t errbuf_pkey_once = PTHREAD_ONCE_INIT;
 
