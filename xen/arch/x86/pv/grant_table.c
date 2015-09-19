@@ -31,7 +31,7 @@ static unsigned int grant_to_pte_flags(unsigned int grant_flags,
                                        unsigned int cache_flags)
 {
     unsigned int pte_flags =
-        _PAGE_PRESENT | _PAGE_ACCESSED | _PAGE_DIRTY | _PAGE_GNTTAB | _PAGE_NX;
+        _PAGE_PRESENT | _PAGE_GNTTAB | _PAGE_NX;
 
     if ( grant_flags & GNTMAP_application_map )
         pte_flags |= _PAGE_USER;
@@ -197,7 +197,8 @@ static bool steal_linear_address(unsigned long linear, l1_pgentry_t *out)
  * only when !(flags & GNTMAP_contains_pte).
  */
 int replace_grant_pv_mapping(uint64_t addr, mfn_t frame,
-                             uint64_t new_addr, unsigned int flags)
+                             uint64_t new_addr, unsigned int flags,
+                             int *page_accessed)
 {
     struct vcpu *curr = current;
     struct domain *currd = curr->domain;
@@ -298,12 +299,12 @@ int replace_grant_pv_mapping(uint64_t addr, mfn_t frame,
     }
 
     if ( unlikely((l1e_get_flags(ol1e) ^ grant_pte_flags) &
-                  ~(_PAGE_AVAIL | PAGE_CACHE_ATTRS)) )
+                  ~(_PAGE_AVAIL | PAGE_CACHE_ATTRS | _PAGE_ACCESSED | _PAGE_DIRTY)) )
         gdprintk(XENLOG_WARNING,
                  "PTE flags %x for %"PRIx64" don't match grant (%x)\n",
                  l1e_get_flags(ol1e), addr, grant_pte_flags);
 
-    if ( UPDATE_ENTRY(l1, pl1e, ol1e, nl1e, gl1mfn, curr, 0) )
+    if ( _update_intpte(&pl1e->l1, &ol1e.l1, nl1e.l1, gl1mfn, curr, 0, 1) )
     {
         /*
          * Generally, replace_grant_pv_mapping() is used to destroy mappings
@@ -315,6 +316,17 @@ int replace_grant_pv_mapping(uint64_t addr, mfn_t frame,
          * checking here.
          */
         rc = GNTST_okay;
+
+        /*
+         * Calculate a synthetic _PAGE_ACCESSED bit, which controls whether
+         * the TLB flush is performed or skipped for grant unmap.
+         *
+         * It is not safe to skip the TLB flush if:
+         *  - This is a remap rather than an unmap operation.
+         *  - The page has actually been accessed by hardware.
+         */
+        *page_accessed = (l1e_get_flags(nl1e) & _PAGE_PRESENT ||
+                          l1e_get_flags(ol1e) & _PAGE_ACCESSED);
     }
 
  out_unlock:
