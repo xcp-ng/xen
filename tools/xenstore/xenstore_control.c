@@ -55,8 +55,10 @@ static int live_update_start(struct xs_handle *xsh, bool force, unsigned int to)
             break;
         /* TODO: use task ID for commands, avoid busy loop polling here
          * oxenstored checks BUSY condition internally on every main loop iteration anyway.
-         * Avoid flooding xenstored with live-update requests */
-        usleep(10000);
+         * Avoid flooding xenstored with live-update requests.
+         * The flooding can also cause the evtchn to overflow in xenstored which makes
+         * xenstored enter an infinite loop */
+        sleep(1);
     }
 
     if (strcmp(ret, "OK"))
