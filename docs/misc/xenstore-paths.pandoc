@@ -613,6 +613,21 @@ The time which the guest was started in SECONDS.MICROSECONDS format
 
 The guest's virtual time offset from UTC in seconds.
 
+## Logging paths
+
+### /local/logconsole/$DOMID = PATH [n,INTERNAL]
+
+Write a path to this key to enable console logging for the specified domain.
+Writing an empty string or removing the node causes logging to stop.
+Rewriting the path causes the daemon to close and reopen the file, which can
+be uses to rotate the log file.
+
+### /local/logconsole/@ = PATH [n,INTERNAL]
+
+Wildcard logging path, for domains without a `/local/logconsole/$DOMID` path.
+The path must contain "%d" which shall be substituted with the domid, and must
+not contain any other "%" characters.
+
 ## Platform-Level paths
 
 ### libxl Specific Paths
