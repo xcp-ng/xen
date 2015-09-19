@@ -36,6 +36,41 @@ enum {
 #define bitmaskof(idx)      (1u << ((idx) & 31))
 #define featureword_of(idx) ((idx) >> 5)
 
+/*
+ * For each bit clear in @featureset which has dependent features, clear those
+ * too.
+ */
+static void clear_deep_deps(uint32_t *featureset, size_t len /* words */)
+{
+    static const uint32_t deep_features[] = INIT_DEEP_FEATURES;
+
+    uint32_t disabled_features[ARRAY_SIZE(deep_features)];
+    size_t i, b;
+
+    len = min(len, ARRAY_SIZE(deep_features));
+
+    /* Identify disabled features that have dependent features. */
+    for ( i = 0; i < len; ++i )
+        disabled_features[i] = ~featureset[i] & deep_features[i];
+
+    /* For each set bit in disabled that has dependent features ... */
+    for ( b = 0; b < (len * 32); ++b )
+    {
+        const uint32_t *dfs;
+
+        if ( !test_bit(b, disabled_features) ||
+             !(dfs = x86_cpu_policy_lookup_deep_deps(b)) )
+            continue;
+
+        /* ... disable all those features too */
+        for ( i = 0; i < len; ++i )
+        {
+            featureset[i] &= ~dfs[i];
+            disabled_features[i] &= ~dfs[i];
+        }
+    }
+}
+
 int xc_get_cpu_levelling_caps(xc_interface *xch, uint32_t *caps)
 {
     DECLARE_SYSCTL;
@@ -680,10 +715,8 @@ int xc_cpuid_apply_policy(xc_interface *xch, uint32_t domid, bool restore,
 
     if ( featureset )
     {
-        uint32_t disabled_features[FEATURESET_NR_ENTRIES],
-            feat[FEATURESET_NR_ENTRIES] = {};
-        static const uint32_t deep_features[] = INIT_DEEP_FEATURES;
-        unsigned int i, b;
+        uint32_t feat[FEATURESET_NR_ENTRIES] = {};
+        unsigned int i;
 
         /*
          * The user supplied featureset may be shorter or longer than
@@ -700,24 +733,7 @@ int xc_cpuid_apply_policy(xc_interface *xch, uint32_t domid, bool restore,
 
         memcpy(feat, featureset, sizeof(*featureset) * user_len);
 
-        /* Disable deep dependencies of disabled features. */
-        for ( i = 0; i < ARRAY_SIZE(disabled_features); ++i )
-            disabled_features[i] = ~feat[i] & deep_features[i];
-
-        for ( b = 0; b < sizeof(disabled_features) * CHAR_BIT; ++b )
-        {
-            const uint32_t *dfs;
-
-            if ( !test_bit(b, disabled_features) ||
-                 !(dfs = x86_cpu_policy_lookup_deep_deps(b)) )
-                continue;
-
-            for ( i = 0; i < ARRAY_SIZE(disabled_features); ++i )
-            {
-                feat[i] &= ~dfs[i];
-                disabled_features[i] &= ~dfs[i];
-            }
-        }
+        clear_deep_deps(feat, user_len);
 
         x86_cpu_featureset_to_policy(feat, p);
     }
