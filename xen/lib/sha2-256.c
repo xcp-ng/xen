@@ -207,7 +207,7 @@ void sha2_256_digest(uint8_t digest[SHA2_256_DIGEST_SIZE],
     sha2_256_final(&s, digest);
 }
 
-#ifdef CONFIG_SELF_TESTS
+#if defined(CONFIG_SELF_TESTS) && !defined(__PURGATORY__)
 
 #include <xen/init.h>
 #include <xen/lib.h>
