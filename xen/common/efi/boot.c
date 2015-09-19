@@ -1172,7 +1172,7 @@ efi_start(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
 #ifndef CONFIG_ARM /* TODO - runtime service support */
 
 static bool_t __initdata efi_rs_enable = 1;
-static bool_t __initdata efi_map_uc;
+static bool_t __initdata efi_map_uc = 1;
 
 static void __init parse_efi_param(char *s)
 {
