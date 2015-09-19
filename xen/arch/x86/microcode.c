@@ -104,7 +104,7 @@ static struct ucode_mod_blob __initdata ucode_blob;
 static bool_t __initdata ucode_scan;
 
 /* By default, ucode loading is done in NMI handler */
-static bool ucode_in_nmi = true;
+static bool ucode_in_nmi = false;
 
 /* Protected by microcode_mutex */
 static struct microcode_patch *microcode_cache;
