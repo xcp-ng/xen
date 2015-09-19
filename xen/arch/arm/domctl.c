@@ -47,6 +47,11 @@ static int handle_vuart_init(struct domain *d,
     return rc;
 }
 
+bool arch_use_domctl_lock(const struct xen_domctl *op)
+{
+    return true;
+}
+
 long arch_do_domctl(struct xen_domctl *domctl, struct domain *d,
                     XEN_GUEST_HANDLE_PARAM(xen_domctl_t) u_domctl)
 {
