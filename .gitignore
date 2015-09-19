@@ -251,6 +251,9 @@ tools/xcutils/lsevtchn
 tools/xcutils/readnotes
 tools/xenbackendd/_paths.h
 tools/xenbackendd/xenbackendd
+tools/xenguest/xenguest
+tools/xenguest/ssdt*
+tools/xenguest/*dsdt*
 tools/xenmon/xentrace_setmask
 tools/xenmon/xenbaked
 tools/xenpaging/xenpaging
