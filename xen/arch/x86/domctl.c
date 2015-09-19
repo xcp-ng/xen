@@ -252,7 +252,8 @@ long arch_do_domctl(
         if ( (fp + np) <= fp || (fp + np) > MAX_IOPORTS )
             ret = -EINVAL;
         else if ( !ioports_access_permitted(currd, fp, fp + np - 1) ||
-                  xsm_ioport_permission(XSM_HOOK, d, fp, fp + np - 1, allow) )
+                  xsm_ioport_permission(XSM_HOOK, d, fp, fp + np - 1, allow) ||
+                  check_ioport_access(d, fp, fp + np - 1) )
             ret = -EPERM;
         else if ( allow )
             ret = ioports_permit_access(d, fp, fp + np - 1);
@@ -700,6 +701,8 @@ long arch_do_domctl(
                 g2m_ioport->np = np;
                 list_add_tail(&g2m_ioport->list, &hvm->g2m_ioport_list);
             }
+            if ( !ret )
+                ret = check_ioport_access(d, fmp, fmp + np - 1);
             if ( !ret )
                 ret = ioports_permit_access(d, fmp, fmp + np - 1);
             if ( ret && !found && g2m_ioport )
