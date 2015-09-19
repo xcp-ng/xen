@@ -29,7 +29,7 @@
 #include "extern.h"
 #include "../ats.h"
 
-#define VTD_QI_TIMEOUT	1
+#define VTD_QI_TIMEOUT	1000
 
 static int __must_check invalidate_sync(struct vtd_iommu *iommu);
 
