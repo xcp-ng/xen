@@ -275,6 +275,7 @@ struct dma_pte {
 #define dma_pte_addr(p) ((p).val & PADDR_MASK & PAGE_MASK_4K)
 #define dma_set_pte_addr(p, addr) do {\
             (p).val |= ((addr) & PAGE_MASK_4K); } while (0)
+#define dma_get_pte_addr(p) (((p).val & PAGE_MASK_4K))
 #define dma_pte_present(p) (((p).val & DMA_PTE_PROT) != 0)
 #define dma_pte_superpage(p) (((p).val & DMA_PTE_SP) != 0)
 
