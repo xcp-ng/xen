@@ -86,6 +86,10 @@ typedef struct privcmd_dm_op {
 	const privcmd_dm_op_buf_t __user *ubufs;
 } privcmd_dm_op_t;
 
+typedef struct privcmd_restrict_domid {
+	domid_t domid;
+} privcmd_restrict_domid_t;
+
 /*
  * @cmd: IOCTL_PRIVCMD_HYPERCALL
  * @arg: &privcmd_hypercall_t
@@ -103,5 +107,7 @@ typedef struct privcmd_dm_op {
 	_IOC(_IOC_NONE, 'P', 5, sizeof(privcmd_dm_op_t))
 #define IOCTL_PRIVCMD_RESTRICT					\
 	_IOC(_IOC_NONE, 'P', 6, sizeof(domid_t))
+#define IOCTL_PRIVCMD_RESTRICT_DOMID				\
+	_IOC(_IOC_NONE, 'P', 100, sizeof(privcmd_restrict_domid_t))
 
 #endif /* __LINUX_PUBLIC_PRIVCMD_H__ */

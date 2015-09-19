@@ -274,7 +274,8 @@ int osdep_xenforeignmemory_unmap(xenforeignmemory_handle *fmem,
 int osdep_xenforeignmemory_restrict(xenforeignmemory_handle *fmem,
                                     domid_t domid)
 {
-    return ioctl(fmem->fd, IOCTL_PRIVCMD_RESTRICT, &domid);
+    struct privcmd_restrict_domid restrict_domid = { domid };
+    return ioctl(fmem->fd, IOCTL_PRIVCMD_RESTRICT_DOMID, &restrict_domid);
 }
 
 /*

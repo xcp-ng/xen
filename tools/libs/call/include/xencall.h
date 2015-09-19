@@ -73,6 +73,8 @@ xencall_handle *xencall_open(struct xentoollog_logger *logger,
  */
 int xencall_close(xencall_handle *xcall);
 
+int xencall_restrict(xencall_handle *xcall, uint32_t domid);
+
 /*
  * Call hypercalls with varying numbers of arguments.
  *

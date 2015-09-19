@@ -67,6 +67,12 @@ int osdep_xencall_close(xencall_handle *xcall)
     return close(fd);
 }
 
+int osdep_xencall_restrict(xencall_handle *xcall, uint32_t dom)
+{
+    struct privcmd_restrict_domid restrict_domid = { dom };
+    return ioctl(xcall->fd, IOCTL_PRIVCMD_RESTRICT_DOMID, &restrict_domid);
+}
+
 int osdep_hypercall(xencall_handle *xcall, privcmd_hypercall_t *hypercall)
 {
     return ioctl(xcall->fd, IOCTL_PRIVCMD_HYPERCALL, hypercall);
