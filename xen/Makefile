@@ -159,6 +159,7 @@ delete-unfresh-files:
 		rm -f include/xen/compile.h; \
 	fi
 
+.banner: XEN_FULLVERSION := $$(echo $(XEN_FULLVERSION) | sed "s/-.*//")
 .banner: Makefile
 	@if which figlet >/dev/null 2>&1 ; then \
 		echo " Xen $(XEN_FULLVERSION)" | figlet -f tools/xen.flf > $@.tmp; \
