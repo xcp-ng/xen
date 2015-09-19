@@ -238,7 +238,7 @@ struct arch_msix {
     int table_refcnt[MAX_MSIX_TABLE_PAGES];
     int table_idx[MAX_MSIX_TABLE_PAGES];
     spinlock_t table_lock;
-    bool host_maskall, guest_maskall;
+    bool host_maskall, guest_maskall, enabled;
     domid_t warned;
 };
 
