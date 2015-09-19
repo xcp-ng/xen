@@ -517,5 +517,6 @@ AS_IF([test "x$pvshim" = "xy"], [
 ])
 
 AX_FIND_HEADER([INCLUDE_ENDIAN_H], [endian.h sys/endian.h])
+AX_FIND_HEADER([INCLUDE_JSON_H], [json/json.h json-c/json.h])
 
 AC_OUTPUT()
