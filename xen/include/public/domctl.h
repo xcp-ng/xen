@@ -329,6 +329,49 @@ struct xen_domctl_nodeaffinity {
     struct xenctl_bitmap nodemap;/* IN */
 };
 
+/*
+ * Return information about the state and running time of a domain.
+ * The "domain runstate" is based on the runstates of all the vcpus of the
+ * domain (see below).
+ * @extra_arg == pointer to domain_runstate_info structure.
+ */
+struct xen_domctl_runstate_info {
+#define DOMAIN_RUNSTATE_full_run           0 /* All vcpus are running */
+#define DOMAIN_RUNSTATE_full_contention    1 /* All vcpus are runnable (i.e., waiting for cpu) */
+#define DOMAIN_RUNSTATE_concurrency_hazard 2 /* Some vcpus are running, some are runnable */
+#define DOMAIN_RUNSTATE_blocked            3 /* All vcpus are blocked / offline */
+#define DOMAIN_RUNSTATE_partial_run        4 /* Some vpcus are running, some are blocked */
+#define DOMAIN_RUNSTATE_partial_contention 5 /* Some vcpus are runnable, some are blocked */
+    uint32_t      state;
+    uint32_t missed_changes;
+    /* Number of times we missed an update due to contention */
+    /* When was current state entered (system time, ns)? */
+    uint64_aligned_t state_entry_time;
+    /*
+     * Time spent in each RUNSTATE_* (ns). The sum of these times is
+     * NOT guaranteed not to drift from system time.
+     */
+    uint64_aligned_t time[6];
+};
+typedef struct xen_domctl_runstate_info xen_domctl_runstate_info_t;
+DEFINE_XEN_GUEST_HANDLE(xen_domctl_runstate_info_t);
+
+/* A form of xen_domctl_runstate_info which can be extended in some circumstances. */
+struct xen_domctl_runstate_info_ext {
+    uint32_t state;
+    uint32_t missed_changes;
+    uint64_aligned_t state_entry_time;
+    uint64_aligned_t time[6]; /* up to here must be identical to xen_domctl_runstate_info */
+
+    /* Average runnable time of vCPUs in the domain */
+    uint64_aligned_t runnable;
+    /* Normalised vCPU time running */
+    uint64_aligned_t running;
+    /* Normalised vCPU time running non-affine */
+    uint64_aligned_t nonaffine;
+};
+typedef struct xen_domctl_runstate_info_ext xen_domctl_runstate_info_ext_t;
+DEFINE_XEN_GUEST_HANDLE(xen_domctl_runstate_info_ext_t);
 
 /* Get/set which physical cpus a vcpu can execute on. */
 /* XEN_DOMCTL_setvcpuaffinity */
@@ -1256,6 +1299,7 @@ struct xen_domctl {
 #define XEN_DOMCTL_setvcpuaffinity                9
 #define XEN_DOMCTL_shadow_op                     10
 #define XEN_DOMCTL_max_mem                       11
+#define XEN_DOMCTL_get_runstate_info           1099
 #define XEN_DOMCTL_setvcpucontext                12
 #define XEN_DOMCTL_getvcpucontext                13
 #define XEN_DOMCTL_getvcpuinfo                   14
@@ -1345,6 +1389,7 @@ struct xen_domctl {
         struct xen_domctl_getdomaininfo     getdomaininfo;
         struct xen_domctl_getpageframeinfo3 getpageframeinfo3;
         struct xen_domctl_nodeaffinity      nodeaffinity;
+        struct xen_domctl_runstate_info_ext domain_runstate;
         struct xen_domctl_vcpuaffinity      vcpuaffinity;
         struct xen_domctl_shadow_op         shadow_op;
         struct xen_domctl_max_mem           max_mem;
