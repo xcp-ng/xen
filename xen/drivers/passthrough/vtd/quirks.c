@@ -29,6 +29,7 @@
 #include <xen/pci_ids.h>
 #include <xen/pci_regs.h>
 #include <xen/keyhandler.h>
+#include <xen/dmi.h>
 #include <asm/msi.h>
 #include <asm/irq.h>
 #include <asm/pci.h>
@@ -614,6 +615,37 @@ void pci_vtd_quirk(const struct pci_dev *pdev)
                    bar, &pdev->sbdf);
         break;
     }
+}
+
+const static struct dmi_system_id __initconstrel rmrr_dmi_quirks[] =
+{
+    {
+        .ident    = "HP Gen 8",
+        .matches  = {
+            DMI_MATCH(DMI_SYS_VENDOR, "HP"),
+            DMI_MATCH(DMI_PRODUCT_NAME,   "Gen8")
+        }
+    },
+    {}
+};
+
+#define PCI_CLASS_AUDIO_DEVICE    0x0403
+
+int __init rmrr_device_quirks(pci_sbdf_t sbdf)
+{
+    static __initdata int8_t match = -1;
+
+    if ( unlikely(match < 0) )
+        match = !!dmi_check_system(rmrr_dmi_quirks);
+    if ( !match )
+        return 0;
+
+    /* Match PCI audio class device not on function 0 */
+    if ( sbdf.fn != 0 &&
+         pci_conf_read16(sbdf, PCI_CLASS_DEVICE) == PCI_CLASS_AUDIO_DEVICE )
+        return 1;
+
+    return 0;
 }
 
 void __init quirk_iommu_caps(struct vtd_iommu *iommu)
