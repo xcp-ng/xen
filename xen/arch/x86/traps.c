@@ -93,11 +93,7 @@
  *  dom0:   The NMI is virtualised to DOM0.
  *  ignore: The NMI error is cleared and ignored.
  */
-#ifdef NDEBUG
-static char __read_mostly opt_nmi[10] = "dom0";
-#else
 static char __read_mostly opt_nmi[10] = "fatal";
-#endif
 string_param("nmi", opt_nmi);
 
 DEFINE_PER_CPU(uint64_t, efer);
