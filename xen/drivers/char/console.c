@@ -115,8 +115,8 @@ static DEFINE_SPINLOCK(console_lock);
  * the lower threshold equal to the upper.
  */
 #ifdef NDEBUG
-#define XENLOG_UPPER_THRESHOLD       2 /* Do not print INFO and DEBUG  */
-#define XENLOG_LOWER_THRESHOLD       2 /* Always print ERR and WARNING */
+#define XENLOG_UPPER_THRESHOLD       3 /* Do not print DEBUG  */
+#define XENLOG_LOWER_THRESHOLD       3 /* Always print INFO, ERR and WARNING */
 #define XENLOG_GUEST_UPPER_THRESHOLD 2 /* Do not print INFO and DEBUG  */
 #define XENLOG_GUEST_LOWER_THRESHOLD 0 /* Rate-limit ERR and WARNING   */
 #else
