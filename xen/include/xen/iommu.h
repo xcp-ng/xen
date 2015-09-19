@@ -99,6 +99,8 @@ int __must_check iommu_iotlb_flush(struct domain *d, unsigned long gfn,
 int __must_check iommu_iotlb_flush_all(struct domain *d,
                                        unsigned int flush_flags);
 
+int iommu_lookup_page(struct domain *d, unsigned long bfn, unsigned long *mfn);
+
 enum iommu_feature
 {
     IOMMU_FEAT_COHERENT_WALK,
@@ -192,6 +194,7 @@ struct iommu_ops {
                                  unsigned int *flush_flags);
     int __must_check (*unmap_page)(struct domain *d, unsigned long gfn,
                                    unsigned int *flush_flags);
+    int (*lookup_page)(struct domain *d, unsigned long bfn, unsigned long *mfn);
     void (*free_page_table)(struct page_info *);
 #ifdef CONFIG_X86
     void (*update_ire_from_apic)(unsigned int apic, unsigned int reg, unsigned int value);
