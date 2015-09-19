@@ -170,6 +170,8 @@ struct pci_dev {
 
     /* Data for vPCI. */
     struct vpci *vpci;
+
+    struct rangeset *config_writable;
 };
 
 #define for_each_pdev(domain, pdev) \
@@ -291,5 +293,8 @@ static inline int arch_pci_clean_pirqs(struct domain *d)
     return 0;
 }
 #endif /* CONFIG_HVM */
+
+bool pdev_has_write_access(const struct pci_dev *pdev,
+                           uint32_t pos, uint8_t size);
 
 #endif /* __XEN_PCI_H__ */

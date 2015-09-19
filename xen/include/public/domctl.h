@@ -409,6 +409,35 @@ struct xen_domctl_vcpuaffinity {
     struct xenctl_bitmap cpumap_soft;
 };
 
+/*
+ * XEN_DOMCTL_pci_access: Access the PCI config space of a device on behalf of
+ *                        domain.
+ *
+ * The PCI device must have already have been assigned to the domain passed.
+ */
+struct xen_domctl_pci_access {
+      /* IN */
+
+      /* PCI address */
+      uint16_t seg;      /* AKA PCI domain */
+      uint8_t bus;
+      uint8_t dev;
+      uint8_t func;
+
+      uint8_t size;      /* bytes to read/write 1/2/4/8 */
+      uint8_t direction; /* XEN_DMOP_pci_read or XEN_DMOP_pci_write */
+      uint8_t pad0;
+
+      uint32_t pos;      /* bytes into config to read/write */
+      uint32_t pad1;
+
+      /* IN/OUT */
+      uint64_t data;
+};
+typedef struct xen_domctl_pci_access xen_domctl_pci_access_t;
+
+#define XEN_DOMCTL_pci_read  1
+#define XEN_DOMCTL_pci_write 2
 
 /*
  * XEN_DOMCTL_max_vcpus:
@@ -1321,6 +1350,7 @@ struct xen_domctl {
 #define XEN_DOMCTL_setvcpucontext                12
 #define XEN_DOMCTL_getvcpucontext                13
 #define XEN_DOMCTL_getvcpuinfo                   14
+#define XEN_DOMCTL_pci_access                  1100
 #define XEN_DOMCTL_max_vcpus                     15
 #define XEN_DOMCTL_scheduler_op                  16
 #define XEN_DOMCTL_setdomainhandle               17
@@ -1412,6 +1442,7 @@ struct xen_domctl {
         struct xen_domctl_vcpuaffinity      vcpuaffinity;
         struct xen_domctl_shadow_op         shadow_op;
         struct xen_domctl_max_mem           max_mem;
+        struct xen_domctl_pci_access        pci_access;
         struct xen_domctl_vcpucontext       vcpucontext;
         struct xen_domctl_getvcpuinfo       getvcpuinfo;
         struct xen_domctl_max_vcpus         max_vcpus;
