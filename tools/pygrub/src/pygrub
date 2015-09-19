@@ -1050,7 +1050,15 @@ if __name__ == "__main__":
     if len(part_offs) < 1:
         raise RuntimeError("Disk has no partitions")
 
-    fs = xenfsimage.open(file, part_offs[0], bootfsoptions)
+    try:
+        fs = xenfsimage.open(file, part_offs[0], bootfsoptions)
+    except IOError:
+        # in this case we tried to detect a disk with a direct filesystem
+        # but probably this disk does not have a valid partition
+        if len(part_offs) == 1 and part_offs[0] == 0:
+            raise RuntimeError("Bootable disk has no valid filesystem")
+        else:
+            raise
 
     # We always boot the "default" kernel if it exists, rather than
     # parsing the grub menu
