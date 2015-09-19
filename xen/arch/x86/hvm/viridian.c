@@ -38,12 +38,14 @@
 /* Viridian Hypercall Status Codes. */
 #define HV_STATUS_SUCCESS                       0x0000
 #define HV_STATUS_INVALID_HYPERCALL_CODE        0x0002
+#define HV_STATUS_INVALID_ALIGNMENT             0x0004
 #define HV_STATUS_INVALID_PARAMETER             0x0005
 
 /* Viridian Hypercall Codes. */
-#define HvFlushVirtualAddressSpace 2
-#define HvFlushVirtualAddressList  3
-#define HvNotifyLongSpinWait       8
+#define HvSwitchVirtualAddressSpace   1
+#define HvFlushVirtualAddressSpace    2
+#define HvFlushVirtualAddressList     3
+#define HvNotifyLongSpinWait          8
 
 /* Viridian Hypercall Flags. */
 #define HV_FLUSH_ALL_PROCESSORS 1
@@ -677,6 +679,39 @@ int viridian_hypercall(struct cpu_user_regs *regs)
 
     switch ( input.call_code )
     {
+        /*
+         * We don't advertise the address-space-switch because it gives no
+         * advantage over just intercepting CR3.  We still need to keep the
+         * implementations, though, for VMs that booted on an older hypervisor
+         * that _did_ advertise them.
+         */
+    case HvSwitchVirtualAddressSpace:
+        perfc_incr(mshv_call_sw_addr_space);
+        /*
+         * If the fast flag is not set, the input parameter points to the
+         * guest physical address where the input data can be found.  For
+         * simple inputs which can be contained wholly in a register the
+         * fast flag indicates that's how it is.  This was not the case for
+         * Vista SP0.
+         */
+        if ( !input.fast )
+        {
+            if ( input_params_gpa & ((sizeof input_params_gpa) - 1) )
+            {
+                status = HV_STATUS_INVALID_ALIGNMENT;
+                break;
+            }
+            if ( hvm_copy_from_guest_phys(&input_params_gpa,
+                                          input_params_gpa,
+                                          sizeof input_params_gpa) )
+            {
+                status = HV_STATUS_INVALID_PARAMETER;
+                break;
+            }
+        }
+        hvm_set_cr3(input_params_gpa, 0);
+        status = HV_STATUS_SUCCESS;
+        break;
     case HvNotifyLongSpinWait:
         /*
          * See Microsoft Hypervisor Top Level Spec. section 18.5.1.
