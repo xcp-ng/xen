@@ -150,7 +150,7 @@ static void default_reboot_type(void)
     if ( xen_guest )
         reboot_type = BOOT_XEN;
     else if ( efi_enabled(EFI_RS) )
-        reboot_type = BOOT_EFI;
+        reboot_type = BOOT_ACPI;
     else if ( acpi_disabled )
         reboot_type = BOOT_KBD;
     else
