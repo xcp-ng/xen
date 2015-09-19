@@ -994,13 +994,22 @@ void hvmloader_acpi_build_tables(struct acpi_config *config,
     if ( !strncmp(xenstore_read("platform/acpi_laptop_slate", "0"), "1", 1)  )
         config->table_flags |= ACPI_HAS_SSDT_LAPTOP_SLATE;
 
-    config->table_flags |= (ACPI_HAS_TCPA | ACPI_HAS_IOAPIC |
+    config->table_flags |= (ACPI_HAS_TPM | ACPI_HAS_IOAPIC |
                             ACPI_HAS_WAET | ACPI_HAS_PMTIMER |
                             ACPI_HAS_BUTTONS | ACPI_HAS_VGA |
                             ACPI_HAS_8042 | ACPI_HAS_CMOS_RTC);
     config->acpi_revision = 4;
 
-    config->tis_hdr = (uint16_t *)ACPI_TIS_HDR_ADDRESS;
+    s = xenstore_read("platform/tpm_version", "0");
+    config->tpm_version = strtoll(s, NULL, 0);
+
+    switch( config->tpm_version )
+    {
+    case 1:
+        config->table_flags |= ACPI_HAS_TPM;
+        config->tis_hdr = (uint16_t *)ACPI_TIS_HDR_ADDRESS;
+        break;
+    }
 
     config->numa.nr_vmemranges = nr_vmemranges;
     config->numa.nr_vnodes = nr_vnodes;
