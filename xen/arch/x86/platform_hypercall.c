@@ -9,6 +9,7 @@
 #include <xen/types.h>
 #include <xen/lib.h>
 #include <xen/mm.h>
+#include <xen/param.h>
 #include <xen/sched.h>
 #include <xen/domain.h>
 #include <xen/event.h>
@@ -45,6 +46,9 @@ struct resource_access {
     unsigned int nr_entries;
     xenpf_resource_entry_t *entries;
 };
+
+static bool __read_mostly opt_core_parking_enabled;
+boolean_param("core_parking", opt_core_parking_enabled);
 
 long cf_check cpu_frequency_change_helper(void *);
 void check_resource_access(struct resource_access *);
@@ -754,6 +758,12 @@ ret_t do_platform_op(
         switch(op->u.core_parking.type)
         {
         case XEN_CORE_PARKING_SET:
+            if ( !opt_core_parking_enabled )
+            {
+                ret = -EINVAL;
+                goto out;
+            }
+
             idle_nums = min_t(uint32_t,
                     op->u.core_parking.idle_nums, num_present_cpus() - 1);
             if ( CONFIG_NR_CPUS > 1 )
