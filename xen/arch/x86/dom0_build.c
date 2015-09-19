@@ -7,6 +7,7 @@
 #include <xen/init.h>
 #include <xen/iocap.h>
 #include <xen/libelf.h>
+#include <xen/lockdown.h>
 #include <xen/param.h>
 #include <xen/pfn.h>
 #include <xen/sched.h>
@@ -328,6 +329,27 @@ int __init initdom_check_parms(
     {
         printk("Kernel does not support Dom0 operation\n");
         return -EINVAL;
+    }
+
+    if ( is_locked_down() )
+    {
+        uint64_t filter_version =
+            parms->xs_elf_notes[XS_ELFNOTE_PRIVCMD_FILTERING].data.num;
+
+        if ( filter_version == 0 )
+        {
+            printk(XENLOG_ERR
+                   "Kernel hypercall filtering version is missing\n");
+            return -EINVAL;
+        }
+        if ( filter_version != PRIVCMD_FILTERING_ABI_VERSION )
+        {
+            printk(XENLOG_ERR
+                   "Kernel hypercall filtering version %#" PRIx64
+                   " is not compatible with expected %#lx\n",
+                   filter_version, PRIVCMD_FILTERING_ABI_VERSION);
+            return -EINVAL;
+        }
     }
 
     return 0;
