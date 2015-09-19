@@ -71,7 +71,7 @@ obj-$(crash_debug) += gdbstub.o
 
 x86_emulate.o: x86_emulate/x86_emulate.c x86_emulate/x86_emulate.h
 
-efi-y := $(shell if [ ! -r $(BASEDIR)/include/xen/compile.h -o \
+#efi-y := $(shell if [ ! -r $(BASEDIR)/include/xen/compile.h -o \
                       -O $(BASEDIR)/include/xen/compile.h ]; then \
                          echo '$(TARGET).efi'; fi)
 
