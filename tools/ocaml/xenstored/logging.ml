@@ -286,14 +286,26 @@ let init_access_log post_rotate = match !access_log_destination with
 	| Syslog facility ->
 		access_logger := Some (make_syslog_logger facility)
 
+let censor_private_data access_type data =
+       let key_is_private k =
+              String.startswith "/local/domain" k &&
+                   (String.ends_with ~suffix:"/data/set_clipboard" k ||
+                   String.ends_with ~suffix:"/data/report_clipboard" k) ||
+                   k = "data/report_clipboard"
+       in
+       match access_type, String.split ~limit:2 ' ' data with
+       | XbOp Xenbus.Xb.Op.Write, k :: _ when key_is_private k ->
+                       sprintf "%s [omitted]" k
+       | _ -> data
+
 let access_logging ~con ~tid ?(data="") ~level access_type =
         try
 		maybe
 			(fun logger ->
 				let date = string_of_date() in
 				let tid = string_of_tid ~con tid in
+				let data = sanitize_data data |> censor_private_data access_type in
 				let access_type = string_of_access_type access_type in
-				let data = sanitize_data data in
 				let prefix = prefix !access_log_destination date in
 				let msg = Printf.sprintf "%s %s %s %s" prefix tid access_type data in
 				logger.write ~level msg)
