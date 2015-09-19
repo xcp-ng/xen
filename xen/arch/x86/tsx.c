@@ -5,7 +5,8 @@
  * Valid values:
  *   1 => Explicit tsx=1
  *   0 => Explicit tsx=0
- *  -1 => Default, implicit tsx=1, may change to 0 to mitigate TAA
+ *  -1 => Default, implicit tsx=1, may change to -2 to mitigate TAA
+ *  -2 => tsx=0, rtm/hle=1
  *  -3 => Implicit tsx=1 (feed-through from spec-ctrl=0)
  *
  * This is arranged such that the bottom bit encodes whether TSX is actually
@@ -53,8 +54,9 @@ void tsx_init(void)
         rdmsrl(MSR_TSX_CTRL, val);
 
         val &= ~(TSX_CTRL_RTM_DISABLE | TSX_CTRL_CPUID_CLEAR);
-        /* Check bottom bit only.  Higher bits are various sentinals. */
-        if ( !(opt_tsx & 1) )
+        if ( opt_tsx == -2 ) /* HACK.  Safe, but CPUID still visible. */
+            val |= TSX_CTRL_RTM_DISABLE;
+        else if ( !(opt_tsx & 1) )
             val |= TSX_CTRL_RTM_DISABLE | TSX_CTRL_CPUID_CLEAR;
 
         wrmsrl(MSR_TSX_CTRL, val);
