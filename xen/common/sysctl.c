@@ -311,7 +311,7 @@ long do_sysctl(XEN_GUEST_HANDLE_PARAM(xen_sysctl_t) u_sysctl)
                     if ( node_online(i) )
                     {
                         meminfo.memsize = node_spanned_pages(i) << PAGE_SHIFT;
-                        meminfo.memfree = avail_node_heap_pages(i) << PAGE_SHIFT;
+                        meminfo.memfree = avail_node_heap_pages(i).avail << PAGE_SHIFT;
                     }
                     else
                         meminfo.memsize = meminfo.memfree = XEN_INVALID_MEM_SZ;

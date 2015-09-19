@@ -2914,12 +2914,19 @@ unsigned long avail_domheap_pages_region(
     return avail_heap_pages(zone_lo, zone_hi, node);
 }
 
-unsigned long avail_node_heap_pages(unsigned int nodeid)
+node_pages_t avail_node_heap_pages(unsigned int nodeid)
 {
-    if ( nodeid < MAX_NUMNODES && node_online(nodeid) )
-        return node_avail_pages[nodeid];
+    node_pages_t np = {};
 
-    return 0;
+    if ( nodeid < MAX_NUMNODES && node_online(nodeid) )
+    {
+        spin_lock(&heap_lock);
+        np.avail   = node_avail_pages[nodeid];
+        np.claimed = per_node_outstanding_claims[nodeid];
+        spin_unlock(&heap_lock);
+    }
+
+    return np;
 }
 
 
