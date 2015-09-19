@@ -700,7 +700,8 @@ long do_domctl(XEN_GUEST_HANDLE_PARAM(xen_domctl_t) u_domctl)
 
         if ( !iomem_access_permitted(current->domain,
                                      mfn, mfn + nr_mfns - 1) ||
-             xsm_iomem_permission(XSM_HOOK, d, mfn, mfn + nr_mfns - 1, allow) )
+             xsm_iomem_permission(XSM_HOOK, d, mfn, mfn + nr_mfns - 1, allow) ||
+             check_iomem_access(d, mfn, mfn + nr_mfns - 1) )
             ret = -EPERM;
         else if ( allow )
             ret = iomem_permit_access(d, mfn, mfn + nr_mfns - 1);
