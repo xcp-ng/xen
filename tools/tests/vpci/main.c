@@ -23,7 +23,7 @@ static struct vpci vpci;
 
 const static struct domain d;
 
-const struct pci_dev test_pdev = {
+struct pci_dev test_pdev = {
     .vpci = &vpci,
 };
 
@@ -40,7 +40,7 @@ static uint32_t vpci_read8(const struct pci_dev *pdev, unsigned int reg,
     return *(uint8_t *)data;
 }
 
-static void vpci_write8(const struct pci_dev *pdev, unsigned int reg,
+static void vpci_write8(struct pci_dev *pdev, unsigned int reg,
                         uint32_t val, void *data)
 {
     *(uint8_t *)data = val;
@@ -52,7 +52,7 @@ static uint32_t vpci_read16(const struct pci_dev *pdev, unsigned int reg,
     return *(uint16_t *)data;
 }
 
-static void vpci_write16(const struct pci_dev *pdev, unsigned int reg,
+static void vpci_write16(struct pci_dev *pdev, unsigned int reg,
                          uint32_t val, void *data)
 {
     *(uint16_t *)data = val;
@@ -64,7 +64,7 @@ static uint32_t vpci_read32(const struct pci_dev *pdev, unsigned int reg,
     return *(uint32_t *)data;
 }
 
-static void vpci_write32(const struct pci_dev *pdev, unsigned int reg,
+static void vpci_write32(struct pci_dev *pdev, unsigned int reg,
                          uint32_t val, void *data)
 {
     *(uint32_t *)data = val;
