@@ -228,6 +228,8 @@ let to_file store cons file =
 end
 
 let _ =
+	Xenbus.Partial.allow_oversize_packets := false;
+
 	let cf = do_argv in
 	let pidfile =
 		if Sys.file_exists (config_filename cf) then
