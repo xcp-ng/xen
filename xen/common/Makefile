@@ -31,6 +31,7 @@ obj-y += pdx.o
 obj-$(CONFIG_PERF_COUNTERS) += perfc.o
 obj-bin-$(CONFIG_HAS_PMAP) += pmap.init.o
 obj-y += preempt.o
+obj-y += pv_iommu.o
 obj-y += random.o
 obj-y += rangeset.o
 obj-y += radix-tree.o
