@@ -2539,11 +2539,32 @@ static void vmx_cpuid_intercept(
 {
     unsigned int input = *eax;
     struct vcpu *v = current;
+    unsigned int cps = v->domain->cores_per_socket;
 
     hvm_cpuid(input, eax, ebx, ecx, edx);
 
     switch ( input )
     {
+        case 0x00000001:
+            if ( cps > 0 )
+            {
+                /* to fake out #vcpus per socket first force on HT/MC */
+                *edx |= cpufeat_mask(X86_FEATURE_HTT);
+                /* fake out #vcpus and inform guest of #cores per package */
+                *ebx &= 0xFF00FFFF;
+                *ebx |= (((cps * 2) & 0xFF) << 16);
+            }
+            break;
+
+        case 0x00000004:
+            if ( cps > 0 )
+            {
+                /* fake out cores per socket */
+                *eax &= 0x3FFF; /* one thread, one core */
+                *eax |= (((cps * 2) - 1) << 26);
+            }
+            break;
+
         case 0x80000001:
             /* SYSCALL is visible iff running in long mode. */
             if ( hvm_long_mode_enabled(v) )

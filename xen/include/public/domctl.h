@@ -1171,6 +1171,13 @@ DEFINE_XEN_GUEST_HANDLE(xen_domctl_runstate_info_t);
 /* Some vcpus are runnable, some are blocked */
 #define DOMAIN_RUNSTATE_partial_contention 5
 
+struct xen_domctl_corespersocket {
+    uint32_t cores_per_socket;
+};
+
+typedef struct xen_domctl_corespersocket xen_domctl_corespersocket_t;
+DEFINE_XEN_GUEST_HANDLE(xen_domctl_corespersocket_t);
+
 struct xen_domctl {
     uint32_t cmd;
 #define XEN_DOMCTL_createdomain                   1
@@ -1254,6 +1261,7 @@ struct xen_domctl {
 #define XEN_DOMCTL_gdbsx_pausevcpu             1001
 #define XEN_DOMCTL_gdbsx_unpausevcpu           1002
 #define XEN_DOMCTL_gdbsx_domstatus             1003
+#define XEN_DOMCTL_setcorespersocket           4001
     uint32_t interface_version; /* XEN_DOMCTL_INTERFACE_VERSION */
     domid_t  domain;
     union {
@@ -1303,6 +1311,7 @@ struct xen_domctl {
         struct xen_domctl_set_virq_handler  set_virq_handler;
         struct xen_domctl_set_max_evtchn    set_max_evtchn;
         struct xen_domctl_runstate_info     domain_runstate;
+        struct xen_domctl_corespersocket    corespersocket;
         struct xen_domctl_gdbsx_memio       gdbsx_guest_memio;
         struct xen_domctl_set_broken_page_p2m set_broken_page_p2m;
         struct xen_domctl_cacheflush        cacheflush;
