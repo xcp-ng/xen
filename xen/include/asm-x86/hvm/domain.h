@@ -154,6 +154,9 @@ struct hvm_domain {
         struct vmx_domain vmx;
         struct svm_domain svm;
     };
+
+    /* Do we need to enable legacy windows driver quirks for this domain? */
+    bool_t                 _win_legacy_quirks;
 };
 
 #define hap_enabled(d)  ((d)->arch.hvm_domain.hap_enabled)
