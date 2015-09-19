@@ -373,6 +373,8 @@ struct evtchn_port_ops;
 
 #define MAX_NR_IOREQ_SERVERS 8
 
+typedef struct xen_domctl_runstate_info_ext domain_runstate_info_t;
+
 struct domain
 {
     domid_t          domain_id;
@@ -620,6 +622,11 @@ struct domain
     struct page_info *pending_scrub;
     unsigned int pending_scrub_order;
     unsigned int pending_scrub_index;
+
+    /* Domain runstates */
+    spinlock_t runstate_lock;
+    atomic_t runstate_missed_changes;
+    domain_runstate_info_t runstate;
 } __aligned(PAGE_SIZE);
 
 static inline struct page_list_head *page_to_list(
@@ -1051,6 +1058,7 @@ int vcpu_affinity_domctl(struct domain *d, uint32_t cmd,
 
 struct vcpu_runstate_extra vcpu_runstate_get(
     const struct vcpu *v, struct vcpu_runstate_info *runstate);
+void domain_runstate_get(struct domain *d, domain_runstate_info_t *info);
 uint64_t vcpu_runstate_get_running(const struct vcpu *v);
 uint64_t get_cpu_idle_time(unsigned int cpu);
 void sched_guest_idle(void (*idle) (void), unsigned int cpu);

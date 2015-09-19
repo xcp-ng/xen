@@ -247,6 +247,8 @@ class domain2
     psr_alloc
 # XENMEM_resource_map
     resource_map
+# XEN_DOMCTL_get_runstate_info
+    get_runstate_info
 # XEN_DOMCTL_get_cpu_policy
     get_cpu_policy
 }
