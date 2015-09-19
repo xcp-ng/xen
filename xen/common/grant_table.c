@@ -50,6 +50,42 @@ integer_param("gnttab_max_nr_frames", max_nr_grant_frames);
 unsigned int __read_mostly max_grant_frames;
 integer_param("gnttab_max_frames", max_grant_frames);
 
+static unsigned int __read_mostly opt_gnttab_max_version = 2;
+static bool_t __read_mostly opt_transitive_grants;
+
+static void __init parse_gnttab(char *s)
+{
+    char *ss;
+
+    do {
+        ss = strchr(s, ',');
+        if ( ss )
+            *ss = '\0';
+
+        if ( !strncmp(s, "max_ver:", 8) )
+        {
+            long ver = simple_strtol(s + 8, NULL, 10);
+
+            if ( ver >= 1 && ver <= 2 )
+                opt_gnttab_max_version = ver;
+        }
+        else
+        {
+            bool_t val = !!strncmp(s, "no-", 3);
+
+            if ( !val )
+                s += 3;
+
+            if ( !strcmp(s, "transitive") )
+                opt_transitive_grants = val;
+        }
+
+        s = ss + 1;
+    } while ( ss );
+}
+
+custom_param("gnttab", parse_gnttab);
+
 /* The maximum number of grant mappings is defined as a multiplier of the
  * maximum number of grant table entries. This defines the multiplier used.
  * Pretty arbitrary. [POLICY]
@@ -2237,6 +2273,10 @@ __acquire_grant_for_copy(
     old_pin = act->pin;
     if ( sha2 && (shah->flags & GTF_type_mask) == GTF_transitive )
     {
+        if ( !opt_transitive_grants )
+            PIN_FAIL(unlock_out_clear, GNTST_general_error,
+                     "transitive grant disallowed by policy\n");
+
         if ( (!old_pin || (!readonly &&
                            !(old_pin & (GNTPIN_devw_mask|GNTPIN_hstw_mask)))) &&
              (rc = _set_status_v2(ldom, readonly, 0, shah, act,
@@ -3292,7 +3332,10 @@ do_grant_table_op(
     }
     case GNTTABOP_set_version:
     {
-        rc = gnttab_set_version(guest_handle_cast(uop, gnttab_set_version_t));
+        if ( opt_gnttab_max_version == 1 )
+            rc = -ENOSYS; /* Behave as before set_version was introduced. */
+        else
+            rc = gnttab_set_version(guest_handle_cast(uop, gnttab_set_version_t));
         break;
     }
     case GNTTABOP_get_status_frames:
