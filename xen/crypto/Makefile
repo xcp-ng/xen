@@ -1,6 +1,7 @@
 obj-y += rijndael.o
 obj-y += vmac.o
 obj-$(CONFIG_PAYLOAD_SIGNING) += builtin_payload_key.o
+obj-$(CONFIG_PAYLOAD_SIGNING) += rsa.o
 
 ifeq ($(CONFIG_PAYLOAD_SIGNING),y)
 key_path := $(srctree)/crypto/$(patsubst "%",%,$(CONFIG_PAYLOAD_SIG_KEY))

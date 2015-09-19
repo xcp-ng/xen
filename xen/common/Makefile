@@ -31,6 +31,7 @@ obj-y += lockdown.o
 obj-$(CONFIG_VM_EVENT) += mem_access.o
 obj-y += memory.o
 obj-$(CONFIG_VM_EVENT) += monitor.o
+obj-$(CONFIG_PAYLOAD_SIGNING) += mpi.o
 obj-y += multicall.o
 obj-y += notifier.o
 obj-$(CONFIG_NUMA) += numa.o
