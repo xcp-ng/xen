@@ -357,6 +357,9 @@ let tweak_gc () =
 
 let () =
 	Printexc.set_uncaught_exception_handler Logging.fallback_exception_handler;
+
+	Xenbus.Partial.allow_oversize_packets := false;
+
 	let cf = do_argv in
 	let pidfile =
 		if Sys.file_exists (config_filename cf) then
