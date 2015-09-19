@@ -87,12 +87,12 @@ unsigned long __section(".bss.page_aligned") __aligned(PAGE_SIZE)
 
 /* Xen command-line option to enable HAP */
 static bool __initdata opt_hap_enabled = true;
-boolean_param("hap", opt_hap_enabled);
+boolean_secure_param("hap", opt_hap_enabled);
 
 #ifndef opt_hvm_fep
 /* Permit use of the Forced Emulation Prefix in HVM guests */
 bool __read_mostly opt_hvm_fep;
-boolean_param("hvm_fep", opt_hvm_fep);
+boolean_secure_param("hvm_fep", opt_hvm_fep);
 #endif
 static const char __initconst warning_hvm_fep[] =
     "WARNING: HVM FORCED EMULATION PREFIX IS AVAILABLE\n"

@@ -13,7 +13,7 @@
 
 /* opt_noreboot: If true, machine will need manual reset on error. */
 bool __ro_after_init opt_noreboot;
-boolean_param("noreboot", opt_noreboot);
+boolean_secure_param("noreboot", opt_noreboot);
 
 static void noreturn reboot_or_halt(void)
 {

@@ -688,7 +688,7 @@ static int __init cf_check numa_setup(const char *opt)
 
     return 0;
 }
-custom_param("numa", numa_setup);
+custom_secure_param("numa", numa_setup);
 
 static void cf_check dump_numa(unsigned char key)
 {

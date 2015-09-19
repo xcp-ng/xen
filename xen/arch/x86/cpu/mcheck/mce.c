@@ -31,7 +31,7 @@
 #include "vmce.h"
 
 bool __read_mostly opt_mce = true;
-boolean_param("mce", opt_mce);
+boolean_secure_param("mce", opt_mce);
 bool __read_mostly mce_broadcast;
 bool is_mc_panic;
 DEFINE_PER_CPU_READ_MOSTLY(unsigned int, nr_mce_banks);

@@ -141,7 +141,7 @@ static int __init cf_check parse_dom0_mem(const char *s)
 
     return s[-1] ? -EINVAL : ret;
 }
-custom_param("dom0_mem", parse_dom0_mem);
+custom_secure_param("dom0_mem", parse_dom0_mem);
 
 static unsigned int __initdata opt_dom0_max_vcpus_min = 1;
 static unsigned int __initdata opt_dom0_max_vcpus_max = UINT_MAX;
@@ -163,7 +163,7 @@ static int __init cf_check parse_dom0_max_vcpus(const char *s)
 
     return *s ? -EINVAL : 0;
 }
-custom_param("dom0_max_vcpus", parse_dom0_max_vcpus);
+custom_secure_param("dom0_max_vcpus", parse_dom0_max_vcpus);
 
 static __initdata unsigned int dom0_nr_pxms;
 static __initdata unsigned int dom0_pxms[MAX_NUMNODES] =
@@ -204,7 +204,7 @@ static int __init cf_check parse_dom0_nodes(const char *s)
 
     return rc;
 }
-custom_param("dom0_nodes", parse_dom0_nodes);
+custom_secure_param("dom0_nodes", parse_dom0_nodes);
 
 cpumask_t __initdata dom0_cpus;
 static nodemask_t __initdata dom0_nodes;

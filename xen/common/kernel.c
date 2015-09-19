@@ -137,8 +137,15 @@ static int parse_params(const char *cmdline, const struct kernel_param *start,
                 continue;
             }
 
-            rctmp = 0;
             found = true;
+
+            if ( !param->is_lockdown_safe && is_locked_down() )
+            {
+                printk("Ignoring cmdline option '%s' in lockdown mode\n", param->name);
+                break;
+            }
+
+            rctmp = 0;
             switch ( param->type )
             {
             case OPT_STR:

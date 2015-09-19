@@ -138,7 +138,7 @@ static int __init cf_check setup_cpufreq_option(const char *str)
 
     return (choice < 0) ? ret : 0;
 }
-custom_param("cpufreq", setup_cpufreq_option);
+custom_secure_param("cpufreq", setup_cpufreq_option);
 
 bool __read_mostly cpufreq_verbose;
 

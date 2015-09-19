@@ -66,7 +66,7 @@
 
 /* opt_nosmp: If true, secondary processors are ignored. */
 static bool __initdata opt_nosmp;
-boolean_param("nosmp", opt_nosmp);
+boolean_secure_param("nosmp", opt_nosmp);
 
 /* maxcpus: maximum number of CPUs to activate. */
 static unsigned int __initdata max_cpus;

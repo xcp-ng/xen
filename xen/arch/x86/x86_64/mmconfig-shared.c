@@ -60,7 +60,7 @@ static int __init cf_check parse_mmcfg(const char *s)
 
     return rc;
 }
-custom_param("mmcfg", parse_mmcfg);
+custom_secure_param("mmcfg", parse_mmcfg);
 
 static const char *__init cf_check pci_mmcfg_e7520(void)
 {
