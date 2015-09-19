@@ -235,6 +235,10 @@ external domain_deassign_device: handle -> domid -> (int * int * int * int) -> u
 external domain_test_assign_device: handle -> domid -> (int * int * int * int) -> bool
        = "stub_xc_domain_test_assign_device"
 
+(** check if some hvm domain got pv driver or not *)
+external hvm_check_pvdriver: handle -> domid -> bool
+       = "stub_xc_hvm_check_pvdriver"
+
 external version: handle -> version = "stub_xc_version_version"
 external version_compile_info: handle -> compile_info
        = "stub_xc_version_compile_info"
