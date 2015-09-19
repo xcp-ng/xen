@@ -503,6 +503,7 @@ chmod -x %{buildroot}/boot/xen-syms-*
 %{_sbindir}/xen-mceinj
 %{_sbindir}/xen-mfndump
 %exclude %{_sbindir}/xen-ringwatch
+%{_sbindir}/xen-vmdebug
 %{_sbindir}/xenbaked
 %{_sbindir}/xenconsoled
 %{_sbindir}/xencov
