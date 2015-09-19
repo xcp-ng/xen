@@ -115,6 +115,9 @@ static const char __initconst warning_hvm_fep[] =
 static bool_t __initdata opt_altp2m_enabled = 0;
 boolean_param("altp2m", opt_altp2m_enabled);
 
+bool_t __read_mostly opt_introspection_extn = 0;
+boolean_param("introspection_extn", opt_introspection_extn);
+
 static int cpu_callback(
     struct notifier_block *nfb, unsigned long action, void *hcpu)
 {
