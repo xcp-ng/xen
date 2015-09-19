@@ -460,6 +460,7 @@ typedef struct xc_dominfo {
 } xc_dominfo_t;
 
 typedef xen_domctl_getdomaininfo_t xc_domaininfo_t;
+typedef xen_domctl_runstate_info_t xc_runstate_info_t;
 
 typedef union 
 {
@@ -1461,6 +1462,11 @@ int xc_domain_get_pod_target(xc_interface *xch,
                              uint64_t *tot_pages,
                              uint64_t *pod_cache_pages,
                              uint64_t *pod_entries);
+
+#define XENCTRL_HAS_GET_RUNSTATE_INFO 1
+int xc_get_runstate_info(xc_interface *xch,
+			 uint32_t domid,
+			 xc_runstate_info_t *info);
 
 int xc_domain_ioport_permission(xc_interface *xch,
                                 uint32_t domid,

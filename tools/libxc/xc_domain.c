@@ -1380,6 +1380,24 @@ int xc_vcpu_getinfo(xc_interface *xch,
     return rc;
 }
 
+int xc_get_runstate_info(xc_interface *xch, uint32_t domid, xc_runstate_info_t *info)
+{
+    int ret = -EBADF;
+    DECLARE_DOMCTL;
+
+    domctl.cmd = XEN_DOMCTL_get_runstate_info;
+    domctl.domain = domid;
+
+    ret = do_domctl(xch, &domctl);
+    if (ret < 0) {
+        ERROR("get runstate info");
+        return ret;
+    }
+
+    memcpy(info, &domctl.u.domain_runstate, sizeof(*info));
+    return ret;
+}
+
 int xc_domain_ioport_permission(xc_interface *xch,
                                 uint32_t domid,
                                 uint32_t first_port,
