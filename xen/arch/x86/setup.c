@@ -1857,6 +1857,18 @@ void __init noreturn __start_xen(unsigned long mbi_p)
     if ( cpu_has_pks )
         wrpkrs_and_cache(0); /* Must be before setting CR4.PKS */
 
+    /*
+     * The AVX512 implementation on SKX/CLX/CPX has package-wide frequency
+     * implications, so is turned off by default.  ICX is far better, and
+     * other vendors have no frequency implications at all.
+     */
+    if ( opt_avx512 == -1 )
+        opt_avx512 = !(boot_cpu_data.x86_vendor == X86_VENDOR_INTEL &&
+                       boot_cpu_data.x86 == 0x6 &&
+                       boot_cpu_data.x86_model == 0x55);
+    if ( !opt_avx512 )
+        setup_clear_cpu_cap(X86_FEATURE_AVX512F);
+
     init_speculation_mitigations();
 
     init_idle_domain();
