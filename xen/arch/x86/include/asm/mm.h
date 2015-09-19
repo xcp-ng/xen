@@ -89,9 +89,12 @@
 /* Page needs to be scrubbed. */
 #define _PGC_need_scrub   PG_shift(8)
 #define PGC_need_scrub    PG_mask(1, 8)
+/* Page has foreign mappings? */
+#define _PGC_foreign_map  PG_shift(9)
+#define PGC_foreign_map   PG_mask(1, 9)
 
 /* Count of references to this frame. */
-#define PGC_count_width   PG_shift(8)
+#define PGC_count_width   PG_shift(9)
 #define PGC_count_mask    ((1UL<<PGC_count_width)-1)
 
 #ifndef CONFIG_BIGMEM
