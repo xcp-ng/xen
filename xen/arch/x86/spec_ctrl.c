@@ -943,7 +943,7 @@ void spec_ctrl_init_domain(struct domain *d)
 
     d->arch.verw =
         (pv ? opt_md_clear_pv : opt_md_clear_hvm) ||
-        (opt_fb_clear_mmio && is_iommu_enabled(d));
+        (opt_fb_clear_mmio && is_iommu_enabled(d) && !is_hardware_domain(d));
 }
 
 void __init init_speculation_mitigations(void)
