@@ -1025,6 +1025,63 @@ void pci_check_disable_device(u16 seg, u8 bus, u8 devfn)
     pci_conf_write16(pdev->sbdf, PCI_COMMAND, cword & ~PCI_COMMAND_MASTER);
 }
 
+static void quirk_dma_func_phantom(pci_sbdf_t sbdf)
+{
+    struct phantom_dev phantom = {
+        .seg = sbdf.seg,
+        .bus = sbdf.bus,
+        .slot = sbdf.devfn,
+        .stride = 1,
+    };
+
+    phantom_devs[nr_phantom_devs++] = phantom;
+}
+
+static void quirk_scan_pci_device(pci_sbdf_t sbdf)
+{
+    unsigned int device, vendor = pci_conf_read16(sbdf, PCI_VENDOR_ID);
+
+    switch ( vendor )
+    {
+    case 0x1b4b: /* Marvell */
+    case 0x197B: /* JMICRON */
+    case 0x1103: /* TTI */
+        break;
+    default:
+        return;
+    }
+
+    device = pci_conf_read16(sbdf, PCI_DEVICE_ID);
+
+    switch ( vendor )
+    {
+    case 0x1b4b: /* Marvell */
+        switch ( device )
+        {
+        case 0x9120: /* 88SE9123 based controllers */
+        case 0x9123:
+        case 0x9130:
+        case 0x9172:
+        case 0x917a:
+        case 0x91a0:
+        case 0x9230:
+            quirk_dma_func_phantom(sbdf);
+            break;
+        }
+        break;
+
+    case 0x197B: /* JMICRON */
+        if ( device == 0x2393 ) /* JMB388 ESD */
+            quirk_dma_func_phantom(sbdf);
+        break;
+
+    case 0x1103: /* TTI */
+        if ( device == 0x0642 )
+            quirk_dma_func_phantom(sbdf);
+        break;
+    }
+}
+
 /*
  * scan pci devices to add all existed PCI devices to alldevs_list,
  * and setup pci hierarchy in array bus2bridge.
@@ -1046,6 +1103,8 @@ static int __init cf_check _scan_pci_devices(struct pci_seg *pseg, void *arg)
                         break;
                     continue;
                 }
+
+                quirk_scan_pci_device(PCI_SBDF(pseg->nr, bus, dev, func));
 
                 pdev = alloc_pdev(pseg, bus, PCI_DEVFN(dev, func));
                 if ( !pdev )
