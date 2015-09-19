@@ -1071,6 +1071,13 @@ long do_domctl(XEN_GUEST_HANDLE_PARAM(xen_domctl_t) u_domctl)
         copyback = 1;
         break;
 
+    case XEN_DOMCTL_set_privileged:
+        if ( opt_introspection_extn )
+            d->is_privileged = 1;
+        else
+            ret = -ENOSYS;
+        break;
+
     default:
         ret = arch_do_domctl(op, d, u_domctl);
         break;
