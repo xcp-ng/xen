@@ -55,8 +55,8 @@ int xc_get_cpu_levelling_caps(xc_interface *xch, uint32_t *caps)
     return ret;
 }
 
-int xc_get_cpu_featureset(xc_interface *xch, uint32_t index,
-                          uint32_t *nr_features, uint32_t *featureset)
+static int xc_get_cpu_featureset_(xc_interface *xch, uint32_t index,
+                                  uint32_t *nr_features, uint32_t *featureset)
 {
     DECLARE_SYSCTL;
     DECLARE_HYPERCALL_BOUNCE(featureset,
@@ -80,6 +80,142 @@ int xc_get_cpu_featureset(xc_interface *xch, uint32_t index,
         *nr_features = sysctl.u.cpu_featureset.nr_features;
 
     return ret;
+}
+
+int xc_get_cpu_featureset(xc_interface *xch, uint32_t index,
+                          uint32_t *nr, uint32_t *fs)
+{
+    uint32_t raw_fs[FEATURESET_NR_ENTRIES] = {}, raw_nr = ARRAY_SIZE(raw_fs);
+    uint32_t host_fs[FEATURESET_NR_ENTRIES] = {}, host_nr = ARRAY_SIZE(host_fs);
+    struct cpuid_leaf l;
+    unsigned int vendor;
+    int ret;
+
+    if ( index != XEN_SYSCTL_cpu_featureset_pv_max &&
+         index != XEN_SYSCTL_cpu_featureset_hvm_max )
+        return xc_get_cpu_featureset_(xch, index, nr, fs);
+
+    /*
+     * Fake up a *_max featureset.  Obtain the raw, host, and pv/hvm default.
+     *
+     * This is used by xenopsd to pass to the toolstack of the incoming
+     * domain, to allow it to establish migration safety.
+     */
+    ret = xc_get_cpu_featureset_(
+        xch, XEN_SYSCTL_cpu_featureset_raw, &raw_nr, raw_fs);
+    if ( ret && errno != ENOBUFS )
+        return ret;
+
+    ret = xc_get_cpu_featureset_(
+        xch, XEN_SYSCTL_cpu_featureset_host, &host_nr, host_fs);
+    if ( ret && errno != ENOBUFS )
+        return ret;
+
+    ret = xc_get_cpu_featureset_(xch, index - 2, nr, fs);
+    if ( ret )
+        return ret;
+
+    cpuid_leaf(0, &l);
+    vendor = x86_cpuid_lookup_vendor(l.b, l.c, l.d);
+
+    /*
+     * Xen 4.7 had the common features duplicated.  4.8 changed this, to only
+     * use the Intel range.  Undo this.
+     */
+    fs[2] |= (fs[0] & CPUID_COMMON_1D_FEATURES);
+
+    /*
+     * Advertise HTT, x2APIC and CMP_LEGACY.  They all impact topology,
+     * unconditionally leak into PV guests, and are fully emulated for HVM.
+     */
+    set_bit(X86_FEATURE_HTT, fs);
+    set_bit(X86_FEATURE_X2APIC, fs);
+    set_bit(X86_FEATURE_CMP_LEGACY, fs);
+
+    /*
+     * Feed HLE/RTM in from the host policy.  We can safely migrate in VMs
+     * which saw HLE/RTM, even if the RTM is disabled for errata/security
+     * reasons.
+     */
+    clear_bit(X86_FEATURE_HLE, fs);
+    if ( test_bit(X86_FEATURE_HLE, host_fs) )
+        set_bit(X86_FEATURE_HLE, fs);
+
+    clear_bit(X86_FEATURE_RTM, fs);
+    if ( test_bit(X86_FEATURE_RTM, host_fs) )
+        set_bit(X86_FEATURE_RTM, fs);
+
+    /*
+     * The Gather Data Sampling microcode mitigation (August 2023) has an
+     * adverse performance impact on the CLWB instruction on SKX/CLX/CPX.
+     *
+     * We hid CLWB in the host policy to stop Xen using it, but VMs which
+     * have previously seen the CLWB feature can safely run on this CPU.
+     */
+    if ( test_bit(X86_FEATURE_CLWB, raw_fs) &&
+         !test_bit(X86_FEATURE_CLWB, host_fs) )
+        set_bit(X86_FEATURE_CLWB, fs);
+
+    switch ( vendor )
+    {
+    case X86_VENDOR_INTEL:
+        /*
+         * MSR_ARCH_CAPS is just feature data, and we can offer it to guests
+         * unconditionally, although limit it to Intel systems as it is highly
+         * uarch-specific.
+         *
+         * In particular, the RSBA and RRSBA bits mean "you might migrate to a
+         * system where RSB underflow uses alternative predictors (a.k.a
+         * Retpoline not safe)", so these need to be visible to a guest in all
+         * cases, even when it's only some other server in the pool which
+         * suffers the identified behaviour.
+         *
+         * We can always run any VM which has previously (or will
+         * subsequently) run on hardware where Retpoline is not safe.
+         * Note:
+         *  - The dependency logic may hide RRSBA for other reasons.
+         *  - The max policy does not constitute a sensible configuration to
+         *    run a guest in.
+         */
+        set_bit(X86_FEATURE_ARCH_CAPS, fs);
+        set_bit(X86_FEATURE_RSBA, fs);
+        set_bit(X86_FEATURE_RRSBA, fs);
+        break;
+    }
+
+    if ( index == XEN_SYSCTL_cpu_featureset_hvm_max )
+    {
+        /*
+         * Xen 4.7 used to falsely advertise IBS, and 4.8 fixed this.
+         * However, the old xenopsd workaround fix for this didn't limit the
+         * workaround to AMD systems, so the Last Boot Record of every HVM VM,
+         * even on Intel, is wrong.
+         */
+        set_bit(X86_FEATURE_IBS, fs);
+
+        /*
+         * MPX has been removed from newer Intel hardware.  Therefore, we hide
+         * it by default, but can still accept any VMs which saw it, if
+         * hardware is MPX-capable.
+         */
+        if ( test_bit(X86_FEATURE_MPX, host_fs) )
+            set_bit(X86_FEATURE_MPX, fs);
+
+        switch ( vendor )
+        {
+        case X86_VENDOR_AMD:
+        case X86_VENDOR_HYGON:
+            /*
+             * In order to mitigate Spectre, AMD dropped the LWP feature in
+             * microcode, to make space for MSR_PRED_CMD.  No one used LWP, but it
+             * was visible to guests at the time.
+             */
+            set_bit(X86_FEATURE_LWP, fs);
+            break;
+        }
+    }
+
+    return 0;
 }
 
 uint32_t xc_get_cpu_featureset_size(void)
