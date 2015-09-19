@@ -230,6 +230,7 @@ struct csched_private {
     /* Period of master and tick in milliseconds */
     unsigned tslice_ms, tick_period_us, ticks_per_tslice;
     unsigned credits_per_tslice;
+    struct csched_dom * privdom;
 };
 
 static void csched_tick(void *_cpu);
@@ -880,6 +881,62 @@ csched_cpu_pick(const struct scheduler *ops, struct vcpu *vc)
     return _csched_cpu_pick(ops, vc, 1);
 }
 
+/* Make sure that the privileged domain always has enough weight for its active
+ * vcpus to get one full pcpu each */
+static inline void __csched_adj_privdom_weight(struct csched_private *prv) {
+    struct csched_dom *sdom = prv->privdom;
+    int other_cpus;
+    unsigned int new_weight;
+#ifndef NDEBUG
+    unsigned int initial_weight;
+#endif
+
+    /* If privdom isn't being accounted for, or is the only active
+     * domain, we're done. */
+    if ( sdom == NULL
+         || list_empty(&sdom->active_sdom_elem)
+         || unlikely(prv->ncpus < 2)
+         || prv->weight == sdom->weight * sdom->active_vcpu_count )
+        return;
+
+    BUG_ON(prv->weight < sdom->weight * sdom->active_vcpu_count);
+
+#ifndef NDEBUG
+    initial_weight = sdom->weight;
+#endif
+
+    /* First, subtract current privdom weight from system weight */
+    prv->weight -= sdom->weight * sdom->active_vcpu_count;
+
+    /* Calculate how many cores to leave to others. */
+    other_cpus = prv->ncpus - sdom->active_vcpu_count;
+
+    /* Don't let privdomain have more than half the available cores */
+    if ( sdom->active_vcpu_count > other_cpus )
+    {
+        /* Privdomain total weight will be equal to the weight of all others,
+         * giving it 50% of available processing power. */
+        new_weight = prv->weight / sdom->active_vcpu_count;
+    }
+    else
+    {
+        /* Calculate new privdomain weight: "other" weight / "other" pcpus */
+        new_weight = prv->weight / other_cpus;
+    }
+
+    if ( new_weight > 0 )
+        sdom->weight = min(new_weight, 0xFFFFu);
+
+    /* Update system weight to reflect new dom0 weight */
+    prv->weight += sdom->weight * sdom->active_vcpu_count;
+
+#ifndef NDEBUG
+   if(0 && initial_weight != sdom->weight)
+        printk("%s: d%d weight %u -> %u\n",
+               __func__, sdom->dom->domain_id, initial_weight, sdom->weight);
+#endif
+}
+
 static inline void
 __csched_vcpu_acct_start(struct csched_private *prv, struct csched_vcpu *svc)
 {
@@ -901,6 +958,16 @@ __csched_vcpu_acct_start(struct csched_private *prv, struct csched_vcpu *svc)
         {
             list_add(&sdom->active_sdom_elem, &prv->active_sdom);
         }
+
+        /* is_privileged isn't set when dom0 is created, so check it here. */
+        if ( unlikely(prv->privdom == NULL)
+             && is_hardware_domain(sdom->dom) ) {
+            printk("%s: setting dom %d as the privileged domain\n",
+                   __func__, sdom->dom->domain_id);
+            prv->privdom = sdom;
+        }
+
+        __csched_adj_privdom_weight(prv);
     }
 
     TRACE_3D(TRC_CSCHED_ACCOUNT_START, sdom->dom->domain_id,
@@ -929,6 +996,7 @@ __csched_vcpu_acct_stop_locked(struct csched_private *prv,
         list_del_init(&sdom->active_sdom_elem);
     }
 
+    __csched_adj_privdom_weight(prv);
     TRACE_3D(TRC_CSCHED_ACCOUNT_STOP, sdom->dom->domain_id,
              svc->vcpu->vcpu_id, sdom->active_vcpu_count);
 }
@@ -1191,6 +1259,8 @@ csched_dom_cntl(
                 prv->weight += op->u.credit.weight * sdom->active_vcpu_count;
             }
             sdom->weight = op->u.credit.weight;
+
+            __csched_adj_privdom_weight(prv);
         }
 
         if ( op->u.credit.cap != (uint16_t)~0U )
@@ -1275,6 +1345,7 @@ csched_alloc_domdata(const struct scheduler *ops, struct domain *dom)
 static int
 csched_dom_init(const struct scheduler *ops, struct domain *dom)
 {
+    struct csched_private *prv = CSCHED_PRIV(ops);
     struct csched_dom *sdom;
 
     if ( is_idle_domain(dom) )
@@ -1285,6 +1356,12 @@ csched_dom_init(const struct scheduler *ops, struct domain *dom)
         return -ENOMEM;
 
     dom->sched_priv = sdom;
+
+    if( is_hardware_domain(dom) ) {
+        printk("%s: setting dom %d as the privileged domain\n",
+               __func__, dom->domain_id);
+        prv->privdom = sdom;
+    }
 
     return 0;
 }
