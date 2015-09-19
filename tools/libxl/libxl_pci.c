@@ -1381,9 +1381,7 @@ static int do_pci_remove(libxl__gc *gc, uint32_t domid,
             rc = ERROR_FAIL;
             goto out_fail;
         }
-    } else {
-        assert(type == LIBXL_DOMAIN_TYPE_PV);
-
+    } else if (type == LIBXL_DOMAIN_TYPE_PV) {
         char *sysfs_path = GCSPRINTF(SYSFS_PCI_DEV"/"PCI_BDF"/resource", pcidev->domain,
                                      pcidev->bus, pcidev->dev, pcidev->func);
         FILE *f = fopen(sysfs_path, "r");
