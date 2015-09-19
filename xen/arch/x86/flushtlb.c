@@ -16,12 +16,7 @@
 #include <asm/page.h>
 #include <asm/domain.h>
 
-/* Debug builds: Wrap frequently to stress-test the wrap logic. */
-#ifdef NDEBUG
 #define WRAP_MASK (0xFFFFFFFFU)
-#else
-#define WRAP_MASK (0x000003FFU)
-#endif
 
 u32 tlbflush_clock = 1U;
 DEFINE_PER_CPU(u32, tlbflush_time);
