@@ -27,6 +27,7 @@ struct xen_domctl_getdomaininfo;
 void getdomaininfo(struct domain *d, struct xen_domctl_getdomaininfo *info);
 void arch_get_domain_info(const struct domain *d,
                           struct xen_domctl_getdomaininfo *info);
+bool arch_use_domctl_lock(const struct xen_domctl *op);
 
 /* CDF_* constant. Internal flags for domain creation. */
 /* Is this a privileged domain? */
