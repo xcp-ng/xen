@@ -1339,6 +1339,37 @@ int xc_vcpu_getinfo(xc_interface *xch,
     return rc;
 }
 
+int xc_get_runstate_info(xc_interface *xch, uint32_t domid, xc_runstate_info_t *info)
+{
+    /* The main caller is statically linked.  Careful with the ABI. */
+    BUILD_BUG_ON(sizeof(*info) != 64);
+
+    struct xen_domctl domctl = {
+        .cmd = XEN_DOMCTL_get_runstate_info,
+        .domain = domid,
+    };
+    int ret = do_domctl(xch, &domctl);
+
+    if ( ret < 0 )
+        return ret;
+
+    /* Note, this takes the runstate_info subset of the runstate_info_ext field. */
+    memcpy(info, &domctl.u.domain_runstate, sizeof(*info));
+
+    return ret;
+}
+
+/* Passes back the whole domctl structure, so it can be extended more easily. */
+int xc_get_runstate_info_ext(xc_interface *xch, uint32_t domid, struct xen_domctl *domctl)
+{
+    *domctl = (struct xen_domctl){
+        .cmd = XEN_DOMCTL_get_runstate_info,
+        .domain = domid,
+    };
+
+    return do_domctl(xch, domctl);
+}
+
 int xc_domain_ioport_permission(xc_interface *xch,
                                 uint32_t domid,
                                 uint32_t first_port,
