@@ -24,6 +24,7 @@ type config =
 	pidfile: string option; (* old xenstored compatibility *)
 	tracefile: string option; (* old xenstored compatibility *)
 	restart: bool;
+	live_reload: bool;
 	disable_socket: bool;
 	use_select: bool;
 }
@@ -36,6 +37,7 @@ let do_argv =
 	and reraise_top_level = ref false
 	and config_file = ref ""
 	and restart = ref false
+	and live_reload = ref false
 	and disable_socket = ref false
 	and use_select = ref false in
 
@@ -53,6 +55,7 @@ let do_argv =
 		  ("--pid-file", Arg.Set_string pidfile, ""); (* for compatibility *)
 		  ("-T", Arg.Set_string tracefile, ""); (* for compatibility *)
 		  ("--restart", Arg.Set restart, "Read database on starting");
+		  ("--live", Arg.Set live_reload, "Read live dump on startup");
 		  ("--disable-socket", Arg.Unit (fun () -> disable_socket := true), "Disable socket");
 		  ("--use-select", Arg.Unit (fun () -> use_select := true), "Use select instead of poll"); (* for backward compatibility and testing *)
 		] in
@@ -67,6 +70,7 @@ let do_argv =
 		pidfile = if !pidfile <> "" then Some !pidfile else None;
 		tracefile = if !tracefile <> "" then Some !tracefile else None;
 		restart = !restart;
+		live_reload = !live_reload;
 		disable_socket = !disable_socket;
 		use_select = !use_select;
 	}
