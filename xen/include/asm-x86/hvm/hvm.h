@@ -40,6 +40,13 @@ extern bool opt_pod_enabled;
 #define opt_pod_enabled false
 #endif
 
+/* introspection extensions commandline argument value */
+#ifdef CONFIG_HVM
+extern bool opt_introspection_extn;
+#else
+#define opt_introspection_extn false
+#endif
+
 /* Interrupt acknowledgement sources. */
 enum hvm_intsrc {
     hvm_intsrc_none,
