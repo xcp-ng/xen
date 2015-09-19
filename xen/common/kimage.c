@@ -96,7 +96,7 @@ static struct page_info *kimage_alloc_zeroed_page(unsigned memflags)
 
 static int do_kimage_alloc(struct kexec_image **rimage, paddr_t entry,
                            unsigned long nr_segments,
-                           xen_kexec_segment_t *segments, uint8_t type)
+                           struct kimage_segment *segments, uint8_t type)
 {
     struct kexec_image *image;
     unsigned long i;
@@ -118,29 +118,6 @@ static int do_kimage_alloc(struct kexec_image **rimage, paddr_t entry,
     INIT_PAGE_LIST_HEAD(&image->control_pages);
     INIT_PAGE_LIST_HEAD(&image->dest_pages);
     INIT_PAGE_LIST_HEAD(&image->unusable_pages);
-
-    /*
-     * Verify we have good destination addresses.  The caller is
-     * responsible for making certain we don't attempt to load the new
-     * image into invalid or reserved areas of RAM.  This just
-     * verifies it is an address we can use.
-     *
-     * Since the kernel does everything in page size chunks ensure the
-     * destination addresses are page aligned.  Too many special cases
-     * crop of when we don't do this.  The most insidious is getting
-     * overlapping destination addresses simply because addresses are
-     * changed to page size granularity.
-     */
-    result = -EADDRNOTAVAIL;
-    for ( i = 0; i < nr_segments; i++ )
-    {
-        paddr_t mstart, mend;
-
-        mstart = image->segments[i].dest_maddr;
-        mend   = mstart + image->segments[i].dest_size;
-        if ( (mstart & ~PAGE_MASK) || (mend & ~PAGE_MASK) )
-            goto out;
-    }
 
     /*
      * Verify our destination addresses do not overlap.  If we allowed
@@ -221,7 +198,7 @@ out:
 
 static int kimage_normal_alloc(struct kexec_image **rimage, paddr_t entry,
                                unsigned long nr_segments,
-                               xen_kexec_segment_t *segments)
+                               struct kimage_segment *segments)
 {
     return do_kimage_alloc(rimage, entry, nr_segments, segments,
                            KEXEC_TYPE_DEFAULT);
@@ -229,7 +206,7 @@ static int kimage_normal_alloc(struct kexec_image **rimage, paddr_t entry,
 
 static int do_kimage_crash_alloc(struct kexec_image **rimage, paddr_t entry,
                                  unsigned long nr_segments,
-                                 xen_kexec_segment_t *segments)
+                                 struct kimage_segment *segments)
 {
     unsigned long i;
 
@@ -264,7 +241,7 @@ static int do_kimage_crash_alloc(struct kexec_image **rimage, paddr_t entry,
 
 static int kimage_crash_alloc(struct kexec_image **rimage, paddr_t entry,
                               unsigned long nr_segments,
-                              xen_kexec_segment_t *segments)
+                              struct kimage_segment *segments)
 {
     /* Verify we have a valid entry point */
     if ( (entry < kexec_crash_area.start)
@@ -276,7 +253,7 @@ static int kimage_crash_alloc(struct kexec_image **rimage, paddr_t entry,
 
 static int kimage_crash_alloc_efi(struct kexec_image **rimage, paddr_t entry,
                                   unsigned long nr_segments,
-                                  xen_kexec_segment_t *segments)
+                                  struct kimage_segment *segments)
 {
     return do_kimage_crash_alloc(rimage, entry, nr_segments, segments);
 }
@@ -694,16 +671,18 @@ found:
 }
 
 static int kimage_load_normal_segment(struct kexec_image *image,
-                                      xen_kexec_segment_t *segment)
+                                      struct kimage_segment *segment)
 {
     unsigned long to_copy;
     unsigned long src_offset;
+    unsigned int dest_offset;
     paddr_t dest, end;
     int ret;
 
     to_copy = segment->buf_size;
     src_offset = 0;
     dest = segment->dest_maddr;
+    dest_offset = segment->dest_offset;
 
     ret = kimage_set_destination(image, dest);
     if ( ret < 0 )
@@ -718,7 +697,7 @@ static int kimage_load_normal_segment(struct kexec_image *image,
 
         dest_mfn = dest >> PAGE_SHIFT;
 
-        size = min_t(unsigned long, PAGE_SIZE, to_copy);
+        size = min_t(unsigned long, PAGE_SIZE - dest_offset, to_copy);
 
         page = kimage_alloc_page(image, dest);
         if ( !page )
@@ -728,7 +707,7 @@ static int kimage_load_normal_segment(struct kexec_image *image,
             return ret;
 
         dest_va = __map_domain_page(page);
-        ret = copy_from_guest_offset(dest_va, segment->buf.h, src_offset, size);
+        ret = copy_from_guest_offset(dest_va + dest_offset, segment->buf.h, src_offset, size);
         unmap_domain_page(dest_va);
         if ( ret )
             return -EFAULT;
@@ -736,6 +715,7 @@ static int kimage_load_normal_segment(struct kexec_image *image,
         to_copy -= size;
         src_offset += size;
         dest += PAGE_SIZE;
+        dest_offset = 0;
     }
 
     /* Remainder of the destination should be zeroed. */
@@ -747,7 +727,7 @@ static int kimage_load_normal_segment(struct kexec_image *image,
 }
 
 static int kimage_load_crash_segment(struct kexec_image *image,
-                                     xen_kexec_segment_t *segment)
+                                     struct kimage_segment *segment)
 {
     /*
      * For crash dumps kernels we simply copy the data from user space
@@ -755,12 +735,14 @@ static int kimage_load_crash_segment(struct kexec_image *image,
      */
     paddr_t dest;
     unsigned long sbytes, dbytes;
+    unsigned int dest_offset;
     int ret = 0;
     unsigned long src_offset = 0;
 
     sbytes = segment->buf_size;
     dbytes = segment->dest_size;
     dest = segment->dest_maddr;
+    dest_offset = segment->dest_offset;
 
     while ( dbytes )
     {
@@ -770,30 +752,35 @@ static int kimage_load_crash_segment(struct kexec_image *image,
 
         dest_mfn = dest >> PAGE_SHIFT;
 
-        dchunk = PAGE_SIZE;
+        dchunk = PAGE_SIZE - dest_offset;
         schunk = min(dchunk, sbytes);
 
         dest_va = map_domain_page(_mfn(dest_mfn));
         if ( !dest_va )
             return -EINVAL;
 
-        ret = copy_from_guest_offset(dest_va, segment->buf.h, src_offset, schunk);
+        if ( dest_offset )
+            memset(dest_va, 0, dest_offset);
+        ret = copy_from_guest_offset(dest_va + dest_offset, segment->buf.h,
+                                     src_offset, schunk);
         memset(dest_va + schunk, 0, dchunk - schunk);
 
         unmap_domain_page(dest_va);
         if ( ret )
             return -EFAULT;
 
-        dbytes -= dchunk;
+        dbytes -= dchunk + dest_offset;
         sbytes -= schunk;
-        dest += dchunk;
+        dest += dchunk + dest_offset;
         src_offset += schunk;
+        dest_offset = 0;
     }
 
     return 0;
 }
 
-static int kimage_load_segment(struct kexec_image *image, xen_kexec_segment_t *segment)
+static int kimage_load_segment(struct kexec_image *image,
+                               struct kimage_segment *segment)
 {
     int result = -ENOMEM;
     paddr_t addr;
@@ -824,9 +811,29 @@ static int kimage_load_segment(struct kexec_image *image, xen_kexec_segment_t *s
 
 int kimage_alloc(struct kexec_image **rimage, uint8_t type, uint16_t arch,
                  uint64_t entry_maddr,
-                 uint32_t nr_segments, xen_kexec_segment_t *segment)
+                     uint32_t nr_segments, struct kimage_segment *segment)
 {
     int result;
+    unsigned int i;
+
+    for ( i = 0; i < nr_segments; i++ )
+    {
+        paddr_t mend;
+
+        /*
+         * Stash the destination offset-in-page for use when copying the
+         * buffer later.
+         */
+        segment[i].dest_offset = PAGE_OFFSET(segment[i].dest_maddr);
+
+        /*
+         * Align down the start address to page size and align up the end
+         * address to page size.
+         */
+        mend = segment[i].dest_maddr + segment[i].dest_size;
+        segment[i].dest_maddr &= PAGE_MASK;
+        segment[i].dest_size = ROUNDUP(mend, PAGE_SIZE) - segment[i].dest_maddr;
+    }
 
     switch( type )
     {
@@ -1318,14 +1325,16 @@ static int kimage_load_purgatory_image(struct kexec_image *image)
  * Update the loaded purgatory with the digest and locations of the segments.
  */
 static int kimage_purgatory_calc_one_digest(struct sha2_256_state *ctx,
-                                            xen_kexec_segment_t *segment)
+                                            struct kimage_segment *segment)
 {
     paddr_t dest;
     unsigned long sbytes;
+    unsigned int dest_offset;
     int ret = 0;
 
     sbytes = segment->buf_size;
-    dest = segment->dest_maddr;
+    dest = segment->dest_maddr + segment->dest_offset;
+    dest_offset = segment->dest_offset;
 
     while ( sbytes )
     {
@@ -1335,14 +1344,14 @@ static int kimage_purgatory_calc_one_digest(struct sha2_256_state *ctx,
 
         dest_mfn = dest >> PAGE_SHIFT;
 
-        dchunk = PAGE_SIZE;
+        dchunk = PAGE_SIZE - dest_offset;
         schunk = min(dchunk, sbytes);
 
         dest_va = map_domain_page(_mfn(dest_mfn));
         if ( !dest_va )
             return -EINVAL;
 
-        sha2_256_update(ctx, dest_va, schunk);
+        sha2_256_update(ctx, dest_va + dest_offset, schunk);
 
         unmap_domain_page(dest_va);
         if ( ret )
@@ -1350,6 +1359,7 @@ static int kimage_purgatory_calc_one_digest(struct sha2_256_state *ctx,
 
         sbytes -= schunk;
         dest += dchunk;
+        dest_offset = 0;
     }
     return 0;
 }
@@ -1376,7 +1386,8 @@ static int kimage_purgatory_calc_digest(struct kexec_image *image)
         if ( ret )
             return ret;
 
-        regions[s].start = image->segments[s].dest_maddr;
+        regions[s].start = image->segments[s].dest_maddr +
+                           image->segments[s].dest_offset;
         regions[s].len = image->segments[s].buf_size;
     }
 
@@ -1408,6 +1419,7 @@ static uint64_t kimage_find_kernel_entry_maddr(struct kexec_image *image)
     void *dest_va;
 
     alignment_addr = image->segments[KERNEL_SEGMENT_IDX].dest_maddr +
+                         image->segments[KERNEL_SEGMENT_IDX].dest_offset +
                          offsetof(struct setup_header, kernel_alignment);
 
     dest_mfn = alignment_addr >> PAGE_SHIFT;
@@ -1430,7 +1442,8 @@ static uint64_t kimage_find_kernel_entry_maddr(struct kexec_image *image)
          alignment > 0x1000000 )
         return -EINVAL;
 
-    return ROUNDUP(image->segments[KERNEL_SEGMENT_IDX].dest_maddr,
+    return ROUNDUP(image->segments[KERNEL_SEGMENT_IDX].dest_maddr +
+                       image->segments[KERNEL_SEGMENT_IDX].dest_offset,
                    alignment) +
                    0x200;
 }

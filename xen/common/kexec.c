@@ -911,7 +911,7 @@ static uint16_t kexec_load_v1_arch(void)
 }
 
 static int kexec_segments_add_segment(unsigned int *nr_segments,
-                                      xen_kexec_segment_t *segments,
+                                      struct kimage_segment *segments,
                                       mfn_t mfn)
 {
     paddr_t maddr = mfn_to_maddr(mfn);
@@ -937,7 +937,7 @@ static int kexec_segments_add_segment(unsigned int *nr_segments,
 
 static int kexec_segments_from_ind_page(mfn_t mfn,
                                         unsigned int *nr_segments,
-                                        xen_kexec_segment_t *segments,
+                                        struct kimage_segment *segments,
                                         bool compat)
 {
     void *page;
@@ -992,7 +992,7 @@ done:
 static int kexec_do_load_v1(xen_kexec_load_v1_t *load, int compat)
 {
     struct kexec_image *kimage = NULL;
-    xen_kexec_segment_t *segments;
+    struct kimage_segment *segments;
     uint16_t arch;
     unsigned int nr_segments = 0;
     mfn_t ind_mfn = maddr_to_mfn(load->image.indirection_page);
@@ -1002,7 +1002,7 @@ static int kexec_do_load_v1(xen_kexec_load_v1_t *load, int compat)
     if ( arch == EM_NONE )
         return -ENOSYS;
 
-    segments = xmalloc_array(xen_kexec_segment_t, KEXEC_SEGMENT_MAX);
+    segments = xmalloc_array(struct kimage_segment, KEXEC_SEGMENT_MAX);
     if ( segments == NULL )
         return -ENOMEM;
 
@@ -1104,9 +1104,10 @@ static int kexec_load_v1_compat(XEN_GUEST_HANDLE_PARAM(void) uarg)
 static int kexec_load(XEN_GUEST_HANDLE_PARAM(void) uarg)
 {
     xen_kexec_load_t load;
-    xen_kexec_segment_t *segments;
+    struct kimage_segment *segments;
     struct kexec_image *kimage = NULL;
     int ret;
+    unsigned int i;
 
     if ( copy_from_guest(&load, uarg, 1) )
         return -EFAULT;
@@ -1119,14 +1120,18 @@ static int kexec_load(XEN_GUEST_HANDLE_PARAM(void) uarg)
     if ( load.nr_segments >= KEXEC_SEGMENT_MAX )
         return -EINVAL;
 
-    segments = xmalloc_array(xen_kexec_segment_t, load.nr_segments);
+    segments = xmalloc_array(struct kimage_segment, load.nr_segments);
     if ( segments == NULL )
         return -ENOMEM;
 
-    if ( copy_from_guest(segments, load.segments.h, load.nr_segments) )
+    for ( i = 0; i < load.nr_segments; i++ )
     {
-        ret = -EFAULT;
-        goto error;
+        if ( copy_from_guest_offset((xen_kexec_segment_t *)&segments[i],
+                                    load.segments.h, i, 1) )
+        {
+            ret = -EFAULT;
+            goto error;
+        }
     }
 
     ret = kimage_alloc(&kimage, load.type, load.arch, load.entry_maddr,
