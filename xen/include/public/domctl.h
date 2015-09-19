@@ -1189,6 +1189,46 @@ struct xen_domctl_vmtrace_op {
 typedef struct xen_domctl_vmtrace_op xen_domctl_vmtrace_op_t;
 DEFINE_XEN_GUEST_HANDLE(xen_domctl_vmtrace_op_t);
 
+/*
+ * Return information about the state and running time of a domain.
+ * The "domain runstate" is based on the runstates of all the vcpus of the
+ * domain (see below).
+ * @extra_arg == pointer to domain_runstate_info structure.
+ */
+struct xen_domctl_runstate_info {
+    /* VCPU's current state (RUNSTATE_*). */
+    uint32_t      state;
+    uint32_t missed_changes;
+    /* Number of times we missed an update due to contention */
+    /* When was current state entered (system time, ns)? */
+    uint64_t state_entry_time;
+    /*
+     * Time spent in each RUNSTATE_* (ns). The sum of these times is
+     * NOT guaranteed not to drift from system time.
+     */
+    uint64_t time[6];
+};
+typedef struct xen_domctl_runstate_info xen_domctl_runstate_info_t;
+DEFINE_XEN_GUEST_HANDLE(xen_domctl_runstate_info_t);
+
+/* All vcpus are running */
+#define DOMAIN_RUNSTATE_full_run           0
+
+/* All vcpus are runnable (i.e., waiting for cpu) */
+#define DOMAIN_RUNSTATE_full_contention    1
+
+/* Some vcpus are running, some are runnable */
+#define DOMAIN_RUNSTATE_concurrency_hazard 2
+
+/* All vcpus are blocked / offline */
+#define DOMAIN_RUNSTATE_blocked            3
+
+/* Some vpcus are running, some are blocked */
+#define DOMAIN_RUNSTATE_partial_run        4
+
+/* Some vcpus are runnable, some are blocked */
+#define DOMAIN_RUNSTATE_partial_contention 5
+
 struct xen_domctl {
     uint32_t cmd;
 #define XEN_DOMCTL_createdomain                   1
@@ -1276,6 +1316,7 @@ struct xen_domctl {
 #define XEN_DOMCTL_vmtrace_op                    84
 #define XEN_DOMCTL_get_paging_mempool_size       85
 #define XEN_DOMCTL_set_paging_mempool_size       86
+#define XEN_DOMCTL_get_runstate_info             98
 #define XEN_DOMCTL_gdbsx_guestmemio            1000
 #define XEN_DOMCTL_gdbsx_pausevcpu             1001
 #define XEN_DOMCTL_gdbsx_unpausevcpu           1002
@@ -1326,6 +1367,7 @@ struct xen_domctl {
         struct xen_domctl_set_access_required access_required;
         struct xen_domctl_audit_p2m         audit_p2m;
         struct xen_domctl_set_virq_handler  set_virq_handler;
+        struct xen_domctl_runstate_info     domain_runstate;
         struct xen_domctl_gdbsx_memio       gdbsx_guest_memio;
         struct xen_domctl_set_broken_page_p2m set_broken_page_p2m;
         struct xen_domctl_cacheflush        cacheflush;

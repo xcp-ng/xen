@@ -259,9 +259,30 @@ static inline void vcpu_urgent_count_update(struct vcpu *v)
     }
 }
 
+/* Used to quickly map the vcpu runstate mask to a domain runstate */
+static int mask_to_state[] = {
+    /* 000: Nothing in any runstate.  Should never happen. */
+    -1,
+    /* 001: All running */
+    DOMAIN_RUNSTATE_full_run,
+    /* 010: All runnable */
+    DOMAIN_RUNSTATE_full_contention,
+    /* 011: Some running, some runnable */
+    DOMAIN_RUNSTATE_concurrency_hazard,
+    /* 100: All blocked / offline */
+    DOMAIN_RUNSTATE_blocked,
+    /* 101: Some running, some blocked / offline */
+    DOMAIN_RUNSTATE_partial_run,
+    /* 110: Some blocked / offline, some runnable */
+    DOMAIN_RUNSTATE_partial_contention,
+    /* 111: Some in every state.  Mixed running + runnable is most important. */
+    DOMAIN_RUNSTATE_concurrency_hazard
+};
+
 static inline void vcpu_runstate_change(
     struct vcpu *v, int new_state, s_time_t new_entry_time)
 {
+    struct domain *d = v->domain;
     s_time_t delta;
     struct sched_unit *unit = v->sched_unit;
 
@@ -287,6 +308,46 @@ static inline void vcpu_runstate_change(
     }
 
     v->runstate.state = new_state;
+
+    /* Update domain runstate */
+    if ( spin_trylock(&d->runstate_lock) )
+    {
+        unsigned mask=0;
+        struct vcpu *ov;
+
+        BUG_ON(d->runstate.state > DOMAIN_RUNSTATE_partial_contention);
+
+        d->runstate.time[d->runstate.state] +=
+            (new_entry_time - d->runstate.state_entry_time);
+        d->runstate.state_entry_time = new_entry_time;
+
+        /* Determine new runstate.  First, see what states we have */
+        for_each_vcpu(d, ov)
+        {
+            /* Don't count vcpus that have beent taken offline by the guest */
+            if ( !(ov->runstate.state == RUNSTATE_offline &&
+                   test_bit(_VPF_down, &ov->pause_flags)) )
+               mask |= (1 << ov->runstate.state);
+        }
+
+        if ( mask == 0 )
+        {
+            printk("%s: d%d has no online vcpus!\n",
+                   __func__, d->domain_id);
+            mask = 1 << RUNSTATE_offline;
+        }
+
+        /* Offline & blocked are the same */
+        mask |= ((1 << RUNSTATE_offline) & mask) >> 1;
+
+        d->runstate.state = mask_to_state[mask&0x7];
+
+        spin_unlock(&d->runstate_lock);
+    }
+    else
+    {
+        atomic_inc(&d->runstate_missed_changes);
+    }
 }
 
 void sched_guest_idle(void (*idle) (void), unsigned int cpu)
@@ -330,6 +391,20 @@ void vcpu_runstate_get(const struct vcpu *v,
         unit_schedule_unlock_irq(lock, unit);
 
     rcu_read_unlock(&sched_res_rculock);
+}
+
+void domain_runstate_get(struct domain *d, domain_runstate_info_t *runstate)
+{
+    unsigned long flags;
+    /* Have to disable interrupts because the other user of the lock runs
+     * in interrupt context. */
+    spin_lock_irqsave(&d->runstate_lock, flags);
+
+    memcpy(runstate, &d->runstate, sizeof(*runstate));
+    runstate->time[d->runstate.state] += NOW() - runstate->state_entry_time;
+    runstate->missed_changes = atomic_read(&d->runstate_missed_changes);
+
+    spin_unlock_irqrestore(&d->runstate_lock, flags);
 }
 
 uint64_t get_cpu_idle_time(unsigned int cpu)
