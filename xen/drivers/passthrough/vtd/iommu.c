@@ -1760,6 +1760,36 @@ static int intel_iommu_unmap_page(struct domain *d, unsigned long gfn)
     return 0;
 }
 
+static int intel_iommu_lookup_page(
+    struct domain *d, unsigned long gfn, unsigned long *mfn)
+{
+    struct domain_iommu *hd = dom_iommu(d);
+    struct dma_pte *page = NULL, *pte = NULL, old;
+    u64 pg_maddr;
+
+    spin_lock(&hd->arch.mapping_lock);
+
+    pg_maddr = addr_to_dma_page_maddr(d, (paddr_t)gfn << PAGE_SHIFT_4K, 1);
+    if ( pg_maddr == 0 )
+    {
+        spin_unlock(&hd->arch.mapping_lock);
+        return -ENOMEM;
+    }
+    page = (struct dma_pte *)map_vtd_domain_page(pg_maddr);
+    pte = page + (gfn & LEVEL_MASK);
+    old = *pte;
+    if (!dma_pte_present(old)) {
+        unmap_vtd_domain_page(page);
+        spin_unlock(&hd->arch.mapping_lock);
+        return -ENOMEM;
+    }
+    unmap_vtd_domain_page(page);
+    spin_unlock(&hd->arch.mapping_lock);
+
+    *mfn = dma_get_pte_addr(old) >> PAGE_SHIFT_4K;
+    return 0;
+}
+
 void iommu_pte_flush(struct domain *d, u64 gfn, u64 *pte,
                      int order, int present)
 {
@@ -2551,6 +2581,7 @@ const struct iommu_ops intel_iommu_ops = {
     .teardown = iommu_domain_teardown,
     .map_page = intel_iommu_map_page,
     .unmap_page = intel_iommu_unmap_page,
+    .lookup_page = intel_iommu_lookup_page,
     .free_page_table = iommu_free_page_table,
     .reassign_device = reassign_device_ownership,
     .get_device_group_id = intel_iommu_group_id,
