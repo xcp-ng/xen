@@ -702,10 +702,12 @@ static void cf_check dump_numa(unsigned char key)
     for_each_online_node ( i )
     {
         mfn_t mfn = _mfn(node_start_pfn(i) + 1);
+        unsigned long claimed, free;
 
-        printk("NODE%u start->%lu size->%lu free->%lu\n",
+        free = avail_node_heap_pages(i, &claimed);
+        printk("NODE%u start->%lu size->%lu free->%lu claimed->%lu\n",
                i, node_start_pfn(i), node_spanned_pages(i),
-               avail_node_heap_pages(i));
+               free, claimed);
         /* Sanity check mfn_to_nid() */
         if ( node_spanned_pages(i) > 1 && mfn_to_nid(mfn) != i )
             printk("mfn_to_nid(%"PRI_mfn") -> %d should be %u\n",
