@@ -358,6 +358,9 @@ let tweak_gc () =
 
 let () =
 	Printexc.set_uncaught_exception_handler Logging.fallback_exception_handler;
+
+	Xenbus.Partial.allow_oversize_packets := false;
+
 	let cf = do_argv in
 	if cf.config_test then begin
 		let path = config_filename cf in
