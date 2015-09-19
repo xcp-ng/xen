@@ -97,6 +97,7 @@ endif
 
 syms-warn-dup-y := --warn-dup
 syms-warn-dup-$(CONFIG_SUPPRESS_DUPLICATE_SYMBOL_WARNINGS) :=
+syms-warn-dup-$(CONFIG_LIVEPATCH) := --error-dup
 
 $(TARGET): $(TARGET)-syms $(efi-y) boot/mkelf32
 	./boot/mkelf32 $(notes_phdrs) $(TARGET)-syms $(TARGET) $(XEN_IMG_OFFSET) \

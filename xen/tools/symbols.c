@@ -597,7 +597,7 @@ static int compare_name(const void *p1, const void *p2)
 int main(int argc, char **argv)
 {
 	unsigned int i;
-	bool unsorted = false, warn_dup = false, found_dup = false;
+	bool unsorted = false, warn_dup = false, error_dup = false, found_dup = false;
 
 	if (argc >= 2) {
 		for (i = 1; i < argc; i++) {
@@ -617,6 +617,8 @@ int main(int argc, char **argv)
 				sort_by_name = 1;
 			else if (strcmp(argv[i], "--warn-dup") == 0)
 				warn_dup = true;
+			else if (strcmp(argv[i], "--error-dup") == 0)
+				warn_dup = error_dup = true;
 			else if (strcmp(argv[i], "--xensyms") == 0)
 				map_only = true;
 			else
@@ -642,7 +644,7 @@ int main(int argc, char **argv)
 		unsorted = true;
 	}
 
-	if (found_dup)
+	if (error_dup && found_dup)
 		exit(1);
 
 	if (unsorted)
