@@ -5262,6 +5262,18 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE_PARAM(void) arg)
             gdprintk(XENLOG_INFO, "Legacy windows driver quirks enabled. "
                      "(HVMOP_set_driver_version)\n");
             goto legacy_win_complete;
+
+        case HVMOP_process_dying:
+            /*
+             * Reduced to functional NOP, but must return success for certain
+             * versions of the legacy drivers.
+             *
+             * Xen-4.5 introduced the HVMOP_op_mask which truncates this op
+             * into HVMOP_set_pci_intx_level.  As HVMOP_set_pci_intx_level is
+             * ineligible for continuations, we can still distinguish legacy
+             * drivers.
+             */
+            goto legacy_win_complete;
         }
     }
 

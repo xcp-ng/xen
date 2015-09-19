@@ -276,6 +276,9 @@ struct xen_hvm_altp2m_op {
 typedef struct xen_hvm_altp2m_op xen_hvm_altp2m_op_t;
 DEFINE_XEN_GUEST_HANDLE(xen_hvm_altp2m_op_t);
 
+/* Legacy NOP: Hint from PV drivers for process destruction. */
+#define HVMOP_process_dying        0x102
+
 #define HVMOP_set_driver_version 0x103
 struct xen_hvm_set_driver_version {
     uint32_t build;
