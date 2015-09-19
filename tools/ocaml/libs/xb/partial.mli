@@ -8,6 +8,7 @@ type pkt = {
 external header_size : unit -> int = "stub_header_size"
 external header_of_string_internal : string -> int * int * int * int
   = "stub_header_of_string"
+val allow_oversize_packets : bool ref
 val xenstore_payload_max : int
 val of_string : string -> pkt
 val append : pkt -> string -> int -> unit
