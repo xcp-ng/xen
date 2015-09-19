@@ -330,15 +330,6 @@ static void amd_xc_cpuid_policy(xc_interface *xch,
             regs[0] = DEF_MAX_AMDEXT;
         break;
 
-    case 0x80000008:
-        /*
-         * ECX[15:12] is ApicIdCoreSize: ECX[7:0] is NumberOfCores (minus one).
-         * Update to reflect vLAPIC_ID = vCPU_ID * 2.
-         */
-        regs[2] = ((regs[2] + (1u << 12)) & 0xf000u) |
-                  ((regs[2] & 0xffu) << 1) | 1u;
-        break;
-
     case 0x8000000a: {
         if ( !info->nestedhvm )
         {
@@ -378,12 +369,7 @@ static void intel_xc_cpuid_policy(xc_interface *xch,
     switch ( input[0] )
     {
     case 0x00000004:
-        /*
-         * EAX[31:26] is Maximum Cores Per Package (minus one).
-         * Update to reflect vLAPIC_ID = vCPU_ID * 2.
-         */
-        regs[0] = (((regs[0] & 0x7c000000u) << 1) | 0x04000000u |
-                   (regs[0] & 0x3ffu));
+        regs[0] &= 0x3ffu;
         regs[3] &= 0x3ffu;
         break;
 
@@ -394,11 +380,6 @@ static void intel_xc_cpuid_policy(xc_interface *xch,
 
     case 0x80000005:
         regs[0] = regs[1] = regs[2] = 0;
-        break;
-
-    case 0x80000008:
-        /* Mask AMD Number of Cores information. */
-        regs[2] = 0;
         break;
     }
 }
@@ -534,15 +515,9 @@ static void xc_cpuid_hvm_policy(xc_interface *xch,
         break;
 
     case 0x00000001:
-        /*
-         * EBX[23:16] is Maximum Logical Processors Per Package.
-         * Update to reflect vLAPIC_ID = vCPU_ID * 2.
-         */
-        regs[1] = (regs[1] & 0x0000ffffu) | ((regs[1] & 0x007f0000u) << 1);
-
         regs[2] = info->featureset[featureword_of(X86_FEATURE_SSE3)];
-        regs[3] = (info->featureset[featureword_of(X86_FEATURE_FPU)] |
-                   bitmaskof(X86_FEATURE_HTT));
+        regs[3] = (info->featureset[featureword_of(X86_FEATURE_FPU)] &
+                   ~bitmaskof(X86_FEATURE_HTT));
         break;
 
     case 0x00000007: /* Intel-defined CPU features */
