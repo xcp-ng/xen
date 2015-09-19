@@ -20,6 +20,7 @@
  */
 
 #include "xc_private.h"
+#include "xenguest.h"
 #include <xen/memory.h>
 #include <xen/hvm/hvm_op.h>
 
@@ -1096,12 +1097,41 @@ int xc_domain_claim_pages(xc_interface *xch,
                                uint32_t domid,
                                unsigned long nr_pages)
 {
+    return xc_domain_claim_pages_node(xch, domid, XC_NUMA_NO_NODE, nr_pages);
+}
+
+/*
+ * Claim pages for a domain from a specific NUMA node.
+ * If node is NUMA_NO_NODE, it is a host-wide claim.
+ * Returns 0 on success, -1 on failure with errno set.
+ */
+int xc_domain_claim_pages_node(xc_interface *xch,
+                               uint32_t domid,
+                               unsigned int node,
+                               unsigned long nr_pages)
+{
     struct xen_memory_reservation reservation = {
         .nr_extents   = nr_pages,
         .extent_order = 0,
         .mem_flags    = 0, /* no flags */
         .domid        = domid
     };
+
+    /*
+     * If node is NUMA_NO_NODE, it is a host-wide claim and we pass no flags.
+     * Otherwise, we set the exact_node flag to request pages from that node
+     * only, and check that node is in range before passing it in the flags.
+     */
+    if ( node != XC_NUMA_NO_NODE )
+    {
+        if ( node >= 0xFF ) /* XENMEMF_node() does node+1, 0xFF is invalid */
+        {
+            errno = ERANGE;
+            return -1;
+        }
+
+        reservation.mem_flags |= XENMEMF_exact_node(node);
+    }
 
     return xc_memory_op(xch, XENMEM_claim_pages, &reservation, sizeof(reservation));
 }
