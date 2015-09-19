@@ -89,6 +89,18 @@ type domctl_create_config =
 	arch: arch_domainconfig;
 }
 
+type runstateinfo = {
+  state : int32;
+  missed_changes: int32;
+  state_entry_time : int64;
+  time0 : int64;
+  time1 : int64;
+  time2 : int64;
+  time3 : int64;
+  time4 : int64;
+  time5 : int64;
+}
+
 type domaininfo =
 {
 	domid             : domid;
@@ -246,6 +258,8 @@ external domain_getinfo: handle -> domid -> domaininfo= "stub_xc_domain_getinfo"
 
 external domain_get_vcpuinfo: handle -> int -> int -> vcpuinfo
        = "stub_xc_vcpu_getinfo"
+external domain_get_runstate_info : handle -> int -> runstateinfo
+  = "stub_xc_get_runstate_info"
 
 external domain_ioport_permission: handle -> domid -> int -> int -> bool -> unit
        = "stub_xc_domain_ioport_permission"
