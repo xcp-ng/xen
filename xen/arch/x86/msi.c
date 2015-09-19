@@ -133,9 +133,11 @@ static bool memory_decoded(const struct pci_dev *dev)
     {
         sbdf.bus = dev->info.physfn.bus;
         sbdf.devfn = dev->info.physfn.devfn;
+
+        return pci_conf_read16(sbdf, PCI_COMMAND) & PCI_COMMAND_MEMORY;
     }
 
-    return pci_conf_read16(sbdf, PCI_COMMAND) & PCI_COMMAND_MEMORY;
+    return dev->memory_enabled;
 }
 
 static bool msix_memory_decoded(const struct pci_dev *dev, unsigned int pos)

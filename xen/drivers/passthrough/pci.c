@@ -344,6 +344,8 @@ static struct pci_dev *alloc_pdev(struct pci_seg *pseg, u8 bus, u8 devfn)
         return NULL;
     }
 
+    pdev->memory_enabled = !!(pci_conf_read16(pdev->sbdf, PCI_COMMAND) & PCI_COMMAND_MEMORY);
+
     list_add(&pdev->alldevs_list, &pseg->alldevs_list);
 
     /* update bus2bridge */
