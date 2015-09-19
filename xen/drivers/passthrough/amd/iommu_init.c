@@ -1347,7 +1347,7 @@ static bool_t __init amd_sp5100_erratum28(void)
         byte = pci_conf_read8(PCI_SBDF(0, bus, 0x14, 0), 0xad);
         if ( (byte >> 3) & 1 )
         {
-            printk(XENLOG_WARNING "AMD-Vi: SP5100 erratum 28 detected, disabling IOMMU.\n"
+            printk(XENLOG_WARNING "AMD-Vi: SP5100 erratum 28 detected, disabling Interrupt Remapping.\n"
                    "If possible, disable SATA Combined mode in BIOS or contact your vendor for BIOS update.\n");
             return 1;
         }
@@ -1387,7 +1387,9 @@ int __init amd_iommu_prepare(bool xt)
 
     if ( iommu_intremap && amd_iommu_perdev_intremap &&
          amd_sp5100_erratum28() )
-        goto error_out;
+    {
+        iommu_intremap = 0;
+    }
 
     /* We implies no IOMMU if ACPI indicates no MSI. */
     if ( unlikely(acpi_gbl_FADT.boot_flags & ACPI_FADT_NO_MSI) )
