@@ -61,6 +61,7 @@ SECTIONS
   . = __image_base__;
   /DISCARD/ : {
     *(.text.header)
+    *(.init.multiboot)
   }
 #endif
 
@@ -209,6 +210,7 @@ SECTIONS
        _sinittext = .;
        *(.init.text)
        *(.text.startup)
+       *(.init.multiboot)
        _einittext = .;
        /*
         * Here are the replacement instructions. The linker sticks them
