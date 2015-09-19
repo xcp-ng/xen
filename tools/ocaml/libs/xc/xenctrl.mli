@@ -222,6 +222,10 @@ type featureset_index =
   | Featureset_pv_max
   | Featureset_hvm_max
 external get_cpu_featureset : handle -> featureset_index -> int64 array = "stub_xc_get_cpu_featureset"
+external get_featureset : handle -> featureset_index -> int64 array = "stub_xc_get_cpu_featureset"
+
+external upgrade_oldstyle_featuremask: handle -> int64 array -> bool -> int64 array = "stub_upgrade_oldstyle_featuremask"
+external oldstyle_featuremask: handle -> int64 array = "stub_oldstyle_featuremask"
 
 external pages_to_kib : int64 -> int64 = "stub_pages_to_kib"
 val pages_to_mib : int64 -> int64
