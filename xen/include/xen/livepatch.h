@@ -14,6 +14,9 @@ struct xen_sysctl_livepatch_op;
 #include <xen/elfstructs.h>
 #ifdef CONFIG_LIVEPATCH
 
+#include <xen/virtual_region.h>
+#include <xen/livepatch_payload.h>
+
 /*
  * We use alternative and exception table code - which by default are __init
  * only, however we need them during runtime. These macros allows us to build
@@ -36,6 +39,40 @@ struct livepatch_symbol {
     unsigned long value;
     unsigned int size;
     bool_t new_symbol;
+};
+
+/* To contain the ELF Note header. */
+struct livepatch_build_id {
+   const void *p;
+   unsigned int len;
+};
+
+struct payload {
+    uint32_t state;                      /* One of the LIVEPATCH_STATE_*. */
+    int32_t rc;                          /* 0 or -XEN_EXX. */
+    struct list_head list;               /* Linked to 'payload_list'. */
+    const void *text_addr;               /* Virtual address of .text. */
+    size_t text_size;                    /* .. and its size. */
+    const void *rw_addr;                 /* Virtual address of .data. */
+    size_t rw_size;                      /* .. and its size (if any). */
+    const void *ro_addr;                 /* Virtual address of .rodata. */
+    size_t ro_size;                      /* .. and its size (if any). */
+    unsigned int pages;                  /* Total pages for [text,rw,ro]_addr */
+    struct list_head applied_list;       /* Linked to 'applied_list'. */
+    struct livepatch_func *funcs;        /* The array of functions to patch. */
+    unsigned int nfuncs;                 /* Nr of functions to patch. */
+    const struct livepatch_symbol *symtab; /* All symbols. */
+    const char *strtab;                  /* Pointer to .strtab. */
+    struct virtual_region region;        /* symbol, bug.frame patching and
+                                            exception table (x86). */
+    unsigned int nsyms;                  /* Nr of entries in .strtab and symbols. */
+    struct livepatch_build_id id;        /* ELFNOTE_DESC(.note.gnu.build-id) of the payload. */
+    struct livepatch_build_id dep;       /* ELFNOTE_DESC(.livepatch.depends). */
+    livepatch_loadcall_t *const *load_funcs;   /* The array of funcs to call after */
+    livepatch_unloadcall_t *const *unload_funcs;/* load and unload of the payload. */
+    unsigned int n_load_funcs;           /* Nr of the funcs to load and execute. */
+    unsigned int n_unload_funcs;         /* Nr of funcs to call durung unload. */
+    char name[XEN_LIVEPATCH_NAME_SIZE]; /* Name of it. */
 };
 
 int livepatch_op(struct xen_sysctl_livepatch_op *);
