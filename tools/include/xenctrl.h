@@ -419,6 +419,7 @@ typedef struct xc_core_header {
  */
 
 typedef xen_domctl_getdomaininfo_t xc_domaininfo_t;
+typedef xen_domctl_runstate_info_t xc_runstate_info_t;
 
 static inline unsigned int dominfo_shutdown_reason(const xc_domaininfo_t *info)
 {
@@ -1345,6 +1346,15 @@ int xc_domain_get_pod_target(xc_interface *xch,
                              uint64_t *tot_pages,
                              uint64_t *pod_cache_pages,
                              uint64_t *pod_entries);
+
+#define XENCTRL_HAS_GET_RUNSTATE_INFO 1
+int xc_get_runstate_info(xc_interface *xch,
+			 uint32_t domid,
+			 xc_runstate_info_t *info);
+#define XENCTRL_HAS_GET_RUNSTATE_INFO_EXT 1
+int xc_get_runstate_info_ext(xc_interface *xch,
+                             uint32_t domid,
+                             struct xen_domctl *domctl);
 
 int xc_domain_ioport_permission(xc_interface *xch,
                                 uint32_t domid,

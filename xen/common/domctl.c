@@ -611,6 +611,11 @@ long do_domctl(XEN_GUEST_HANDLE_PARAM(xen_domctl_t) u_domctl)
         /* Other sub-ops handled by arch_do_domctl() further down. */
         break;
 
+    case XEN_DOMCTL_get_runstate_info:
+        domain_runstate_get(d, &op->u.domain_runstate);
+        copyback = true;
+        goto domctl_out_unlock_domonly;
+
     default:
         /* Everything else handled further up or further down. */
         break;
