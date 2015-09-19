@@ -649,6 +649,10 @@ int hvm_domain_initialise(struct domain *d)
     BUILD_BUG_ON(NR_HVM_DOMU_IRQS < NR_ISAIRQS);
     ASSERT(hvm_domain_irq(d)->nr_gsis >= NR_ISAIRQS);
 
+    /* Always enable altp2m support for introspected guests. */
+    if ( opt_introspection_extn )
+        d->arch.hvm.params[HVM_PARAM_ALTP2M] = XEN_ALTP2M_external;
+
     /* need link to containing domain */
     d->arch.hvm.pl_time->domain = d;
 
