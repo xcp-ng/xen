@@ -204,6 +204,8 @@ int main(int argc, char **argv)
 	if (!xen_setup())
 		exit(1);
 
+	watch_logconsole();
+
 	handle_io();
 
 	closelog();
