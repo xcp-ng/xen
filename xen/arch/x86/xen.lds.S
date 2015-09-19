@@ -338,6 +338,8 @@ SECTIONS
     *(.reloc)
     __base_relocs_end = .;
   }
+
+  .sbat (NOLOAD) : { *(.sbat) }
 #elif defined(XEN_BUILD_EFI)
   /*
    * Due to the way EFI support is currently implemented, these two symbols
