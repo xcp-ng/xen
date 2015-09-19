@@ -276,6 +276,13 @@ struct xen_hvm_altp2m_op {
 typedef struct xen_hvm_altp2m_op xen_hvm_altp2m_op_t;
 DEFINE_XEN_GUEST_HANDLE(xen_hvm_altp2m_op_t);
 
+#define HVMOP_set_driver_version 0x103
+struct xen_hvm_set_driver_version {
+    uint32_t build;
+};
+typedef struct xen_hvm_set_driver_version xen_hvm_set_driver_version_t;
+DEFINE_XEN_GUEST_HANDLE(xen_hvm_set_driver_version_t);
+
 #endif /* __XEN_PUBLIC_HVM_HVM_OP_H__ */
 
 /*
