@@ -767,7 +767,10 @@ p2m_pt_set_entry(struct p2m_domain *p2m, gfn_t gfn_, mfn_t mfn,
      * avoid a potential use-after-free.
      */
     if ( l1e_get_flags(intermediate_entry) & _PAGE_PRESENT )
+    {
+        p2m_tlb_flush_sync(p2m);
         p2m_free_entry(p2m, &intermediate_entry, page_order);
+    }
 
  out:
     unmap_domain_page(table);
