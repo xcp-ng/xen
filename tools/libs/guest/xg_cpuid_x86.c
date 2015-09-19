@@ -576,7 +576,7 @@ static int xc_msr_policy(xc_interface *xch, domid_t domid,
 
 int xc_cpuid_apply_policy(xc_interface *xch, uint32_t domid, bool restore,
                           const uint32_t *featureset, unsigned int nr_features,
-                          bool pae, bool itsc, bool nested_virt,
+                          bool pae, bool itsc, bool nested_virt, unsigned int cps,
                           const struct xc_xend_cpuid *xend,
                           const struct xc_msr *msr)
 {
@@ -741,6 +741,46 @@ int xc_cpuid_apply_policy(xc_interface *xch, uint32_t domid, bool restore,
                 p->policy.cache.subleaf[i].threads_per_cache = 0;
             }
             break;
+        }
+
+        /*
+         * BODGE: XenServer legacy cores-per-socket.  Needs to remain like
+         * this for backwards compatibility with migration streams which lack
+         * CPUID data.
+         */
+        if ( cps > 0 )
+        {
+            p->policy.basic.htt = true;
+
+            /*
+             * This (cps * 2) is wrong, and contrary to the statement in the
+             * AMD manual.  However, Xen unconditionally offers Intel-style
+             * APIC IDs (odd IDs for hyperthreads) which breaks the AMD APIC
+             * Enumeration Requirements.
+             *
+             * Fake up cores-per-socket as a socket with twice as many cores
+             * as expected, with every odd core offline.
+             */
+            p->policy.basic.lppp = cps * 2;
+
+            switch ( p->policy.x86_vendor )
+            {
+            case X86_VENDOR_INTEL:
+                for ( i = 0; (p->policy.cache.subleaf[i].type &&
+                              i < ARRAY_SIZE(p->policy.cache.raw)); ++i )
+                {
+                    p->policy.cache.subleaf[i].cores_per_package = (cps * 2) - 1;
+                    p->policy.cache.subleaf[i].threads_per_cache = 0;
+                }
+                break;
+
+            case X86_VENDOR_AMD:
+            case X86_VENDOR_HYGON:
+                p->policy.extd.cmp_legacy = true;
+                p->policy.extd.apic_id_size = 0;
+                p->policy.extd.nc = (cps * 2) - 1;
+                break;
+            }
         }
     }
 
