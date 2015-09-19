@@ -711,8 +711,9 @@ trampoline_setup:
         lret
 
         .section .init.text, "ax", @progbits
+#include "x86_64.S"
+
+	.section .init.data, "aw", @progbits
 ENTRY(trampoline_start)
 #include "trampoline.S"
 ENTRY(trampoline_end)
-
-#include "x86_64.S"
