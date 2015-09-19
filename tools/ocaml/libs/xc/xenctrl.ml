@@ -151,7 +151,7 @@ let with_intf f =
 		handle := Some h;
 		f h
 
-external _domain_create: handle -> int32 -> domain_create_flag list -> int array -> arch_domainconfig -> domid
+external _domain_create: handle -> int32 -> domain_create_flag list -> int array -> domid
        = "stub_xc_domain_create"
 
 let int_array_of_uuid_string s =
