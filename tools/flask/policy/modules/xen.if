@@ -189,3 +189,14 @@ define(`admin_device', `
 define(`delegate_devices', `
     allow $1 $2:resource { add remove };
 ')
+
+# delegate_unlabeled_resources(priv-domain, target-domain)
+# Allow full access to target domain of all the unlabeled resources that have
+# been passed to it.
+define(`delegate_unlabeled_resources', `
+    allow $1 $2:resource { add remove };
+    admin_device($2, irq_t);
+    admin_device($2, ioport_t);
+    admin_device($2, device_t);
+    admin_device($2, iomem_t);
+')

@@ -22,7 +22,12 @@ domain_comms(dom0_t, dm_dom_t)
 make_device_model(dom0_t, dm_dom_t, domU_t)
 
 # This is required for PCI (or other device) passthrough
-delegate_devices(dom0_t, domU_t)
+#delegate_devices(dom0_t, domU_t)
+
+# Delegate full access to PCI passthrough devices and other
+# resources passed to target domain. Possible security risk till the time
+# we come up with a proper solution with toolstack to name all the resources.
+delegate_unlabeled_resources(dom0_t, domU_t)
 
 # Both of these domain types can be created using the default (system) role
 role system_r types { domU_t dm_dom_t };
