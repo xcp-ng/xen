@@ -588,7 +588,7 @@ static bool need_cache(const struct pci_dev *pdev, unsigned int num_bars)
     return false;
 }
 
-static bool __maybe_unused cache_pdev(struct pci_dev *pdev)
+static bool cache_pdev(struct pci_dev *pdev)
 {
     unsigned i;
 
@@ -653,6 +653,50 @@ static bool __maybe_unused cache_pdev(struct pci_dev *pdev)
                      PCI_BAR_ROM);
 
     return true;
+}
+
+/*
+ * When Lockdown mode is active, we further restrict IO Ports to being part of
+ * an IO BAR of an assigned device.
+ */
+int check_ioports_vs_pci_bars(
+    struct domain *d, unsigned int port_start, unsigned int port_end)
+{
+    struct pci_dev *pdev;
+    int rc = 0;
+
+    if ( !is_locked_down() )
+        return 0;
+
+    read_lock(&d->pci_lock);
+    list_for_each_entry ( pdev, &d->pdev_list, domain_list )
+    {
+        if ( pdev->info.is_virtfn )
+            continue;
+
+        if ( !cache_pdev(pdev) )
+            continue;
+
+        for ( unsigned i = 0; i < PCI_HEADER_NORMAL_NR_BARS; i++ )
+        {
+            uint32_t size, addr;
+
+            if ( pdev->bar[i].type != PCI_BAR_TYPE_IO )
+                continue;
+
+            addr = (uint32_t)pdev->bar[i].addr;
+            size = (uint32_t)pdev->bar[i].size;
+
+            if ( port_start >= addr && port_end <= (addr + size - 1) )
+                goto out;
+        }
+    }
+
+    rc = -ENOENT;
+
+out:
+    read_unlock(&d->pci_lock);
+    return rc;
 }
 
 /**

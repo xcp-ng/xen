@@ -284,6 +284,9 @@ const char *parse_pci_seg(const char *s, unsigned int *seg_p,
                           unsigned int *bus_p, unsigned int *dev_p,
                           unsigned int *func_p, bool *def_seg);
 
+int check_ioports_vs_pci_bars(
+    struct domain *d, unsigned int port_start, unsigned int port_end);
+
 #define PCI_BAR_VF      (1u << 0)
 #define PCI_BAR_LAST    (1u << 1)
 #define PCI_BAR_ROM     (1u << 2)

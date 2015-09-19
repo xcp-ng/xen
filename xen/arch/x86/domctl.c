@@ -362,7 +362,8 @@ long arch_do_domctl(
 
         iocaps_double_lock(d, true);
 
-        if ( !ioports_access_permitted(currd, fp, fp + np - 1) )
+        if ( !ioports_access_permitted(currd, fp, fp + np - 1) ||
+             check_ioports_vs_pci_bars(d, fp, fp + np - 1) )
             ret = -EPERM;
         else if ( allow )
             ret = ioports_permit_access(d, fp, fp + np - 1);
@@ -832,6 +833,8 @@ long arch_do_domctl(
                 list_add_tail(&g2m_ioport->list, &hvm->g2m_ioport_list);
             }
             write_unlock(&hvm->g2m_ioport_lock);
+            if ( !ret )
+                ret = check_ioports_vs_pci_bars(d, fmp, fmp + np - 1);
             if ( !ret )
                 ret = ioports_permit_access(d, fmp, fmp + np - 1);
             if ( ret && !found && g2m_ioport )
