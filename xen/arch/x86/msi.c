@@ -142,9 +142,7 @@ static bool memory_decoded(const struct pci_dev *dev)
 
 static bool msix_memory_decoded(const struct pci_dev *dev, unsigned int pos)
 {
-    uint16_t control = pci_conf_read16(dev->sbdf, msix_control_reg(pos));
-
-    if ( !(control & PCI_MSIX_FLAGS_ENABLE) )
+    if ( !dev->msix->enabled )
         return false;
 
     return memory_decoded(dev);
@@ -307,6 +305,7 @@ static void msix_set_enable(struct pci_dev *dev, int enable)
         if ( enable )
             control |= PCI_MSIX_FLAGS_ENABLE;
         pci_conf_write16(dev->sbdf, msix_control_reg(pos), control);
+        dev->msix->enabled = !!enable;
     }
 }
 
@@ -323,7 +322,7 @@ static bool msi_set_mask_bit(struct irq_desc *desc, bool host, bool guest)
     struct pci_dev *pdev;
     u16 seg, control;
     u8 bus, slot, func;
-    bool flag = host || guest, maskall;
+    bool flag = host || guest, maskall, was_enabled;
 
     ASSERT(spin_is_locked(&desc->lock));
     BUG_ON(!entry || !entry->dev);
@@ -347,10 +346,12 @@ static bool msi_set_mask_bit(struct irq_desc *desc, bool host, bool guest)
         break;
     case PCI_CAP_ID_MSIX:
         maskall = pdev->msix->host_maskall;
-        control = pci_conf_read16(pdev->sbdf,
-                                  msix_control_reg(entry->msi_attrib.pos));
-        if ( unlikely(!(control & PCI_MSIX_FLAGS_ENABLE)) )
+        was_enabled = pdev->msix->enabled;
+        if ( unlikely(!was_enabled) )
         {
+            control = pci_conf_read16(pdev->sbdf,
+                                      msix_control_reg(entry->msi_attrib.pos));
+            pdev->msix->enabled = true;
             pdev->msix->host_maskall = 1;
             pci_conf_write16(pdev->sbdf,
                              msix_control_reg(entry->msi_attrib.pos),
@@ -362,7 +363,7 @@ static bool msi_set_mask_bit(struct irq_desc *desc, bool host, bool guest)
             writel(flag, entry->mask_base + PCI_MSIX_ENTRY_VECTOR_CTRL_OFFSET);
             readl(entry->mask_base + PCI_MSIX_ENTRY_VECTOR_CTRL_OFFSET);
 
-            if ( likely(control & PCI_MSIX_FLAGS_ENABLE) )
+            if ( likely(was_enabled) )
                 break;
 
             entry->msi_attrib.host_masked = host;
@@ -370,17 +371,24 @@ static bool msi_set_mask_bit(struct irq_desc *desc, bool host, bool guest)
 
             flag = true;
         }
-        else if ( flag && !(control & PCI_MSIX_FLAGS_MASKALL) )
+        else
         {
-            domid_t domid = pdev->domain->domain_id;
+            if ( was_enabled )
+                control = pci_conf_read16(pdev->sbdf,
+                                          msix_control_reg(entry->msi_attrib.pos));
 
-            maskall = true;
-            if ( pdev->msix->warned != domid )
+            if ( flag && !(control & PCI_MSIX_FLAGS_MASKALL) )
             {
-                pdev->msix->warned = domid;
-                printk(XENLOG_G_WARNING
-                       "cannot mask IRQ %d: masking MSI-X on Dom%d's %pp\n",
-                       desc->irq, domid, &pdev->sbdf);
+                domid_t domid = pdev->domain->domain_id;
+
+                maskall = true;
+                if ( pdev->msix->warned != domid )
+                {
+                    pdev->msix->warned = domid;
+                    printk(XENLOG_G_WARNING
+                           "cannot mask IRQ %d: masking MSI-X on Dom%d's %pp\n",
+                           desc->irq, domid, &pdev->sbdf);
+                }
             }
         }
         pdev->msix->host_maskall = maskall;
@@ -521,9 +529,12 @@ int setup_msi_irq(struct irq_desc *desc, struct msi_desc *msidesc)
     {
         control = pci_conf_read16(pdev->sbdf, cpos);
         if ( !(control & PCI_MSIX_FLAGS_ENABLE) )
+        {
             pci_conf_write16(pdev->sbdf, cpos,
                              control | (PCI_MSIX_FLAGS_ENABLE |
                                         PCI_MSIX_FLAGS_MASKALL));
+            pdev->msix->enabled = true;
+        }
     }
 
     rc = __setup_msi_irq(desc, msidesc,
@@ -531,7 +542,10 @@ int setup_msi_irq(struct irq_desc *desc, struct msi_desc *msidesc)
                                                    : &pci_msi_nonmaskable);
 
     if ( !(control & PCI_MSIX_FLAGS_ENABLE) )
+    {
         pci_conf_write16(pdev->sbdf, cpos, control);
+        pdev->msix->enabled = false;
+    }
 
     return rc;
 }
@@ -796,12 +810,14 @@ static int msix_capability_init(struct pci_dev *dev,
      * fully set up.
      */
     msix->host_maskall = 1;
+    msix->enabled = true;
     pci_conf_write16(dev->sbdf, msix_control_reg(pos),
                      control | (PCI_MSIX_FLAGS_ENABLE |
                                 PCI_MSIX_FLAGS_MASKALL));
 
     if ( unlikely(!memory_decoded(dev)) )
     {
+        msix->enabled = false;
         pci_conf_write16(dev->sbdf, msix_control_reg(pos),
                          control & ~PCI_MSIX_FLAGS_ENABLE);
         return -ENXIO;
@@ -812,6 +828,7 @@ static int msix_capability_init(struct pci_dev *dev,
         entry = alloc_msi_entry(1);
         if ( !entry )
         {
+            msix->enabled = false;
             pci_conf_write16(dev->sbdf, msix_control_reg(pos),
                              control & ~PCI_MSIX_FLAGS_ENABLE);
             return -ENOMEM;
@@ -852,6 +869,7 @@ static int msix_capability_init(struct pci_dev *dev,
         {
             if ( !msi || !msi->table_base )
             {
+                msix->enabled = false;
                 pci_conf_write16(dev->sbdf, msix_control_reg(pos),
                                  control & ~PCI_MSIX_FLAGS_ENABLE);
                 xfree(entry);
@@ -905,6 +923,7 @@ static int msix_capability_init(struct pci_dev *dev,
                 msix->table.first = 0;
                 msix->pba.first = 0;
 
+                msix->enabled = false;
                 control &= ~PCI_MSIX_FLAGS_ENABLE;
             }
 
@@ -977,6 +996,7 @@ static int msix_capability_init(struct pci_dev *dev,
          * brain model where Dom0 actually enables MSI (and disables INTx).
          */
         pci_intx(dev, false);
+        msix->enabled = true;
         control |= PCI_MSIX_FLAGS_ENABLE;
         control &= ~PCI_MSIX_FLAGS_MASKALL;
         maskall = 0;
@@ -1118,6 +1138,7 @@ static void __pci_disable_msix(struct msi_desc *entry)
     if ( unlikely(!(control & PCI_MSIX_FLAGS_ENABLE)) )
     {
         dev->msix->host_maskall = 1;
+        dev->msix->enabled = 1;
         pci_conf_write16(dev->sbdf, msix_control_reg(pos),
                          control | (PCI_MSIX_FLAGS_ENABLE |
                                     PCI_MSIX_FLAGS_MASKALL));
@@ -1248,6 +1269,9 @@ int pci_reset_msix_state(struct pci_dev *pdev)
 
     pdev->msix->host_maskall = false;
     pdev->msix->guest_maskall = false;
+    pdev->msix->enabled =
+        !!(pci_conf_read16(pdev->sbdf, msix_control_reg(pos)) &
+               PCI_MSIX_FLAGS_ENABLE);
 
     return 0;
 }
@@ -1278,6 +1302,7 @@ int pci_msi_conf_write_intercept(struct pci_dev *pdev, unsigned int reg,
             pdev->msix->guest_maskall = !!(*data & PCI_MSIX_FLAGS_MASKALL);
             if ( pdev->msix->host_maskall )
                 *data |= PCI_MSIX_FLAGS_MASKALL;
+            pdev->msix->enabled = !!(*data & PCI_MSIX_FLAGS_ENABLE);
 
             return 1;
         }
@@ -1356,8 +1381,11 @@ int pci_restore_msi_state(struct pci_dev *pdev)
                     &pdev->sbdf, i);
             spin_unlock_irqrestore(&desc->lock, flags);
             if ( type == PCI_CAP_ID_MSIX )
+            {
                 pci_conf_write16(pdev->sbdf, msix_control_reg(pos),
                                  control & ~PCI_MSIX_FLAGS_ENABLE);
+                pdev->msix->enabled = false;
+            }
             return -EINVAL;
         }
 
@@ -1374,11 +1402,13 @@ int pci_restore_msi_state(struct pci_dev *pdev)
             pci_conf_write16(pdev->sbdf, msix_control_reg(pos),
                              control | (PCI_MSIX_FLAGS_ENABLE |
                                         PCI_MSIX_FLAGS_MASKALL));
+            pdev->msix->enabled = true;
             if ( unlikely(!memory_decoded(pdev)) )
             {
                 spin_unlock_irqrestore(&desc->lock, flags);
                 pci_conf_write16(pdev->sbdf, msix_control_reg(pos),
                                  control & ~PCI_MSIX_FLAGS_ENABLE);
+                pdev->msix->enabled = false;
                 return -ENXIO;
             }
         }
@@ -1419,8 +1449,11 @@ int pci_restore_msi_state(struct pci_dev *pdev)
     }
 
     if ( type == PCI_CAP_ID_MSIX )
+    {
         pci_conf_write16(pdev->sbdf, msix_control_reg(pos),
                          control | PCI_MSIX_FLAGS_ENABLE);
+        pdev->msix->enabled = true;
+    }
 
     return 0;
 }
