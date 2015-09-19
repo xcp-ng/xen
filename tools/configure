@@ -8919,6 +8919,32 @@ fi
 
 
 
+ac_fn_c_check_header_mongrel "$LINENO" "json/json.h" "ac_cv_header_json_json_h" "$ac_includes_default"
+if test "x$ac_cv_header_json_json_h" = xyes; then :
+
+
+$as_echo "#define INCLUDE_JSON_H <json/json.h>" >>confdefs.h
+
+
+else
+
+    ac_fn_c_check_header_mongrel "$LINENO" "json-c/json.h" "ac_cv_header_json_c_json_h" "$ac_includes_default"
+if test "x$ac_cv_header_json_c_json_h" = xyes; then :
+
+
+$as_echo "#define INCLUDE_JSON_H <json-c/json.h>" >>confdefs.h
+
+
+else
+  as_fn_error $? "Could not find libjson" "$LINENO" 5
+fi
+
+
+
+fi
+
+
+
 # FDT is needed only on ARM
 case "$host_cpu" in
 arm*|aarch64)
