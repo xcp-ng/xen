@@ -54,7 +54,7 @@ struct vcpu
 };
 
 extern const struct vcpu *current;
-extern const struct pci_dev test_pdev;
+extern struct pci_dev test_pdev;
 
 typedef bool spinlock_t;
 #define spin_lock_init(l) (*(l) = false)
