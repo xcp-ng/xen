@@ -297,6 +297,7 @@ long do_domctl(XEN_GUEST_HANDLE_PARAM(xen_domctl_t) u_domctl)
     bool_t copyback = 0;
     struct xen_domctl curop, *op = &curop;
     struct domain *d;
+    bool use_lock;
 
     if ( copy_from_guest(op, u_domctl, 1) )
         return -EFAULT;
@@ -337,7 +338,8 @@ long do_domctl(XEN_GUEST_HANDLE_PARAM(xen_domctl_t) u_domctl)
     if ( ret )
         goto domctl_out_unlock_domonly;
 
-    if ( !domctl_lock_acquire() )
+    use_lock = arch_use_domctl_lock(op);
+    if ( use_lock && !domctl_lock_acquire() )
     {
         if ( d && d != dom_io )
             rcu_unlock_domain(d);
@@ -873,7 +875,8 @@ long do_domctl(XEN_GUEST_HANDLE_PARAM(xen_domctl_t) u_domctl)
         break;
     }
 
-    domctl_lock_release();
+    if ( use_lock )
+        domctl_lock_release();
 
  domctl_out_unlock_domonly:
     if ( d && d != dom_io )
