@@ -244,6 +244,7 @@ ifeq ($(CONFIG_DEBUG_INFO),y)
 	$(if $(filter --strip-debug,$(EFI_LDFLAGS)),:$(space))$(OBJCOPY) -O elf64-x86-64 $@.tmp $@.elf
 	$(if $(filter --strip-debug,$(EFI_LDFLAGS)),:$(space))$(STRIP) $@.tmp
 endif
+	$(PYTHON) $(srctree)/tools/fix_pe_characteristics $@.tmp
 	rm -f $(dot-target).[0-9]* $(@D)/..$(@F).[0-9]*
 	mv -f $@.tmp $@
 ifeq ($(CONFIG_XEN_IBT),y)
