@@ -860,6 +860,11 @@ long do_domctl(XEN_GUEST_HANDLE_PARAM(xen_domctl_t) u_domctl)
                 __HYPERVISOR_domctl, "h", u_domctl);
         break;
 
+    case XEN_DOMCTL_get_runstate_info:
+        domain_runstate_get(d, &op->u.domain_runstate);
+        copyback = 1;
+        break;
+
     default:
         ret = arch_do_domctl(op, d, u_domctl);
         break;
