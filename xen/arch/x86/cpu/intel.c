@@ -11,6 +11,7 @@
 #include <asm/i387.h>
 #include <mach_apic.h>
 #include <asm/hvm/support.h>
+#include <acpi/cpufreq/cpufreq.h>
 
 #include "cpu.h"
 
@@ -414,6 +415,11 @@ static void init_intel(struct cpuinfo_x86 *c)
 	     ( c->cpuid_level >= 0x00000006 ) &&
 	     ( cpuid_eax(0x00000006) & (1u<<2) ) )
 		__set_bit(X86_FEATURE_ARAT, c->x86_capability);
+
+	/* Default to performance cpufreq governor */
+	if (!cpufreq_opt_governor)
+		cpufreq_opt_governor = &cpufreq_gov_performance;
+
 }
 
 const struct cpu_dev intel_cpu_dev = {
