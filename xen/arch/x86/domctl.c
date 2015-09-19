@@ -151,6 +151,105 @@ void arch_get_domain_info(const struct domain *d,
     info->gpaddr_bits = hap_paddr_bits;
 }
 
+static int pci_access(struct domain *d,
+                      uint16_t seg, uint8_t bus, uint8_t dev, uint8_t func,
+                      uint8_t size, uint8_t dir, uint32_t pos, uint64_t *data)
+{
+    struct pci_dev *pdev;
+    int rc = 0;
+    pci_sbdf_t sbdf;
+
+    if ( is_hardware_domain(d) || is_control_domain(d) )
+        return -EACCES;
+
+    if ( size != 1 && size != 2 && size != 4 && size != 8 )
+        return -EFAULT;
+
+    if ( dir == 0 || dir & ~3 )
+        return -EINVAL;
+
+    sbdf = PCI_SBDF(seg, bus, dev, func);
+    pcidevs_lock();
+    pdev = pci_get_pdev(NULL, sbdf);
+
+    if ( !pdev )
+    {
+        rc = -ENXIO;
+        goto out;
+    }
+
+    if ( pdev->domain != d )
+    {
+        rc = -EACCES;
+        goto out;
+    }
+
+    if ( dir & XEN_DOMCTL_pci_write )
+    {
+        if ( !pdev_has_write_access(pdev, pos, size) )
+        {
+            rc = -EACCES;
+        }
+        else if ( size <= 4 )
+        {
+            rc = pci_conf_write_intercept(seg, sbdf.bdf, pos, size,
+                                          (uint32_t *)data);
+            if ( rc >= 0)
+            {
+                rc = 0;
+                switch (size)
+                {
+                case 1:
+                    pci_conf_write8(sbdf, pos, (uint8_t) *data);
+                    break;
+                case 2:
+                    pci_conf_write16(sbdf, pos, (uint16_t) *data);
+                    break;
+                case 4:
+                    pci_conf_write32(sbdf, pos, (uint32_t) *data);
+                    break;
+                }
+            }
+        }
+        else
+        {
+            if ( (rc = pci_conf_write_intercept(seg, sbdf.bdf, pos, 4,
+                                                (uint32_t *)data)) >= 0 &&
+                 (rc = pci_conf_write_intercept(seg, sbdf.bdf, pos + 4, 4,
+                                                ((uint32_t *)data) + 1)) >= 0 )
+            {
+                rc = 0;
+                pci_conf_write32(sbdf, pos, (uint32_t) *data);
+                pci_conf_write32(sbdf, pos + 4, (uint32_t) (*data >> 32) );
+            }
+        }
+    }
+
+    if ( dir & XEN_DOMCTL_pci_read )
+    {
+        switch (size)
+        {
+        case 1:
+            *data = (uint64_t) pci_conf_read8(sbdf,  pos);
+            break;
+        case 2:
+            *data = (uint64_t) pci_conf_read16(sbdf, pos);
+            break;
+        case 4:
+            *data = (uint64_t) pci_conf_read32(sbdf, pos);
+            break;
+        case 8:
+            *data = (uint64_t) pci_conf_read32(sbdf, pos);
+            *data |= ((uint64_t) pci_conf_read32(sbdf, pos + 4)) << 32;
+            break;
+        }
+    }
+
+out:
+    pcidevs_unlock();
+    return rc;
+}
+
 static int do_vmtrace_op(struct domain *d, struct xen_domctl_vmtrace_op *op,
                          XEN_GUEST_HANDLE_PARAM(xen_domctl_t) u_domctl)
 {
@@ -226,6 +325,26 @@ long arch_do_domctl(
         ret = -EOPNOTSUPP;
 #endif
         break;
+
+    case XEN_DOMCTL_pci_access:
+    {
+        struct xen_domctl_pci_access *data =
+            &domctl->u.pci_access;
+
+        ret = -EINVAL;
+
+        if ( data->pad0 || data->pad1 )
+            break;
+
+        ret = pci_access(d, data->seg, data->bus,
+                         data->dev, data->func, data->size, data->direction,
+                         data->pos, &data->data);
+
+        if ( !ret && data->direction & XEN_DOMCTL_pci_read)
+            copyback = true;
+
+        break;
+    }
 
     case XEN_DOMCTL_ioport_permission:
     {

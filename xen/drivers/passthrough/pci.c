@@ -28,6 +28,7 @@
 #include <xen/event.h>
 #include <xen/guest_access.h>
 #include <xen/paging.h>
+#include <xen/rangeset.h>
 #include <xen/radix-tree.h>
 #include <xen/softirq.h>
 #include <xen/tasklet.h>
@@ -51,6 +52,8 @@ struct pci_seg {
 };
 
 static DEFINE_RSPINLOCK(_pcidevs_lock);
+
+static int pdev_config_writable_init(struct pci_dev *pdev);
 
 /* Do not use, as it has no speculation barrier, use pcidevs_lock() instead. */
 void pcidevs_lock_unsafe(void)
@@ -336,6 +339,8 @@ static struct pci_dev *alloc_pdev(struct pci_seg *pseg, u8 bus, u8 devfn)
     arch_pci_init_pdev(pdev);
 
     rc = pdev_msi_init(pdev);
+    if ( !rc )
+        rc = pdev_config_writable_init(pdev);
     if ( rc )
     {
         xfree(pdev);
@@ -456,6 +461,8 @@ static void free_pdev(struct pci_seg *pseg, struct pci_dev *pdev)
 
     if ( pdev->info.is_virtfn )
         list_del(&pdev->vf_list);
+
+    rangeset_destroy(pdev->config_writable);
 
     xfree(pdev);
 }
@@ -1892,6 +1899,178 @@ int pci_iterate_devices(int (*handler)(struct pci_dev *pdev, void *arg),
     };
 
     return pci_segments_iterate(iterate_all, &iter) ?: iter.rc;
+}
+
+struct pci_dev_config {
+    uint16_t start:12;
+    uint16_t version:4;
+    uint16_t id;
+};
+
+static int add_write_accessible(struct rangeset *config_writable,
+                                uint16_t start, uint16_t len)
+{
+    /* some sanity check */
+    if ( start >= 4096 || start + len > 4096 )
+        return 0;
+
+    return rangeset_add_range(config_writable, start, start + len - 1);
+}
+
+static int add_accesses(struct pci_dev *pdev,
+                        struct pci_dev_config *configs, uint16_t num_configs)
+{
+    int rc;
+    struct rangeset *config_writable = rangeset_new(NULL, "config writable", 0);
+
+    if ( !config_writable )
+        return -ENOMEM;
+
+#define add_write_accessible(start, len) do { \
+        rc = add_write_accessible(config_writable, start, len); \
+        if ( rc < 0 ) goto fail; \
+    } while(0)
+
+    /* Base ones (offsets 0-0x40) */
+    add_write_accessible(PCI_COMMAND, 2);
+    add_write_accessible(PCI_STATUS, 2);
+
+    /* Scan various configurations */
+    for ( unsigned int i = 0; i < num_configs; ++i )
+    {
+        const struct pci_dev_config *const config = &configs[i];
+
+        if ( config->start < 0x100 && config->id == PCI_CAP_ID_MSIX )
+            add_write_accessible(config->start + PCI_MSIX_FLAGS, 2);
+        if ( config->start < 0x100 && config->id == PCI_CAP_ID_PM )
+            add_write_accessible(config->start + PCI_PM_CTRL, 2);
+        if ( config->start < 0x100 && config->id == PCI_CAP_ID_MSI )
+            add_write_accessible(config->start + PCI_MSI_FLAGS, 2);
+    }
+
+    /* Link to the device */
+    pdev->config_writable = config_writable;
+    return 0;
+
+ fail:
+    rangeset_destroy(config_writable);
+    return rc;
+}
+
+static int pdev_config_writable_init(struct pci_dev *pdev)
+{
+    /*
+     * Capabilities starts at a multiple of 4 bytes, use a bitmap to mark
+     * already encountered starts.
+     * We need to do this to avoid circular scanning, the order of the
+     * capability offsets is not always increasing.
+     */
+    enum { NUM_CAP_STARTS = 4096 / 4 };
+    struct pci_dev_config *configs = NULL;
+    uint16_t num_configs;
+    DECLARE_BITMAP(cap_starts, NUM_CAP_STARTS);
+    uint16_t status;
+    uint32_t header;
+    int rc;
+
+    bitmap_zero(cap_starts, NUM_CAP_STARTS);
+
+    /* Scan all capabilities */
+    status = pci_conf_read16(pdev->sbdf, PCI_STATUS);
+    if ( (status & PCI_STATUS_CAP_LIST) != 0 )
+    {
+        for ( uint8_t pos = PCI_CAPABILITY_LIST; ; pos += PCI_CAP_LIST_NEXT )
+        {
+            uint8_t id;
+
+            pos = pci_conf_read8(pdev->sbdf, pos);
+            if ( pos < 0x40 )
+                break;
+
+            pos &= ~3;
+            /* avoids recursion */
+            if ( test_bit(pos / 4, cap_starts) )
+                break;
+            set_bit(pos / 4, cap_starts);
+
+            id = pci_conf_read8(pdev->sbdf, pos + PCI_CAP_LIST_ID);
+
+            if ( id == 0xff )
+                break;
+        }
+    }
+
+    /* Scan all extended capabilities */
+    header = pci_conf_read32(pdev->sbdf, 0x100);
+
+    /*
+     * If we have no capabilities, this is indicated by cap ID,
+     * cap version and next pointer all being 0.
+     */
+    if ( header != 0 && header != -1 )
+    {
+        unsigned int pos = 0x100;
+
+        for ( ; ; )
+        {
+            /* avoids recursion */
+            if ( test_bit(pos / 4, cap_starts) )
+                break;
+            set_bit(pos / 4, cap_starts);
+
+            pos = PCI_EXT_CAP_NEXT(header);
+            if ( pos < 0x100 )
+                break;
+            header = pci_conf_read32(pdev->sbdf, pos);
+        }
+    }
+
+    num_configs = bitmap_weight(cap_starts, NUM_CAP_STARTS);
+    configs = xzalloc_array(struct pci_dev_config, num_configs);
+    if ( !configs )
+        return -ENOMEM;
+
+    for ( unsigned int start = find_first_bit(cap_starts, NUM_CAP_STARTS),
+          i = 0;
+          start < NUM_CAP_STARTS;
+          start = find_next_bit(cap_starts, NUM_CAP_STARTS, start + 1) )
+    {
+        const unsigned int pos = start * 4;
+        struct pci_dev_config *const config = &configs[i++];
+
+        config->start = pos;
+        if ( pos < 0x100 )
+        {
+            uint8_t id = pci_conf_read8(pdev->sbdf, pos + PCI_CAP_LIST_ID);
+
+            config->version = 0;
+            config->id = id;
+        }
+        else
+        {
+            uint32_t header = pci_conf_read32(pdev->sbdf, pos);
+
+            config->version = PCI_EXT_CAP_VER(header);
+            config->id = PCI_EXT_CAP_ID(header);
+        }
+    }
+
+    rc = add_accesses(pdev, configs, num_configs);
+    xfree(configs);
+
+    return min(rc, 0);
+}
+
+bool pdev_has_write_access(const struct pci_dev *pdev,
+                           uint32_t pos, uint8_t size)
+{
+    ASSERT(pdev->config_writable);
+
+    if ( pos >= 4096 )
+        return false;
+
+    /* Search entry in writable table */
+    return rangeset_contains_range(pdev->config_writable, pos, pos + size - 1);
 }
 
 /*
