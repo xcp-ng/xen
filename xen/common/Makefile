@@ -32,6 +32,7 @@ obj-y += page_alloc.o
 obj-$(CONFIG_HAS_PDX) += pdx.o
 obj-$(CONFIG_PERF_COUNTERS) += perfc.o
 obj-y += preempt.o
+obj-y += pv_iommu.o
 obj-y += random.o
 obj-y += rangeset.o
 obj-y += radix-tree.o
