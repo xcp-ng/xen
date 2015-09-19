@@ -242,8 +242,12 @@ struct page_info
 #define PGC_state_free    PG_mask(3, 9)
 #define page_state_is(pg, st) (((pg)->count_info&PGC_state) == PGC_state_##st)
 
+/* Page has foreign mappings? */
+#define _PGC_foreign_map  PG_shift(10)
+#define PGC_foreign_map   PG_mask(1, 10)
+
  /* Count of references to this frame. */
-#define PGC_count_width   PG_shift(9)
+#define PGC_count_width   PG_shift(10)
 #define PGC_count_mask    ((1UL<<PGC_count_width)-1)
 
 struct spage_info
