@@ -17,6 +17,7 @@ from __future__ import print_function
 import os, sys, string, struct, tempfile, re, traceback, stat, errno
 import copy
 import ctypes, ctypes.util
+import grp
 import logging
 import platform
 import resource
@@ -99,6 +100,7 @@ def depriv(output_directory, output, device, uid, path_kernel, path_ramdisk):
     # Create a temporary directory for the chroot
     chroot = tempfile.mkdtemp(prefix=str(uid)+'-', dir=output_directory) + '/'
     device_path = '/device'
+    disk_gid = grp.getgrnam("disk").gr_gid
 
     pid = os.fork()
     if pid:
@@ -151,10 +153,13 @@ def depriv(output_directory, output, device, uid, path_kernel, path_ramdisk):
         raise RuntimeError("remount_tmpfs rc=%d dst=\"%s\"" % (rc, chroot))
 
     # Drop superpowers!
+    #
+    # NOTE: XenServer specifically wants to keep "disk" as an additional
+    #       group so pygrub keeps access to the disks passed by XAPI
     os.chroot(chroot)
     os.chdir('/')
     os.setgid(uid)
-    os.setgroups([uid])
+    os.setgroups([disk_gid])
     os.setuid(uid)
 
     return device_path
