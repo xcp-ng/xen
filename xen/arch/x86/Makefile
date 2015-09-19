@@ -93,7 +93,7 @@ endif
 
 $(TARGET): $(TARGET)-syms $(efi-y) boot/mkelf32
 	./boot/mkelf32 $(notes_phdrs) $(TARGET)-syms $(TARGET) 0x100000 \
-	`$(NM) -nr $(TARGET)-syms | head -n 1 | sed -e 's/^\([^ ]*\).*/0x\1/'`
+	`$(NM) $(TARGET)-syms | grep " _end$$" | sed -e 's/^\([^ ]*\).*/0x\1/'`
 
 .PHONY: tests
 tests:
