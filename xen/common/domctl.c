@@ -1145,6 +1145,32 @@ long do_domctl(XEN_GUEST_HANDLE_PARAM(xen_domctl_t) u_domctl)
         copyback = 1;
         break;
 
+    case XEN_DOMCTL_setcorespersocket:
+    {
+        unsigned int cps = op->u.corespersocket.cores_per_socket;
+
+        /* Toolstack is permitted to set this value exactly once. */
+        if ( d->cores_per_socket != 0 )
+            ret = -EEXIST;
+
+        /* Only meaningful for HVM domains. */
+        else if ( !is_hvm_domain(d) )
+            ret = -EOPNOTSUPP;
+
+        /* Cores per socket is strictly within the bounds of max_vcpus. */
+        else if ( cps < 1 || cps > d->max_vcpus )
+            ret = -EINVAL;
+
+        /* Cores per socket must exactly divide max_vcpus. */
+        else if ( d->max_vcpus % cps != 0 )
+            ret = -EDOM;
+
+        else
+            d->cores_per_socket = cps;
+
+        break;
+    }
+
     default:
         ret = arch_do_domctl(op, d, u_domctl);
         break;
