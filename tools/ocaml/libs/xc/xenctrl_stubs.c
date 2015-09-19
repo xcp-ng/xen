@@ -103,8 +103,7 @@ static int domain_create_flag_table[] = {
 };
 
 CAMLprim value stub_xc_domain_create(value xch, value ssidref,
-                                     value flags, value handle,
-                                     value domconfig)
+                                     value flags, value handle)
 {
 	CAMLparam4(xch, ssidref, flags, handle);
 
@@ -115,7 +114,6 @@ CAMLprim value stub_xc_domain_create(value xch, value ssidref,
 	uint32_t c_ssidref = Int32_val(ssidref);
 	unsigned int c_flags = 0;
 	value l;
-	xc_domain_configuration_t config = {};
 
         if (Wosize_val(handle) != 16)
 		caml_invalid_argument("Handle not a 16-integer array");
@@ -129,28 +127,8 @@ CAMLprim value stub_xc_domain_create(value xch, value ssidref,
 		c_flags |= domain_create_flag_table[v];
 	}
 
-	switch(Tag_val(domconfig)) {
-	case 0: /* ARM - nothing to do */
-		caml_failwith("Unhandled: ARM");
-		break;
-
-	case 1: /* X86 - emulation flags in the block */
-#if defined(__i386__) || defined(__x86_64__)
-		for (l = Field(Field(domconfig, 0), 0);
-		     l != Val_none;
-		     l = Field(l, 1))
-			config.emulation_flags |= 1u << Int_val(Field(l, 0));
-#else
-		caml_failwith("Unhandled: x86");
-#endif
-		break;
-
-	default:
-		caml_failwith("Unhandled domconfig type");
-	}
-
 	caml_enter_blocking_section();
-	result = xc_domain_create(_H(xch), c_ssidref, h, c_flags, &domid, &config);
+	result = xc_domain_create(_H(xch), c_ssidref, h, c_flags, &domid, NULL);
 	caml_leave_blocking_section();
 
 	if (result < 0)

@@ -111,7 +111,7 @@ val get_handle: unit -> handle option
  * would invalidate the handle that with_intf passes to its argument. *)
 val close_handle: unit -> unit
 
-val domain_create : handle -> int32 -> domain_create_flag list -> string -> arch_domainconfig -> domid
+val domain_create : handle -> int32 -> domain_create_flag list -> string -> domid
 val domain_sethandle : handle -> domid -> string -> unit
 external domain_max_vcpus : handle -> domid -> int -> unit
   = "stub_xc_domain_max_vcpus"
