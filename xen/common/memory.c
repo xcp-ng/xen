@@ -1761,6 +1761,9 @@ long do_memory_op(unsigned long cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
         break;
 
     case XENMEM_claim_pages:
+    {
+        nodeid_t node = NUMA_NO_NODE;
+
         if ( unlikely(start_extent) )
             return -EINVAL;
 
@@ -1773,8 +1776,17 @@ long do_memory_op(unsigned long cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
         if ( reservation.extent_order != 0 )
             return -EINVAL;
 
-        if ( reservation.mem_flags != 0 )
+        if ( reservation.mem_flags &
+             ~(XENMEMF_node(0xFE) | XENMEMF_exact_node_request) )
             return -EINVAL;
+
+        if ( reservation.mem_flags & XENMEMF_exact_node_request )
+        {
+            /* domain_set_outstanding_pages() checks the validity of the node */
+            node = XENMEMF_get_node(reservation.mem_flags);
+            if ( node == NUMA_NO_NODE )
+                return -EINVAL;
+        }
 
         d = rcu_lock_domain_by_id(reservation.domid);
         if ( d == NULL )
@@ -1786,12 +1798,13 @@ long do_memory_op(unsigned long cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
             rc = -EINVAL;
 
         if ( !rc )
-            rc = domain_set_outstanding_pages(d, NUMA_NO_NODE,
+            rc = domain_set_outstanding_pages(d, node,
                                               reservation.nr_extents);
 
         rcu_unlock_domain(d);
 
         break;
+    }
 
     case XENMEM_get_vnumainfo:
     {
