@@ -82,7 +82,7 @@
  *  ignore: The NMI error is cleared and ignored.
  */
 static char __read_mostly opt_nmi[10] = "fatal";
-string_param("nmi", opt_nmi);
+string_secure_param("nmi", opt_nmi);
 
 DEFINE_PER_CPU(uint64_t, efer);
 static DEFINE_PER_CPU(unsigned long, last_extable_addr);

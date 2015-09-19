@@ -189,7 +189,7 @@ static int __init cf_check parse_crashkernel(const char *str)
 
     return rc;
 }
-custom_param("crashkernel", parse_crashkernel);
+custom_secure_param("crashkernel", parse_crashkernel);
 
 /* Parse command lines in the format:
  *

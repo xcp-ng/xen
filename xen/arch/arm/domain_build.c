@@ -40,7 +40,7 @@
 #include <xen/serial.h>
 
 static unsigned int __initdata opt_dom0_max_vcpus;
-integer_param("dom0_max_vcpus", opt_dom0_max_vcpus);
+integer_secure_param("dom0_max_vcpus", opt_dom0_max_vcpus);
 
 /*
  * If true, the extended regions support is enabled for dom0 and
@@ -60,7 +60,7 @@ static int __init parse_dom0_mem(const char *s)
 
     return *s ? -EINVAL : 0;
 }
-custom_param("dom0_mem", parse_dom0_mem);
+custom_secure_param("dom0_mem", parse_dom0_mem);
 
 int __init parse_arch_dom0_param(const char *s, const char *e)
 {

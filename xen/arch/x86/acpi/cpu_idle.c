@@ -140,7 +140,7 @@ static int __init cf_check parse_cstate(const char *s)
         max_csubstate = simple_strtoul(s + 1, NULL, 0);
     return 0;
 }
-custom_param("max_cstate", parse_cstate);
+custom_secure_param("max_cstate", parse_cstate);
 
 static bool __read_mostly local_apic_timer_c2_ok;
 boolean_param("lapic_timer_c2_ok", local_apic_timer_c2_ok);

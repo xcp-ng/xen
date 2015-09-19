@@ -41,8 +41,8 @@ DEFINE_PERCPU_RWLOCK_GLOBAL(p2m_percpu_rwlock);
 /* Turn on/off host superpage page table support for hap, default on. */
 bool __initdata opt_hap_1gb = true;
 bool __initdata opt_hap_2mb = true;
-boolean_param("hap_1gb", opt_hap_1gb);
-boolean_param("hap_2mb", opt_hap_2mb);
+boolean_secure_param("hap_1gb", opt_hap_1gb);
+boolean_secure_param("hap_2mb", opt_hap_2mb);
 
 int p2m_init_logdirty(struct p2m_domain *p2m)
 {

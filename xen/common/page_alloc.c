@@ -235,7 +235,7 @@ static int __init cf_check parse_bootscrub_param(const char *s)
 
     return 0;
 }
-custom_param("bootscrub", parse_bootscrub_param);
+custom_secure_param("bootscrub", parse_bootscrub_param);
 
 /*
  * bootscrub_chunk -> Amount of bytes to scrub lockstep on non-SMT CPUs

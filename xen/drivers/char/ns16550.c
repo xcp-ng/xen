@@ -20,6 +20,7 @@
 #include <xen/console.h>
 #include <xen/init.h>
 #include <xen/irq.h>
+#include <xen/lockdown.h>
 #include <xen/param.h>
 #include <xen/sched.h>
 #include <xen/sections.h>
@@ -1390,8 +1391,8 @@ static void enable_exar_enhanced_bits(const struct ns16550 *uart)
  */
 static char __initdata opt_com1[128] = "";
 static char __initdata opt_com2[128] = "";
-string_param("com1", opt_com1);
-string_param("com2", opt_com2);
+string_secure_param("com1", opt_com1);
+string_secure_param("com2", opt_com2);
 
 enum serial_param_type {
     baud_rate,
@@ -1477,7 +1478,7 @@ static enum __init serial_param_type get_token(char *token, char **value)
     } while ( 0 )
 
 
-static bool __init parse_positional(struct ns16550 *uart, char **str)
+static bool __init parse_positional(struct ns16550 *uart, char **str, int index)
 {
     int baud;
     const char *conf;
@@ -1546,7 +1547,17 @@ static bool __init parse_positional(struct ns16550 *uart, char **str)
         else
 #endif
         {
-            uart->io_base = simple_strtoull(conf, &conf, 0);
+            const char *s = conf;
+            unsigned long val = simple_strtoull(s, &conf, 0);
+
+            if ( is_locked_down()
+#ifdef CONFIG_X86
+                 && val != 0x3f8 && val != 0x2f8
+#endif
+               )
+                lockdown_ignore(index == 0 ? "com1" : "com2", s, conf);
+            else
+                uart->io_base = val;
         }
     }
 
@@ -1586,7 +1597,7 @@ static bool __init parse_positional(struct ns16550 *uart, char **str)
     return true;
 }
 
-static bool __init parse_namevalue_pairs(char *str, struct ns16550 *uart)
+static bool __init parse_namevalue_pairs(char *str, struct ns16550 *uart, int index)
 {
     char *token, *start = str;
     char *param_value = NULL;
@@ -1611,14 +1622,32 @@ static bool __init parse_namevalue_pairs(char *str, struct ns16550 *uart)
             break;
 
         case io_base:
-            if ( dev_set )
             {
-                printk(XENLOG_WARNING
-                       "Can't use io_base with dev=pci or dev=amt options\n");
+                unsigned long val;
+
+                if ( dev_set )
+                {
+                    printk(XENLOG_WARNING
+                           "Can't use io_base with dev=pci or dev=amt options\n");
+                    break;
+                }
+
+                val = simple_strtoull(param_value, NULL, 0);
+
+                if ( is_locked_down()
+#ifdef CONFIG_X86
+                     && val != 0x3f8 && val != 0x2f8
+#endif
+                   )
+                {
+                    lockdown_ignore_namevalue((index == 0) ? "com1" : "com2",
+                                              token, param_value);
+                    break;
+                }
+
+                uart->io_base = val;
                 break;
             }
-            uart->io_base = simple_strtoull(param_value, NULL, 0);
-            break;
 
         case irq:
             uart->irq = simple_strtoul(param_value, NULL, 0);
@@ -1682,7 +1711,7 @@ static bool __init parse_namevalue_pairs(char *str, struct ns16550 *uart)
 }
 
 static void __init ns16550_parse_port_config(
-    struct ns16550 *uart, const char *conf)
+    struct ns16550 *uart, const char *conf, int index)
 {
     char com_console_options[128];
     char *str;
@@ -1700,10 +1729,10 @@ static void __init ns16550_parse_port_config(
     str = com_console_options;
 
     /* parse positional parameters and get pointer for name-value pairs */
-    if ( !parse_positional(uart, &str) )
+    if ( !parse_positional(uart, &str, index) )
         return;
 
-    if ( !parse_namevalue_pairs(str, uart) )
+    if ( !parse_namevalue_pairs(str, uart, index) )
         return;
 
  config_parsed:
@@ -1749,7 +1778,7 @@ void __init ns16550_init(int index, struct ns16550_defaults *defaults)
     uart->reg_width = 1;
     uart->reg_shift = 0;
 
-    ns16550_parse_port_config(uart, (index == 0) ? opt_com1 : opt_com2);
+    ns16550_parse_port_config(uart, (index == 0) ? opt_com1 : opt_com2, index);
 }
 
 #endif /* CONFIG_X86 */
