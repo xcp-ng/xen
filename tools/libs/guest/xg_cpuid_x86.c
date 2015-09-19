@@ -85,8 +85,8 @@ int xc_get_cpu_levelling_caps(xc_interface *xch, uint32_t *caps)
     return ret;
 }
 
-int xc_get_cpu_featureset(xc_interface *xch, uint32_t index,
-                          uint32_t *nr_features, uint32_t *featureset)
+static int xc_get_cpu_featureset_(xc_interface *xch, uint32_t index,
+                                  uint32_t *nr_features, uint32_t *featureset)
 {
     DECLARE_SYSCTL;
     DECLARE_HYPERCALL_BOUNCE(featureset,
@@ -110,6 +110,87 @@ int xc_get_cpu_featureset(xc_interface *xch, uint32_t index,
         *nr_features = sysctl.u.cpu_featureset.nr_features;
 
     return ret;
+}
+
+int xc_get_cpu_featureset(xc_interface *xch, uint32_t index,
+                          uint32_t *nr, uint32_t *fs)
+{
+    uint32_t host_fs[FEATURESET_NR_ENTRIES] = {}, host_nr = ARRAY_SIZE(host_fs);
+    unsigned int vendor;
+    int ret;
+
+    if ( index != XEN_SYSCTL_cpu_featureset_pv_max &&
+         index != XEN_SYSCTL_cpu_featureset_hvm_max )
+        return xc_get_cpu_featureset_(xch, index, nr, fs);
+
+    /*
+     * Augment a *_max featureset.
+     *
+     * This is used by xenopsd to pass to the toolstack of the incoming
+     * domain, to allow it to establish migration safety.
+     */
+    ret = xc_get_cpu_featureset_(
+        xch, XEN_SYSCTL_cpu_featureset_host, &host_nr, host_fs);
+    if ( ret && errno != ENOBUFS )
+        return ret;
+
+    ret = xc_get_cpu_featureset_(xch, index, nr, fs);
+    if ( ret )
+        return ret;
+
+    /*
+     * Xen 4.7 had the common features duplicated.  4.8 changed this, to only
+     * use the Intel range.  Undo this.
+     */
+    fs[2] |= (fs[0] & CPUID_COMMON_1D_FEATURES);
+
+    if ( index == XEN_SYSCTL_cpu_featureset_hvm_max )
+    {
+        struct cpuid_leaf l;
+
+        cpuid_leaf(0, &l);
+        vendor = x86_cpuid_lookup_vendor(l.b, l.c, l.d);
+
+        /*
+         * Xen 4.7 used to falsely advertise IBS, and 4.8 fixed this.
+         * However, the old xenopsd workaround fix for this didn't limit the
+         * workaround to AMD systems, so the Last Boot Record of every HVM VM,
+         * even on Intel, is wrong.
+         */
+        set_bit(X86_FEATURE_IBS, fs);
+
+        switch ( vendor )
+        {
+        case X86_VENDOR_AMD:
+        case X86_VENDOR_HYGON:
+            /*
+             * In order to mitigate Spectre, AMD dropped the LWP feature in
+             * microcode, to make space for MSR_PRED_CMD.  No one used LWP, but it
+             * was visible to guests at the time.
+             */
+            set_bit(X86_FEATURE_LWP, fs);
+
+            /*
+             * Xen 4.14 and earlier advertised SVM by default, but cleared it
+             * behind the scenes when nested-virt wasn't configured.  Keep it
+             * visible in Xapi's view.
+             */
+            set_bit(X86_FEATURE_SVM, fs);
+            break;
+
+        case X86_VENDOR_INTEL:
+        case X86_VENDOR_CENTAUR:
+            /*
+             * Xen 4.14 and earlier advertised VMX by default, but cleared it
+             * behind the scenes when nested-virt wasn't configured.  Keep it
+             * visible in Xapi's view.
+             */
+            set_bit(X86_FEATURE_VMX, fs);
+            break;
+        }
+    }
+
+    return 0;
 }
 
 uint32_t xc_get_cpu_featureset_size(void)
