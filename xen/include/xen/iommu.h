@@ -419,6 +419,9 @@ static inline int iommu_update_ire_from_msi(
 }
 #endif
 
+extern uint64_t bfn_foreign_offset;
+int can_use_iommu_check(struct domain *d);
+
 #endif /* _IOMMU_H_ */
 
 /*
