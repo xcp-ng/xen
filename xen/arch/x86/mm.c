@@ -187,7 +187,7 @@ static uint32_t base_disallow_mask;
       is_pv_domain(d)) ?                                        \
      L1_DISALLOW_MASK : (L1_DISALLOW_MASK & ~PAGE_CACHE_ATTRS))
 
-static s8 __read_mostly opt_mmio_relax;
+static s8 __read_mostly opt_mmio_relax = 1;
 
 static int __init cf_check parse_mmio_relax(const char *s)
 {
@@ -674,7 +674,7 @@ static void dec_linear_uses(struct page_info *pg)
  *     frame if it is mapped by a different root table. This is sufficient and
  *     also necessary to allow validation of a root table mapping itself.
  */
-static bool __read_mostly opt_pv_linear_pt = true;
+static bool __read_mostly opt_pv_linear_pt = false;
 boolean_param("pv-linear-pt", opt_pv_linear_pt);
 
 #define define_get_linear_pagetable(level)                                  \

@@ -806,7 +806,7 @@ static PyObject *pyxc_readconsolering(XcObject *self,
                                       PyObject *kwds)
 {
     unsigned int clear = 0, index = 0, incremental = 0;
-    unsigned int count = 16384 + 1, size = count;
+    unsigned int count = 65536 + 1, size = count;
     char        *str, *ptr;
     PyObject    *obj;
     int          ret;
