@@ -9711,6 +9711,45 @@ fi
 done
 
 
+ax_found=0
+
+    if test "$ax_found" = "0"; then :
+
+        ac_fn_c_check_header_mongrel "$LINENO" "json/json.h" "ac_cv_header_json_json_h" "$ac_includes_default"
+if test "x$ac_cv_header_json_json_h" = xyes; then :
+
+
+$as_echo "#define INCLUDE_JSON_H <json/json.h>" >>confdefs.h
+
+            ax_found=1
+fi
+
+
+
+fi
+
+    if test "$ax_found" = "0"; then :
+
+        ac_fn_c_check_header_mongrel "$LINENO" "json-c/json.h" "ac_cv_header_json_c_json_h" "$ac_includes_default"
+if test "x$ac_cv_header_json_c_json_h" = xyes; then :
+
+
+$as_echo "#define INCLUDE_JSON_H <json-c/json.h>" >>confdefs.h
+
+            ax_found=1
+fi
+
+
+
+fi
+
+if test "$ax_found" = "0"; then :
+
+    as_fn_error $? "No header found from list json/json.h json-c/json.h" "$LINENO" 5
+
+fi
+
+
 cat >confcache <<\_ACEOF
 # This file is a shell script that caches the results of configure
 # tests run on this system so they can be shared between configure

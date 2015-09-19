@@ -93,6 +93,9 @@
 /* Define extfs header to use */
 #undef INCLUDE_EXTFS_H
 
+/* Header path for INCLUDE_JSON_H */
+#undef INCLUDE_JSON_H
+
 /* IPXE path */
 #undef IPXE_PATH
 
