@@ -30,7 +30,6 @@
 #include <public/vm_event.h>
 #include <asm/p2m.h>
 #include <asm/altp2m.h>
-#include <asm/hvm/emulate.h>
 #include <asm/vm_event.h>
 #include <asm/hvm/hvm.h>
 
@@ -409,21 +408,6 @@ bool p2m_mem_access_check(paddr_t gpa, unsigned long gla,
             gfn_unlock(p2m, gfn, 0);
             return true;
         }
-    }
-
-    /*
-     * Try to avoid sending a mem event. Suppress events caused by page-walks
-     * by emulating but still checking mem_access violations.
-     */
-    if ( vm_event_check_ring(d->vm_event_monitor) &&
-         d->arch.monitor.inguest_pagefault_disabled &&
-         npfec.kind == npfec_kind_in_gpt )
-    {
-        v->arch.vm_event->send_event = true;
-        hvm_emulate_one_vm_event(EMUL_KIND_NORMAL, TRAP_invalid_op, X86_EVENT_NO_EC);
-        v->arch.vm_event->send_event = false;
-
-        return true;
     }
 
     if ( opt_introspection_extn &&
