@@ -45,7 +45,7 @@ static DEFINE_PER_CPU(unsigned int, nmi_timer_ticks);
 bool_t __initdata opt_watchdog = 0;
 
 /* watchdog_force: If true, process unknown NMIs when running the watchdog. */
-bool_t watchdog_force = 0;
+bool_t watchdog_force = 1;
 
 static void __init parse_watchdog(char *s)
 {
