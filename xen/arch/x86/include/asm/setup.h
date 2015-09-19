@@ -42,6 +42,8 @@ void bootstrap_unmap(void);
 
 void release_boot_module(struct boot_module *bm);
 
+int xen_in_range(unsigned long mfn);
+
 struct rangeset;
 int remove_xen_ranges(struct rangeset *r);
 
