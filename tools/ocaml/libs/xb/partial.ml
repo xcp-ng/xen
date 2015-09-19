@@ -27,6 +27,8 @@ external header_size: unit -> int = "stub_header_size"
 external header_of_string_internal: string -> int * int * int * int
          = "stub_header_of_string"
 
+let allow_oversize_packets = ref true
+
 let xenstore_payload_max = 4096 (* xen/include/public/io/xs_wire.h *)
 let xenstore_rel_path_max = 2048 (* xen/include/public/io/xs_wire.h *)
 
@@ -36,7 +38,7 @@ let of_string s =
 	   This will leave the guest connection is a bad state and will
 	   be hard to recover from without restarting the connection
 	   (ie rebooting the guest) *)
-	let dlen = max 0 (min xenstore_payload_max dlen) in
+	let dlen = max 0 (if !allow_oversize_packets then dlen else min xenstore_payload_max dlen) in
 	{
 		tid = tid;
 		rid = rid;
@@ -46,8 +48,8 @@ let of_string s =
 	}
 
 let append pkt s sz =
-	if Buffer.length pkt.buf + sz > xenstore_payload_max then failwith "Buffer.add: cannot grow buffer";
-	Buffer.add_substring pkt.buf s 0 sz
+	if not !allow_oversize_packets && Buffer.length pkt.buf + sz > xenstore_payload_max then failwith "Buffer.add: cannot grow buffer";
+	Buffer.add_string pkt.buf (String.sub s 0 sz)
 
 let to_complete pkt =
 	pkt.len - (Buffer.length pkt.buf)
