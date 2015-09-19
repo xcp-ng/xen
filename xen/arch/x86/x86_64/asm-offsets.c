@@ -15,6 +15,10 @@
 #include <asm/hardirq.h>
 #include <xen/multiboot.h>
 #include <xen/multiboot2.h>
+#include <public/sysctl.h>
+#include <xen/symbols.h>
+#include <xen/livepatch.h>
+#include <xen/livepatch_payload.h>
 
 #define DEFINE(_sym, _val)                                                 \
     asm volatile ("\n.ascii\"==>#define " #_sym " %0 /* " #_val " */<==\"" \
@@ -26,6 +30,82 @@
 
 void __dummy__(void)
 {
+    OFFSET(DOMAIN_id, struct domain, domain_id);
+    OFFSET(DOMAIN_shared_info, struct domain, shared_info);
+    OFFSET(DOMAIN_next, struct domain, next_in_list);
+    OFFSET(DOMAIN_max_vcpus, struct domain, max_vcpus);
+    OFFSET(DOMAIN_vcpus, struct domain, vcpu);
+    // TODO - fix this up properly in combination with the crashdump analyser
+    OFFSET(DOMAIN_options, struct domain, options);
+    OFFSET(DOMAIN_is_privileged, struct domain, is_privileged);
+    OFFSET(DOMAIN_tot_pages, struct domain, tot_pages);
+    OFFSET(DOMAIN_max_pages, struct domain, max_pages);
+#ifdef CONFIG_MEM_SHARING
+    OFFSET(DOMAIN_shr_pages, struct domain, shr_pages);
+#endif
+    OFFSET(DOMAIN_has_32bit_shinfo, struct domain, arch.has_32bit_shinfo);
+    OFFSET(DOMAIN_pause_count, struct domain, pause_count);
+    OFFSET(DOMAIN_handle, struct domain, handle);
+    OFFSET(DOMAIN_paging_mode, struct domain, arch.paging.mode);
+    DEFINE(DOMAIN_sizeof, sizeof(struct domain));
+    BLANK();
+
+    OFFSET(SHARED_max_pfn, struct shared_info, arch.max_pfn);
+    OFFSET(SHARED_pfn_to_mfn_list_list, struct shared_info, arch.pfn_to_mfn_frame_list_list);
+    BLANK();
+
+    DEFINE(VIRT_XEN_START, XEN_VIRT_START);
+    DEFINE(VIRT_XEN_END, XEN_VIRT_END);
+    DEFINE(VIRT_DIRECTMAP_START, DIRECTMAP_VIRT_START);
+    DEFINE(VIRT_DIRECTMAP_END, DIRECTMAP_VIRT_END);
+    BLANK();
+
+    DEFINE(XEN_DEBUG, IS_ENABLED(CONFIG_DEBUG));
+    DEFINE(XEN_FRAME_POINTER, IS_ENABLED(CONFIG_FRAME_POINTER));
+    DEFINE(XEN_STACK_SIZE, STACK_SIZE);
+    DEFINE(XEN_PRIMARY_STACK_SIZE, PRIMARY_STACK_SIZE);
+    BLANK();
+
+    OFFSET(VCPU_vcpu_id, struct vcpu, vcpu_id);
+    OFFSET(VCPU_user_regs, struct vcpu, arch.user_regs);
+    OFFSET(VCPU_flags, struct vcpu, arch.flags);
+    OFFSET(VCPU_guest_table_user, struct vcpu, arch.guest_table_user);
+    OFFSET(VCPU_guest_table, struct vcpu, arch.guest_table);
+    OFFSET(VCPU_pause_flags, struct vcpu, pause_flags);
+    OFFSET(VCPU_pause_count, struct vcpu, pause_count);
+    DEFINE(VCPU_sizeof, sizeof(struct vcpu));
+    BLANK();
+
+    OFFSET(CPUINFO_processor_id, struct cpu_info, processor_id);
+    BLANK();
+
+    OFFSET(LIST_HEAD_next, struct list_head, next);
+    BLANK();
+
+#ifdef CONFIG_LIVEPATCH
+    OFFSET(LIVEPATCH_payload_list, struct payload, list);
+    OFFSET(LIVEPATCH_payload_state, struct payload, state);
+    OFFSET(LIVEPATCH_payload_rc, struct payload, rc);
+    OFFSET(LIVEPATCH_payload_buildid, struct payload, id.p);
+    OFFSET(LIVEPATCH_payload_buildid_len, struct payload, id.len);
+    OFFSET(LIVEPATCH_payload_text_addr, struct payload, text_addr);
+    OFFSET(LIVEPATCH_payload_text_size, struct payload, text_size);
+    OFFSET(LIVEPATCH_payload_rw_addr, struct payload, rw_addr);
+    OFFSET(LIVEPATCH_payload_rw_size, struct payload, rw_size);
+    OFFSET(LIVEPATCH_payload_ro_addr, struct payload, ro_addr);
+    OFFSET(LIVEPATCH_payload_ro_size, struct payload, ro_size);
+    OFFSET(LIVEPATCH_payload_applied_list, struct payload, applied_list);
+    OFFSET(LIVEPATCH_payload_symtab, struct payload, symtab);
+    OFFSET(LIVEPATCH_payload_nsyms, struct payload, nsyms);
+    OFFSET(LIVEPATCH_payload_name, struct payload, name);
+    DEFINE(LIVEPATCH_payload_name_max_len, XEN_LIVEPATCH_NAME_SIZE);
+    OFFSET(LIVEPATCH_symbol_name, struct livepatch_symbol, name);
+    OFFSET(LIVEPATCH_symbol_value, struct livepatch_symbol, value);
+    DEFINE(LIVEPATCH_symbol_sizeof, sizeof(struct livepatch_symbol));
+    DEFINE(LIVEPATCH_symbol_max_len, KSYM_NAME_LEN);
+    BLANK();
+#endif
+
     OFFSET(UREGS_r15, struct cpu_user_regs, r15);
     OFFSET(UREGS_r14, struct cpu_user_regs, r14);
     OFFSET(UREGS_r13, struct cpu_user_regs, r13);
