@@ -1602,14 +1602,52 @@ static void svm_cpuid_intercept(
 {
     unsigned int input = *eax;
     struct vcpu *v = current;
+    unsigned int cps = v->domain->cores_per_socket;
 
     hvm_cpuid(input, eax, ebx, ecx, edx);
 
     switch (input) {
+    case 1:
+        if ( cps > 0 )
+        {
+            /* to fake out #vcpus per socket first force on HT/MC */
+            *edx |= cpufeat_mask(X86_FEATURE_HTT);
+            /* fake out #vcpus and inform guest of #cores per package */
+            *ebx &= 0xFF00FFFF;
+            /*
+             * This (cps * 2) is wrong, and contrary to the statement in the
+             * AMD manual.  However, Xen unconditionally offers Intel-style
+             * APIC IDs (odd IDs for hyperthreads) which breaks the AMD APIC
+             * Enumeration Requirements.
+             *
+             * Fake up cores-per-socket as a socket with twice as many cores
+             * as expected, with every odd core offline.
+             */
+            *ebx |= (((cps * 2) & 0xFF) << 16);
+        }
+        break;
     case 0x80000001:
         /* Fix up VLAPIC details. */
         if ( vlapic_hw_disabled(vcpu_vlapic(v)) )
             __clear_bit(X86_FEATURE_APIC & 31, edx);
+        if ( cps > 0 )
+            *ecx |= cpufeat_mask(X86_FEATURE_CMP_LEGACY);
+        break;
+    case 0x80000008:
+        if ( cps > 0 )
+        {
+            *ecx &= 0xFFFF0F00;
+            /*
+             * This (cps * 2) is wrong, and contrary to the statement in the
+             * AMD manual.  However, Xen unconditionally offers Intel-style
+             * APIC IDs (odd IDs for hyperthreads) which breaks the AMD APIC
+             * Enumeration Requirements.
+             *
+             * Fake up cores-per-socket as a socket with twice as many cores
+             * as expected, with every odd core offline.
+             */
+            *ecx |= ((cps * 2) - 1) & 0xFF;
+        }
         break;
     case 0x8000001c: 
     {
