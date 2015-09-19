@@ -11,6 +11,7 @@
 #include <asm/i387.h>
 #include <mach_apic.h>
 #include <asm/hvm/support.h>
+#include <acpi/cpufreq/cpufreq.h>
 
 #include "cpu.h"
 
@@ -492,6 +493,11 @@ static void init_intel(struct cpuinfo_x86 *c)
 	if (c == &boot_cpu_data &&
 	    c->x86 == 6 && c->x86_model == 0x55 /* INTEL_FAM6_SKYLAKE_X */)
 		setup_clear_cpu_cap(X86_FEATURE_CLWB);
+
+	/* Default to performance cpufreq governor */
+	if (!cpufreq_opt_governor)
+		cpufreq_opt_governor = &cpufreq_gov_performance;
+
 }
 
 const struct cpu_dev intel_cpu_dev = {
