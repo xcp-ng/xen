@@ -1150,6 +1150,26 @@ static uint32_t encode_sbdf(int domain, int bus, int dev, int func)
 		((uint32_t)func   &    0x7);
 }
 
+CAMLprim value stub_xc_hvm_check_pvdriver(value xch, value domid)
+{
+	CAMLparam2(xch, domid);
+	uint64_t irq;
+	int ret;
+
+	caml_enter_blocking_section();
+	ret = xc_hvm_param_get(_H(xch), _D(domid),
+			       HVM_PARAM_CALLBACK_IRQ, &irq);
+	caml_leave_blocking_section();
+
+	if (ret)
+		failwith_xc(_H(xch));
+
+	if (irq)
+		CAMLreturn(Val_true);
+	else
+		CAMLreturn(Val_false);
+}
+
 CAMLprim value stub_xc_domain_test_assign_device(value xch, value domid, value desc)
 {
 	CAMLparam3(xch, domid, desc);
