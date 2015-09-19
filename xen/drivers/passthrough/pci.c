@@ -33,6 +33,7 @@
 #include <xen/tasklet.h>
 #include <xen/vpci.h>
 #include <xen/msi.h>
+#include <xen/lockdown.h>
 #include <xsm/xsm.h>
 #include "ats.h"
 
@@ -573,6 +574,62 @@ struct pci_dev *pci_get_pdev(const struct domain *d, pci_sbdf_t sbdf)
                 return pdev;
 
     return NULL;
+}
+
+int check_ioport_access(const struct domain *d, unsigned int port_start,
+                        unsigned int port_end)
+{
+    struct pci_dev *pdev;
+    int rc = 0;
+
+    if ( !is_locked_down() )
+        return 0;
+
+    pcidevs_lock();
+    list_for_each_entry ( pdev, &d->pdev_list, domain_list )
+    {
+        unsigned int i;
+
+        if ( pdev->info.is_virtfn )
+            continue;
+
+        if ( (pci_conf_read8(pdev->sbdf, PCI_HEADER_TYPE) & 0x7f) !=
+                PCI_HEADER_TYPE_NORMAL )
+            continue;
+
+        for ( i = 0; i < PCI_HEADER_NORMAL_NR_BARS; i++ )
+        {
+            uint32_t size;
+            unsigned int idx = PCI_BASE_ADDRESS_0 + i * 4;
+            uint32_t bar = pci_conf_read32(pdev->sbdf, idx);
+
+            if ( (bar & PCI_BASE_ADDRESS_SPACE) == PCI_BASE_ADDRESS_SPACE_MEMORY )
+            {
+                if ( (bar & PCI_BASE_ADDRESS_MEM_TYPE_MASK) ==
+                        PCI_BASE_ADDRESS_MEM_TYPE_64 )
+                    i++;
+                continue;
+            }
+
+            pci_conf_write32(pdev->sbdf, idx, ~0);
+            size = pci_conf_read32(pdev->sbdf, idx) & PCI_BASE_ADDRESS_IO_MASK;
+            size = ~size + 1;
+            pci_conf_write32(pdev->sbdf, idx, bar);
+
+            if ( port_start >= (bar & PCI_BASE_ADDRESS_IO_MASK) &&
+                 port_end <= ((bar & PCI_BASE_ADDRESS_IO_MASK) + size - 1) )
+            {
+                rc = 0;
+                goto out;
+            }
+        }
+    }
+
+    rc = -ENOENT;
+
+out:
+    pcidevs_unlock();
+    return rc;
 }
 
 /**
