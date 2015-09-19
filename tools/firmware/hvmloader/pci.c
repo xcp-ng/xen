@@ -188,7 +188,12 @@ void pci_setup(void)
             {
                 vga_devfn = devfn;
                 virtual_vga = VGA_pt;
-                if ( vendor_id == 0x8086 )
+                if ( vendor_id == 0x10DE )
+                {
+                    vga_devfn = devfn;
+                    virtual_vga = VGA_std;
+                }
+                else if ( vendor_id == 0x8086 )
                 {
                     igd_opregion_pgbase = mem_hole_alloc(IGD_OPREGION_PAGES);
                     /*
