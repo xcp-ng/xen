@@ -385,6 +385,15 @@ static int __init acpi_parse_dev_scope(
             break;
 
         case ACPI_DMAR_SCOPE_TYPE_ENDPOINT:
+            if ( !drhd && rmrr_device_quirks(PCI_SBDF(seg, bus, path->dev, path->fn)) )
+            {
+                if ( iommu_verbose )
+                    printk(VTDPREFIX " QUIRK: ignoring %04x:%02x:%02x.%u\n",
+                           seg, bus, path->dev, path->fn);
+                start += acpi_scope->length;
+                continue;
+            }
+
             if ( iommu_verbose )
                 printk(VTDPREFIX " endpoint: %pp\n",
                        &PCI_SBDF(seg, bus, path->dev, path->fn));
