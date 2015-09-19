@@ -480,11 +480,19 @@ long do_domctl(XEN_GUEST_HANDLE_PARAM(xen_domctl_t) u_domctl)
     case XEN_DOMCTL_pausedomain:
         ret = -EINVAL;
         if ( d != current->domain )
-            ret = domain_pause_by_systemcontroller(d);
+        {
+            if ( opt_introspection_extn && current->domain->domain_id )
+                ret = domain_pause_by_introspector(d);
+            else
+                ret = domain_pause_by_systemcontroller(d);
+        }
         break;
 
     case XEN_DOMCTL_unpausedomain:
-        ret = domain_unpause_by_systemcontroller(d);
+        if ( opt_introspection_extn && current->domain->domain_id )
+            ret = domain_unpause_by_introspector(d);
+        else
+            ret = domain_unpause_by_systemcontroller(d);
         break;
 
     case XEN_DOMCTL_resumedomain:
