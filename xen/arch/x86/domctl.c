@@ -197,6 +197,29 @@ static int do_vmtrace_op(struct domain *d, struct xen_domctl_vmtrace_op *op,
     return rc;
 }
 
+bool arch_use_domctl_lock(const struct xen_domctl *op)
+{
+    switch ( op->cmd )
+    {
+    case XEN_DOMCTL_shadow_op:
+        switch ( op->u.shadow_op.op )
+        {
+        case XEN_DOMCTL_SHADOW_OP_CLEAN:
+        case XEN_DOMCTL_SHADOW_OP_PEEK:
+            return false;
+
+        default:
+            return true;
+        }
+
+    case XEN_DOMCTL_getpageframeinfo3:
+        return false;
+
+    default:
+        return true;
+    }
+}
+
 #define MAX_IOPORTS 0x10000
 
 long arch_do_domctl(

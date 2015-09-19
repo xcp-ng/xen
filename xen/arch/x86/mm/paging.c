@@ -781,11 +781,14 @@ long do_paging_domctl_cont(
     ret = xsm_domctl(XSM_OTHER, d, op.cmd, 0 /* SSIDref not applicable */);
     if ( !ret )
     {
-        if ( domctl_lock_acquire() )
+        bool use_lock = arch_use_domctl_lock(&op);
+
+        if ( !use_lock || domctl_lock_acquire() )
         {
             ret = paging_domctl(d, &op.u.shadow_op, u_domctl, 1);
 
-            domctl_lock_release();
+            if ( use_lock )
+                domctl_lock_release();
         }
         else
             ret = -ERESTART;
