@@ -216,6 +216,13 @@ efi_multiboot2_proto:
         jmp     0b
 
 run_bs:
+        /*
+         * Align the stack as UEFI spec requires. Keep it aligned
+         * before efi_multiboot2() call by pushing/popping even
+         * numbers of items on it.
+         */
+        and     $~15,%rsp
+
         push    %rax
         push    %rdx
 
