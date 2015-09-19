@@ -75,6 +75,7 @@ const hypercall_args_t hypercall_args_table[NR_hypercalls] =
 #endif
     ARGS(mca, 1),
     ARGS(arch_1, 1),
+    ARGS(iommu_op, 2),
 };
 
 #undef COMP
