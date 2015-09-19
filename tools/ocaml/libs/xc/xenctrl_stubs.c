@@ -746,7 +746,7 @@ CAMLprim value stub_xc_evtchn_status(value xch_val, value domid, value port)
 CAMLprim value stub_xc_readconsolering(value xch_val)
 {
 	/* Safe to use outside of blocking sections because of Ocaml GC lock. */
-	static unsigned int conring_size = 16384 + 1;
+	static unsigned int conring_size = 65536 + 1;
 
 	unsigned int count = conring_size, size = count, index = 0;
 	char *str = NULL, *ptr;
