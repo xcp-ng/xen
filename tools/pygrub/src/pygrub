@@ -901,6 +901,7 @@ if __name__ == "__main__":
 
     try:
         opts, args = getopt.gnu_getopt(sys.argv[1:], 'qilnh::',
+                                       ["default_args=", "extra_args=", "vm="] +
                                    ["quiet", "interactive", "list-entries", "not-really", "help",
                                     "output=", "output-format=", "output-directory=", "offset=",
                                     "runas=", "entry=", "kernel=",
@@ -925,6 +926,8 @@ if __name__ == "__main__":
     output_format = "sxp"
     output_directory = "/var/run/xen/pygrub/"
     uid = None
+    default_args = ""
+    extra_args = ""
 
     # what was passed in
     incfg = { "kernel": None, "ramdisk": None, "args": "" }
@@ -987,6 +990,10 @@ if __name__ == "__main__":
                 print("%s is not an existing directory" % a)
                 sys.exit(1)
             output_directory = a + '/'
+        elif o in ("--default_args",):
+            default_args = a
+        elif o in ("--extra_args",):
+            extra_args = a
 
     if debug:
         logging.basicConfig(level=logging.DEBUG)
@@ -1072,6 +1079,13 @@ if __name__ == "__main__":
     # Did looping through partitions find us a kernel?
     if fs is None:
         raise RuntimeError("Unable to find partition containing kernel")
+
+    # Append any extra arguments we were given
+    if extra_args:
+        if chosencfg["args"] == None:
+            chosencfg["args"] = extra_args
+        else:
+            chosencfg["args"] += " " + extra_args
 
     copy_from_image(fs, chosencfg["kernel"], "kernel",
                     fd_kernel, None if uid else path_kernel, not_really)
