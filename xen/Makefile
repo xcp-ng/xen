@@ -239,6 +239,7 @@ _cscope:
 .PHONY: _MAP
 _MAP:
 	$(NM) -n $(TARGET)-syms | grep -v '\(compiled\)\|\(\.o$$\)\|\( [aUw] \)\|\(\.\.ng$$\)\|\(LASH[RL]DI\)' > System.map
+	cat include/asm/asm-offsets.h | awk '/^#define __ASM_OFFSETS_H__/ { next } ; /^#define / { printf "%016x - +%s\n", $$3, $$2 }' >> System.map
 
 .PHONY: FORCE
 FORCE:
