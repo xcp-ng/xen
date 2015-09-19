@@ -53,6 +53,9 @@ boolean_param("unrestricted_guest", opt_unrestricted_guest_enabled);
 static bool_t __read_mostly opt_apicv_enabled = 0;
 boolean_param("apicv", opt_apicv_enabled);
 
+static bool __read_mostly opt_force_software_vmcs_shadow;
+boolean_param("force_software_vmcs_shadow", opt_force_software_vmcs_shadow);
+
 /*
  * These two parameters are used to config the controls for Pause-Loop Exiting:
  * ple_gap:    upper bound on the amount of time between two successive
@@ -499,6 +502,9 @@ static int vmx_init_vmcs_config(bool bsp)
     /* Virtualization exceptions are only enabled if VMFUNC is enabled */
     if ( !(_vmx_secondary_exec_control & SECONDARY_EXEC_ENABLE_VM_FUNCTIONS) )
         _vmx_secondary_exec_control &= ~SECONDARY_EXEC_ENABLE_VIRT_EXCEPTIONS;
+
+    if ( opt_force_software_vmcs_shadow )
+        _vmx_secondary_exec_control &= ~SECONDARY_EXEC_ENABLE_VMCS_SHADOWING;
 
     min = 0;
     opt = (VM_ENTRY_LOAD_GUEST_PAT | VM_ENTRY_LOAD_GUEST_EFER |
