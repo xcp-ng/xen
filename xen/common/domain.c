@@ -351,7 +351,7 @@ static int late_hwdom_init(struct domain *d)
 }
 
 static unsigned int __read_mostly extra_hwdom_irqs;
-#define DEFAULT_EXTRA_DOMU_IRQS 32U
+#define DEFAULT_EXTRA_DOMU_IRQS 64U
 static unsigned int __read_mostly extra_domU_irqs = DEFAULT_EXTRA_DOMU_IRQS;
 
 static int __init cf_check parse_extra_guest_irqs(const char *s)
