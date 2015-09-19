@@ -306,6 +306,7 @@ static int __hwdom_init cf_check map_subtract(unsigned long s, unsigned long e,
 
 struct map_data {
     struct domain *d;
+    unsigned long offset;
     unsigned int flush_flags;
     bool mmio_ro;
 };
@@ -323,7 +324,7 @@ static int __hwdom_init cf_check identity_map(unsigned long s, unsigned long e,
 
     if ( paging_mode_translate(d) )
     {
-        if ( info->mmio_ro )
+        if ( info->mmio_ro || info->offset )
         {
             ASSERT_UNREACHABLE();
             /* End the rangeset iteration, as other regions will also fail. */
@@ -344,6 +345,7 @@ static int __hwdom_init cf_check identity_map(unsigned long s, unsigned long e,
          * Read-only ranges are strictly MMIO and need an additional iomem
          * permissions check.
          */
+        ASSERT(!info->mmio_ro || !info->offset);
         while ( info->mmio_ro && s <= e && !iomem_access_permitted(d, s, e) )
         {
             /*
@@ -362,7 +364,7 @@ static int __hwdom_init cf_check identity_map(unsigned long s, unsigned long e,
             }
             s++;
         }
-        while ( (rc = iommu_map(d, _dfn(s), _mfn(s), e - s + 1,
+        while ( (rc = iommu_map(d, _dfn(s + info->offset), _mfn(s), e - s + 1,
                                 perms, &info->flush_flags)) > 0 )
         {
             s += rc;
@@ -382,8 +384,9 @@ static int __hwdom_init cf_check identity_map(unsigned long s, unsigned long e,
 void __hwdom_init arch_iommu_hwdom_init(struct domain *d)
 {
     unsigned int i;
-    struct rangeset *map;
+    struct rangeset *map, *offset_map = NULL;
     struct map_data map_data = { .d = d };
+    unsigned long ram_offset = can_use_iommu_check(d) ? bfn_foreign_offset : 0;
     int rc;
 
     BUG_ON(!is_hardware_domain(d));
@@ -409,7 +412,9 @@ void __hwdom_init arch_iommu_hwdom_init(struct domain *d)
         return;
 
     map = rangeset_new(NULL, NULL, 0);
-    if ( !map )
+    if ( ram_offset )
+        offset_map = rangeset_new(NULL, NULL, 0);
+    if ( !map || (ram_offset && !offset_map) )
         panic("IOMMU init: unable to allocate rangeset\n");
 
     if ( iommu_hwdom_inclusive )
@@ -423,6 +428,7 @@ void __hwdom_init arch_iommu_hwdom_init(struct domain *d)
     for ( i = 0; i < e820.nr_map; i++ )
     {
         const struct e820entry entry = e820.map[i];
+        struct rangeset *dest_map = map;
 
         switch ( entry.type )
         {
@@ -442,20 +448,30 @@ void __hwdom_init arch_iommu_hwdom_init(struct domain *d)
         case E820_RAM:
             if ( iommu_hwdom_strict )
                 continue;
+            if ( ram_offset )
+            {
+                /*
+                 * RAM regions should go to the offset map, remove in case the
+                 * region was added by the usage of the inclusive option.
+                 */
+                rc = rangeset_remove_range(map, PFN_DOWN(entry.addr),
+                                           PFN_DOWN(entry.addr + entry.size - 1));
+                dest_map = offset_map;
+            }
             break;
 
         default:
             continue;
         }
 
-        rc = rangeset_add_range(map, PFN_DOWN(entry.addr),
+        rc = rangeset_add_range(dest_map, PFN_DOWN(entry.addr),
                                 PFN_DOWN(entry.addr + entry.size - 1));
         if ( rc )
             panic("IOMMU failed to add identity range: %d\n", rc);
     }
 
     /* Remove any areas in-use by Xen. */
-    rc = remove_xen_ranges(map);
+    rc = remove_xen_ranges(offset_map ?: map);
     if ( rc )
         panic("IOMMU failed to remove Xen ranges: %d\n", rc);
 
@@ -512,6 +528,17 @@ void __hwdom_init arch_iommu_hwdom_init(struct domain *d)
 
     rc = rangeset_report_ranges(map, 0, ~0UL, identity_map, &map_data);
     rangeset_destroy(map);
+
+    if ( offset_map )
+    {
+        map_data.offset = ram_offset;
+
+        rc = rangeset_report_ranges(offset_map, 0, ~0UL, identity_map,
+                                    &map_data);
+        map_data.offset = 0;
+        rangeset_destroy(offset_map);
+    }
+
     if ( !rc && is_pv_domain(d) )
     {
         map_data.mmio_ro = true;
