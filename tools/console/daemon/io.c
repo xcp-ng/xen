@@ -108,7 +108,11 @@ struct domain {
 	struct xencons_interface *interface;
 	int event_count;
 	long long next_period;
+	FILE *logfile;
 };
+
+static void update_logconsole(struct domain *);
+static char *wildcard_logfile = NULL;
 
 static struct domain *dom_head;
 
@@ -163,6 +167,7 @@ static void buffer_append(struct domain *dom)
 	struct buffer *buffer = &dom->buffer;
 	XENCONS_RING_IDX cons, prod, size;
 	struct xencons_interface *intf = dom->interface;
+	size_t begin;
 
 	cons = intf->out_cons;
 	prod = intf->out_prod;
@@ -181,9 +186,15 @@ static void buffer_append(struct domain *dom)
 		}
 	}
 
+	begin = buffer->size;
 	while (cons != prod)
 		buffer->data[buffer->size++] = intf->out[
 			MASK_XENCONS_IDX(cons++, intf->out)];
+	if (dom->logfile && buffer->size != begin) {
+		fwrite(&buffer->data[begin], buffer->size - begin, 1,
+		       dom->logfile);
+		fflush(dom->logfile);
+	}
 
 	xen_mb();
 	intf->out_cons = cons;
@@ -690,6 +701,9 @@ static struct domain *create_domain(int domid)
 	if (!watch_domain(dom, true))
 		goto out;
 
+	dom->logfile = NULL;
+	update_logconsole(dom);
+
 	dom->next = dom_head;
 	dom_head = dom;
 
@@ -721,6 +735,9 @@ static void remove_domain(struct domain *dom)
 	for (pp = &dom_head; *pp; pp = &(*pp)->next) {
 		if (dom == *pp) {
 			*pp = dom->next;
+			if (dom->logfile)
+				fclose(dom->logfile);
+			dom->logfile = NULL;
 			free(dom);
 			break;
 		}
@@ -778,6 +795,38 @@ static void enum_domains(void)
 			dom->last_seen = enum_pass;
 		domid = dominfo.domid + 1;
 	}
+}
+
+static void update_logconsole(struct domain *dom)
+{
+	char *fname = NULL, *path = NULL;
+	FILE *oldfile;
+
+	oldfile = dom->logfile;
+
+	if (asprintf(&path, "/local/logconsole/%d", dom->domid) == -1)
+		goto out;
+
+	fname = xs_read(xs, XBT_NULL, path, NULL);
+	if (!fname && wildcard_logfile)
+		if (asprintf(&fname, wildcard_logfile, dom->domid) == -1)
+			goto out;
+	if (!fname || !fname[0])
+		goto out;
+
+	dom->logfile = fopen(fname, "a");
+	if (!dom->logfile)
+		dolog(LOG_ERR, "fopen('%s', 'a') failed: %d (%s)",
+		      fname, errno, strerror(errno));
+
+ out:
+	if (oldfile && dom->logfile == oldfile) {
+		dom->logfile = NULL;
+		fclose(oldfile);
+	}
+	free(fname);
+	free(path);
+	return;
 }
 
 static int ring_free_bytes(struct domain *dom)
@@ -903,6 +952,30 @@ static void handle_xs(void)
 		   been removed, so dom may be NULL here. */
 		if (dom && dom->is_dead == false)
 			domain_create_ring(dom);
+	} else if (!strcmp(vec[XS_WATCH_TOKEN], "logconsole")) {
+		if (sscanf(vec[XS_WATCH_PATH], "/local/logconsole/%u",
+			   &domid) == 1) {
+			dom = lookup_domain(domid);
+			if (dom && dom->is_dead == false)
+				update_logconsole(dom);
+		} else if (!strcmp(vec[XS_WATCH_PATH],
+				   "/local/logconsole/@")) {
+			char *wildcard, *tmp;
+			free(wildcard_logfile);
+			wildcard_logfile = NULL;
+			wildcard = xs_read(xs, XBT_NULL,
+					   "/local/logconsole/@", NULL);
+			/* Sanitise string, as it gets used by asprintf().  It
+			 * should contain exactly one "%d" and no futher "%"s */
+			if(wildcard) {
+				tmp = strchr(wildcard, '%');
+				if(tmp && tmp[1] == 'd' &&
+				   strchr(&tmp[1], '%') == NULL)
+					wildcard_logfile = wildcard;
+				else
+					free(wildcard);
+			}
+		}
 	}
 
 	free(vec);
@@ -1212,6 +1285,16 @@ void handle_io(void)
 		xgt_handle = NULL;
 	}
 	log_hv_evtchn = -1;
+}
+
+void watch_logconsole(void)
+{
+      bool success;
+
+      success = xs_watch(xs, "/local/logconsole", "logconsole");
+      if (!success)
+              dolog(LOG_ERR, "logconsole watch failed");
+      wildcard_logfile = xs_read(xs, XBT_NULL, "/local/logconsole/@", NULL);
 }
 
 /*
