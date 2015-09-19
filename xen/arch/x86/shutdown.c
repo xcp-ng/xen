@@ -583,6 +583,7 @@ void machine_restart(unsigned int delay_millisecs)
 
     if ( system_state >= SYS_STATE_smp_boot )
     {
+        system_state = SYS_STATE_reboot;
         local_irq_enable();
 
         /* Ensure we are the boot CPU. */
