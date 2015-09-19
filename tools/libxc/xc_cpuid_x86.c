@@ -456,7 +456,7 @@ int xc_cpuid_set(
 
 int xc_cpuid_apply_policy(xc_interface *xch, uint32_t domid,
                           const uint32_t *featureset, unsigned int nr_features,
-                          bool pae)
+                          bool pae, unsigned int cps)
 {
     int rc;
     xc_dominfo_t di;
@@ -619,6 +619,46 @@ int xc_cpuid_apply_policy(xc_interface *xch, uint32_t domid,
             goto out;
         if ( val )
             p->basic.x2apic = false;
+
+        /*
+         * BODGE: XenServer legacy cores-per-socket.  Needs to remain like
+         * this for backwards compatibility with migration streams which lack
+         * CPUID data.
+         */
+        if ( cps > 0 )
+        {
+            p->basic.htt = true;
+
+            /*
+             * This (cps * 2) is wrong, and contrary to the statement in the
+             * AMD manual.  However, Xen unconditionally offers Intel-style
+             * APIC IDs (odd IDs for hyperthreads) which breaks the AMD APIC
+             * Enumeration Requirements.
+             *
+             * Fake up cores-per-socket as a socket with twice as many cores
+             * as expected, with every odd core offline.
+             */
+            p->basic.lppp = cps * 2;
+
+            switch ( p->x86_vendor )
+            {
+            case X86_VENDOR_INTEL:
+                for ( i = 0; (p->cache.subleaf[i].type &&
+                              i < ARRAY_SIZE(p->cache.raw)); ++i )
+                {
+                    p->cache.subleaf[i].cores_per_package = (cps * 2) - 1;
+                    p->cache.subleaf[i].threads_per_cache = 0;
+                }
+                break;
+
+            case X86_VENDOR_AMD:
+            case X86_VENDOR_HYGON:
+                p->extd.cmp_legacy = true;
+                p->extd.apic_id_size = 0;
+                p->extd.nc = (cps * 2) - 1;
+                break;
+            }
+        }
     }
 
     rc = x86_cpuid_copy_to_buffer(p, leaves, &nr_leaves);
