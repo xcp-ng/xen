@@ -740,10 +740,10 @@ libxl_xen_console_reader *
     /*
      * We want xen to fill the buffer in as few hypercalls as
      * possible, but xen will not nul-terminate it.  The default size
-     * of Xen's console buffer is 16384.  Leave one byte at the end
+     * of Xen's console buffer is 65536.  Leave one byte at the end
      * for the null character.
      */
-    unsigned int size = 16384 + 1;
+    unsigned int size = 65536 + 1;
 
     cr = libxl__zalloc(NOGC, sizeof(libxl_xen_console_reader));
     cr->buffer = libxl__zalloc(NOGC, size);

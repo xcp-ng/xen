@@ -1553,7 +1553,7 @@ efi_start(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
 
 #include <asm/spec_ctrl.h>
 
-static bool __initdata efi_map_uc;
+static bool __initdata efi_map_uc = true;
 
 static int __init cf_check parse_efi_param(const char *s)
 {

@@ -50,7 +50,7 @@ boolean_param("vpid", opt_vpid_enabled);
 static bool_t __read_mostly opt_unrestricted_guest_enabled = 1;
 boolean_param("unrestricted_guest", opt_unrestricted_guest_enabled);
 
-static bool_t __read_mostly opt_apicv_enabled = 1;
+static bool_t __read_mostly opt_apicv_enabled = 0;
 boolean_param("apicv", opt_apicv_enabled);
 
 /*
@@ -72,7 +72,7 @@ integer_param("vm-notify-window", vm_notify_window);
 
 static bool __read_mostly opt_ept_pml = true;
 static s8 __read_mostly opt_ept_ad = -1;
-int8_t __read_mostly opt_ept_exec_sp = -1;
+int8_t __read_mostly opt_ept_exec_sp = 1; /* Default to fast. */
 
 static int __init cf_check parse_ept_param(const char *s)
 {

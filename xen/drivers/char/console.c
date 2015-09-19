@@ -77,7 +77,7 @@ enum con_timestamp_mode
     TSM_RAW,           /* [XXXXXXXXXXXXXXXX] */
 };
 
-static enum con_timestamp_mode __read_mostly opt_con_timestamp_mode = TSM_NONE;
+static enum con_timestamp_mode __read_mostly opt_con_timestamp_mode = TSM_BOOT;
 
 #ifdef CONFIG_HYPFS
 static const char con_timestamp_mode_2_string[][7] = {
@@ -102,11 +102,11 @@ static int cf_check parse_console_timestamps(const char *s);
 custom_runtime_param("console_timestamps", parse_console_timestamps,
                      con_timestamp_mode_upd);
 
-/* conring_size: allows a large console ring than default (16kB). */
+/* conring_size: allows a large console ring than default (64kB). */
 static uint32_t __initdata opt_conring_size;
 size_param("conring_size", opt_conring_size);
 
-#define _CONRING_SIZE 16384
+#define _CONRING_SIZE KB(64)
 #define CONRING_IDX_MASK(i) ((i)&(conring_size-1))
 static char __initdata _conring[_CONRING_SIZE];
 static char *__read_mostly conring = _conring;
