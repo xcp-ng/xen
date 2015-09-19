@@ -23,6 +23,7 @@
 #include "hypercall.h"
 #include "config.h"
 #include "pci_regs.h"
+#include "vgt.h"
 
 #include <xen/memory.h>
 #include <xen/hvm/ioreq.h>
@@ -91,6 +92,7 @@ void pci_setup(void)
     uint16_t class, vendor_id, device_id;
     unsigned int bar, pin, link, isa_irq;
     uint8_t pci_devfn_decode_type[256] = {};
+    uint8_t intel_gpu_present = 0;
 
     /* Resources assignable to PCI devices via BARs. */
     struct resource {
@@ -169,6 +171,9 @@ void pci_setup(void)
 
         ASSERT((devfn != PCI_ISA_DEVFN) ||
                ((vendor_id == 0x8086) && (device_id == 0x7000)));
+
+        if (( vendor_id == 0x8086 ) && (class == 0x0300 || class == 0x0380))
+            intel_gpu_present = 1;
 
         switch ( class )
         {
@@ -553,6 +558,36 @@ void pci_setup(void)
 
     if ( vga_devfn != 256 )
     {
+        if ( intel_gpu_present )
+        {
+            uint32_t bar = pci_readl(vga_devfn, PCI_BASE_ADDRESS_0)
+                                        & PCI_BASE_ADDRESS_MEM_MASK;
+
+            void *pvinfo = (void *)bar + VGT_PVINFO_PAGE;
+            uint64_t *magic = pvinfo;
+
+            if (*magic == VGT_MAGIC) {
+		uint32_t vga_bar = pci_readl(vga_devfn, PCI_BASE_ADDRESS_5)
+						& PCI_BASE_ADDRESS_MEM_MASK;
+                /*
+                 * Found VGT device, and use standard VGA bios.
+                 */
+                virtual_vga = VGA_vgt;
+
+                /* XXX: we use this hack to tell vGT driver the
+                 * top of <4G mem, so vGT can avoid unnecessary
+                 * attempts to map the mem hole. This optimization
+                 * can speed up guest bootup time and improve Win7
+                 * SMP guest's stability.
+                 * NOTE: here we're actually trying to write 32 bits
+                 * into VENDOR_ID and DEVICE_ID -- we assume normally
+                 * sane codes in guest won't do this...
+                 */
+                 pci_writel(vga_devfn, PCI_VENDOR_ID, hvm_info->low_mem_pgend);
+		 /* XXX: Let QEMU legacy VGA emulator know the vga bar address*/
+                 pci_writel(0, 0xf8, vga_bar);
+            }
+        }
         /*
          * VGA registers live in I/O space so ensure that primary VGA
          * has IO enabled, even if there is no I/O BAR on that

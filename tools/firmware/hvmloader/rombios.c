@@ -78,6 +78,7 @@ static void rombios_load_roms(void)
                vgabios_cirrusvga, sizeof(vgabios_cirrusvga));
         vgabios_sz = round_option_rom(sizeof(vgabios_cirrusvga));
         break;
+    case VGA_vgt:
     case VGA_std:
         printf("Loading Standard VGABIOS ...\n");
         memcpy((void *)VGABIOS_PHYSICAL_ADDRESS,
