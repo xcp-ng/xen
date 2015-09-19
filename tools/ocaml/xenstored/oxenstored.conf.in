@@ -56,9 +56,9 @@ perms-watch-activate = true
 
 # Activate quota
 quota-activate = true
-quota-maxentity = 1000
+quota-maxentity = 8192
 quota-maxsize = 2048
-quota-maxwatch = 100
+quota-maxwatch = 512
 quota-transaction = 10
 quota-maxrequests = 1024
 quota-path-max = 1024
@@ -72,12 +72,14 @@ persistent = false
 # xenstored-log-file = @XEN_LOG_DIR@/xenstored.log
 # xenstored-log-level = null
 # xenstored-log-nb-files = 10
+xenstored-log-file = syslog:daemon
 
 # Xenstored access logs
 # access-log-file = @XEN_LOG_DIR@/xenstored-access.log
 # access-log-nb-lines = 13215
 # acesss-log-nb-chars = 180
 # access-log-special-ops = false
+access-log-file = syslog:local3
 
 # Perodically scanning all the rings as a safenet for lazy clients.
 # Define the interval in seconds, set to negative to disable.
