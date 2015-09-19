@@ -309,6 +309,8 @@ enum guest_type {
     guest_type_pv, guest_type_hvm
 };
 
+typedef struct xen_domctl_runstate_info domain_runstate_info_t;
+
 struct domain
 {
     domid_t          domain_id;
@@ -491,6 +493,11 @@ struct domain
         unsigned int guest_request_enabled       : 1;
         unsigned int guest_request_sync          : 1;
     } monitor;
+
+    /* Domain runstates */
+    spinlock_t runstate_lock;
+    atomic_t runstate_missed_changes;
+    domain_runstate_info_t runstate;
 };
 
 /* Protect updates/reads (resp.) of domain_list and domain_hash. */
@@ -851,6 +858,8 @@ void restore_vcpu_affinity(struct domain *d);
 int vcpu_pin_override(struct vcpu *v, int cpu);
 
 void vcpu_runstate_get(struct vcpu *v, struct vcpu_runstate_info *runstate);
+void domain_runstate_get(struct domain *d, domain_runstate_info_t *runstate);
+
 uint64_t get_cpu_idle_time(unsigned int cpu);
 
 /*
