@@ -87,8 +87,12 @@
 #define _PGC_extra        PG_shift(7)
 #define PGC_extra         PG_mask(1, 7)
 
+/* Page has foreign mappings? */
+#define _PGC_foreign_map  PG_shift(8)
+#define PGC_foreign_map   PG_mask(1, 8)
+
 /* Count of references to this frame. */
-#define PGC_count_width   PG_shift(7)
+#define PGC_count_width   PG_shift(8)
 #define PGC_count_mask    ((1UL<<PGC_count_width)-1)
 
 /*

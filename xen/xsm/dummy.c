@@ -101,6 +101,7 @@ static const struct xsm_ops __initconst_cf_clobber dummy_ops = {
     .hvm_altp2mhvm_op              = xsm_hvm_altp2mhvm_op,
 
     .do_xsm_op                     = xsm_do_xsm_op,
+    .iommu_control                 = xsm_iommu_control,
 #ifdef CONFIG_COMPAT
     .do_compat_op                  = xsm_do_compat_op,
 #endif
