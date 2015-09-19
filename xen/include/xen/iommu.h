@@ -39,6 +39,9 @@ TYPE_SAFE(uint64_t, dfn);
 #define dfn_x
 #endif
 
+extern uint64_t bfn_foreign_offset;
+int can_use_iommu_check(struct domain *d);
+
 static inline dfn_t __must_check dfn_add(dfn_t dfn, unsigned long i)
 {
     return _dfn(dfn_x(dfn) + i);
