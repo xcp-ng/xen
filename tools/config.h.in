@@ -93,6 +93,9 @@
 /* Define extfs header to use */
 #undef INCLUDE_EXTFS_H
 
+/* Define json header to use */
+#undef INCLUDE_JSON_H
+
 /* libutil header file name */
 #undef INCLUDE_LIBUTIL_H
 
