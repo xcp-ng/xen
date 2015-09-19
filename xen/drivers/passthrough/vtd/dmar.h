@@ -159,5 +159,6 @@ do {                                                               \
 int vtd_hw_check(void);
 void disable_pmr(struct vtd_iommu *iommu);
 int is_igd_drhd(struct acpi_drhd_unit *drhd);
+int rmrr_device_quirks(pci_sbdf_t sbdf);
 
 #endif /* _DMAR_H_ */
