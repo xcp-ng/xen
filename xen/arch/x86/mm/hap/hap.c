@@ -752,12 +752,10 @@ static bool flush_vcpu(const struct vcpu *v, const unsigned long *vcpu_bitmap)
     return !vcpu_bitmap || test_bit(v->vcpu_id, vcpu_bitmap);
 }
 
-/* Flush TLB of selected vCPUs.  NULL for all. */
-static bool cf_check flush_tlb(const unsigned long *vcpu_bitmap)
+static bool __flush_tlb(struct domain *d, const unsigned long *vcpu_bitmap)
 {
     static DEFINE_PER_CPU(cpumask_t, flush_cpumask);
     cpumask_t *mask = &this_cpu(flush_cpumask);
-    struct domain *d = current->domain;
     unsigned int this_cpu = smp_processor_id();
     struct vcpu *v;
 
@@ -787,6 +785,12 @@ static bool cf_check flush_tlb(const unsigned long *vcpu_bitmap)
     on_selected_cpus(mask, NULL, NULL, 0);
 
     return true;
+}
+
+/* Flush TLB of selected vCPUs.  NULL for all. */
+static bool cf_check flush_tlb(const unsigned long *vcpu_bitmap)
+{
+    return __flush_tlb(current->domain, vcpu_bitmap);
 }
 
 const struct paging_mode *
@@ -845,9 +849,7 @@ hap_write_p2m_entry_post(struct p2m_domain *p2m, unsigned int oflags)
 static void cf_check
 hap_p2m_tlb_flush(struct p2m_domain *p2m)
 {
-    struct domain *d = p2m->domain;
-
-    guest_flush_tlb_mask(d, d->dirty_cpumask);
+    __flush_tlb(p2m->domain, NULL);
 }
 
 void hap_p2m_init(struct p2m_domain *p2m)
