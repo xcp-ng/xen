@@ -212,6 +212,7 @@ tools/tests/mem-sharing/memshrtool
 tools/tests/mce-test/tools/xen-mceinj
 tools/xcutils/lsevtchn
 tools/xcutils/readnotes
+tools/xenguest/xenguest
 tools/xenmon/xentrace_setmask
 tools/xenmon/xenbaked
 tools/xenpaging/xenpaging

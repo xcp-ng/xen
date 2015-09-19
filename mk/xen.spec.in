@@ -466,6 +466,7 @@ chmod -x %{buildroot}/boot/xen-syms-*
 %{_libexecdir}/%{name}/bin/xenconsole
 %{_libexecdir}/%{name}/bin/xenctx
 %{_libexecdir}/%{name}/bin/xendomains
+%{_libexecdir}/%{name}/bin/xenguest
 %{_libexecdir}/%{name}/bin/xenpaging
 %{_libexecdir}/%{name}/bin/xenpvnetboot
 %{_libexecdir}/%{name}/boot/hvmloader
