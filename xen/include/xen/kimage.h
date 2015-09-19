@@ -11,11 +11,24 @@
 
 #include <xen/list.h>
 #include <xen/mm.h>
+#include <xen/elfstructs.h>
 #include <public/kexec.h>
 
 #define KEXEC_SEGMENT_MAX 16
 
+extern const char kexec_purgatory[];
+extern const unsigned int kexec_purgatory_size;
+
 typedef paddr_t kimage_entry_t;
+
+struct purgatory_info {
+    uint64_t dest;
+    void *buffer;
+    uint64_t bufsz;
+    uint64_t memsz;
+    uint64_t buf_align;
+    Elf_Shdr *sechdrs;
+};
 
 struct kexec_image {
     uint8_t type;
@@ -37,6 +50,9 @@ struct kexec_image {
 
     /* Address of next control page to allocate for crash kernels. */
     paddr_t next_crash_page;
+
+    struct purgatory_info pi;
+    xen_kexec_regs_t regs;
 };
 
 int kimage_alloc(struct kexec_image **rimage, uint8_t type, uint16_t arch,
@@ -52,6 +68,12 @@ mfn_t kimage_entry_mfn(kimage_entry_t *entry, bool compat);
 unsigned long kimage_entry_ind(kimage_entry_t *entry, bool compat);
 int kimage_build_ind(struct kexec_image *image, mfn_t ind_mfn,
                      bool compat);
+int kimage_setup_purgatory(struct kexec_image *image, uint64_t parameters);
+void kimage_terminate(struct kexec_image *image);
+
+int arch_kexec_apply_relocations_add(struct purgatory_info *pi,
+                                     Elf_Shdr *section, const Elf_Shdr *relsec,
+                                     const Elf_Shdr *symtabsec);
 
 #endif /* __ASSEMBLY__ */
 
