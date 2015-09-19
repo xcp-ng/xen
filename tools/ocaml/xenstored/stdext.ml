@@ -94,6 +94,11 @@ let fold_left f accu string =
 let startswith prefix x =
 	let x_l = String.length x and prefix_l = String.length prefix in
 	prefix_l <= x_l && String.sub x 0 prefix_l  = prefix
+
+(** True if string 'x' ends with suffix 'suffix' *)
+let endswith suffix x =
+ 	let x_l = String.length x and suffix_l = String.length suffix in
+ 	suffix_l <= x_l && String.sub x (x_l - suffix_l) suffix_l = suffix
 end
 
 module Unixext = struct
