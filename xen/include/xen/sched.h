@@ -515,6 +515,9 @@ struct domain
     struct arch_domain arch;
 
     void *ssid; /* sHype security subject identifier */
+#ifdef CONFIG_XSM_SILO
+    uint32_t silo_magic;
+#endif
 
     /* Control-plane tools handle for this domain. */
     xen_domain_handle_t handle;
