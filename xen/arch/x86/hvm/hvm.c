@@ -5242,6 +5242,27 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE_PARAM(void) arg)
      * the acquisition of a lock).
      */
 
+    if ( is_hvm_domain(current->domain) )
+    {
+        switch ( op )
+        {
+        case HVMOP_set_driver_version:
+            /*
+             * The XenServer 6.1 "newstyle" drivers do not make this
+             * hypercall.  All older drivers do make it.
+             *
+             * Xen-4.5 introduced the HVMOP_op_mask which truncates this op
+             * into HVMOP_set_isa_irq_level.  As HVMOP_set_isa_irq_level is
+             * ineligible for continuations, we can still distinguish legacy
+             * drivers.
+             */
+            current->domain->arch.hvm_domain._win_legacy_quirks = 1;
+            gdprintk(XENLOG_INFO, "Legacy windows driver quirks enabled. "
+                     "(HVMOP_set_driver_version)\n");
+            goto legacy_win_complete;
+        }
+    }
+
     switch ( op )
     {
     case HVMOP_set_evtchn_upcall_vector:
@@ -5377,6 +5398,7 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE_PARAM(void) arg)
         rc = hypercall_create_continuation(__HYPERVISOR_hvm_op, "lh",
                                            op, arg);
 
+ legacy_win_complete:
     return rc;
 }
 
