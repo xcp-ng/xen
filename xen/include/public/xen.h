@@ -125,6 +125,7 @@ DEFINE_XEN_GUEST_HANDLE(xen_ulong_t);
 #define __HYPERVISOR_arch_6               54
 #define __HYPERVISOR_arch_7               55
 
+#define __HYPERVISOR_iommu_op             56
 /* ` } */
 
 /*
