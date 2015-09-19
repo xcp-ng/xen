@@ -53,10 +53,10 @@
 #define MICROCODE_CALLIN_TIMEOUT_US 30000
 
 /*
- * Timeout for each thread to complete update is set to 1s. It is a
+ * Timeout for each thread to complete update is set to 10s. It is a
  * conservative choice considering all possible interference.
  */
-#define MICROCODE_UPDATE_TIMEOUT_US 1000000
+#define MICROCODE_UPDATE_TIMEOUT_US 10000000
 
 static bool __initdata ucode_mod_forced;
 static unsigned int nr_cores;

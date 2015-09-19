@@ -1291,7 +1291,7 @@ static bool __get_cmos_time(struct rtc_time *rtc)
     return t1 <= SECONDS(1) && t2 < MILLISECS(3);
 }
 
-static bool __initdata opt_cmos_rtc_probe;
+static bool __initdata opt_cmos_rtc_probe = true;
 boolean_param("cmos-rtc-probe", opt_cmos_rtc_probe);
 
 static bool __init cmos_rtc_probe(void)
