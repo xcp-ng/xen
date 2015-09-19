@@ -19,12 +19,7 @@
 #include <asm/pv/domain.h>
 #include <asm/spec_ctrl.h>
 
-/* Debug builds: Wrap frequently to stress-test the wrap logic. */
-#ifdef NDEBUG
 #define WRAP_MASK (0xFFFFFFFFU)
-#else
-#define WRAP_MASK (0x000003FFU)
-#endif
 
 #ifndef CONFIG_PV
 # undef X86_CR4_PCIDE
