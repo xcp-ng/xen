@@ -974,8 +974,10 @@ static int deassign_device(struct domain *d, uint16_t seg, uint8_t bus,
 
         target = dom_io;
     }
-    else
+    else if ( !is_locked_down() )
         target = hardware_domain;
+    else
+        return -EPERM;
 
     while ( pdev->phantom_stride )
     {
@@ -1645,6 +1647,9 @@ static int assign_device(struct domain *d, u16 seg, u8 bus, u8 devfn, u32 flag)
 
     if ( !arch_iommu_use_permitted(d) )
         return -EXDEV;
+
+    if ( is_locked_down() && d == hardware_domain )
+        return -EPERM;
 
     /* device_assigned() should already have cleared the device for assignment */
     ASSERT(pcidevs_locked());
