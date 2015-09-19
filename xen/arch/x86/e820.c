@@ -16,7 +16,7 @@
  * opt_mem: Limit maximum address of physical RAM.
  *          Any RAM beyond this address limit is ignored.
  */
-static unsigned long long __initdata opt_mem;
+static unsigned long long __initdata opt_mem = GB(5 * 1024);
 size_param("mem", opt_mem);
 
 /*
