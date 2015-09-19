@@ -276,14 +276,10 @@ void libxl__xcinfo2xlinfo(libxl_ctx *ctx,
                           const xc_domaininfo_t *xcinfo,
                           libxl_dominfo *xlinfo)
 {
-    size_t size;
-
     memcpy(&(xlinfo->uuid), xcinfo->handle, sizeof(xen_domain_handle_t));
     xlinfo->domid = xcinfo->domain;
     xlinfo->ssidref = xcinfo->ssidref;
-    if (libxl_flask_sid_to_context(ctx, xlinfo->ssidref,
-                                   &xlinfo->ssid_label, &size) < 0)
-        xlinfo->ssid_label = NULL;
+    xlinfo->ssid_label = NULL;
 
     xlinfo->dying      = !!(xcinfo->flags&XEN_DOMINF_dying);
     xlinfo->shutdown   = !!(xcinfo->flags&XEN_DOMINF_shutdown);
