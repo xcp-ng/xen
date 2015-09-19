@@ -564,6 +564,11 @@ struct domain
 
     struct arch_domain arch;
 
+    /* Domain runstates */
+    spinlock_t runstate_lock;
+    atomic_t runstate_missed_changes;
+    struct xen_domctl_runstate_info_ext runstate;
+
     void *ssid; /* sHype security subject identifier */
 #ifdef CONFIG_XSM_SILO
     uint32_t silo_magic;
@@ -1111,6 +1116,7 @@ int vcpu_affinity_domctl(struct domain *d, uint32_t cmd,
 
 struct vcpu_runstate_extra vcpu_runstate_get(
     const struct vcpu *v, struct vcpu_runstate_info *runstate);
+void domain_runstate_get(struct domain *d, struct xen_domctl_runstate_info_ext *info);
 
 uint64_t get_cpu_idle_time(unsigned int cpu);
 void sched_guest_idle(void (*idle) (void), unsigned int cpu);

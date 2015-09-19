@@ -720,6 +720,9 @@ static int cf_check flask_domctl(struct domain *d, unsigned int cmd,
     case XEN_DOMCTL_unpausedomain:
         return current_has_perm(d, SECCLASS_DOMAIN, DOMAIN__UNPAUSE);
 
+    case XEN_DOMCTL_get_runstate_info:
+        return current_has_perm(d, SECCLASS_DOMAIN2, DOMAIN2__GET_RUNSTATE_INFO);
+
     case XEN_DOMCTL_setvcpuaffinity:
     case XEN_DOMCTL_setnodeaffinity:
         return current_has_perm(d, SECCLASS_DOMAIN, DOMAIN__SETAFFINITY);

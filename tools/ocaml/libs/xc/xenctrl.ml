@@ -209,6 +209,44 @@ external domain_create_stub: handle -> domid -> domctl_create_config -> domid
 let domain_create handle ?(domid=0) config =
   domain_create_stub handle domid config
 
+module Runstateinfo = struct
+  module V1 = struct
+    (* Retain old names for backwards compatibility *)
+    type runstateinfo = {
+      state: int32;
+      missed_changes: int32;
+      state_entry_time: int64;
+      time0: int64;
+      time1: int64;
+      time2: int64;
+      time3: int64;
+      time4: int64;
+      time5: int64;
+    }
+    external domain_get_runstate_info : handle -> int -> runstateinfo = "stub_xc_get_runstate_info"
+  end
+
+  module V2 = struct
+    type t = {
+      state: int32;
+      missed_changes: int32;
+      state_entry_time: int64;
+      time0: int64;
+      time1: int64;
+      time2: int64;
+      time3: int64;
+      time4: int64;
+      time5: int64;
+      runnable: int64;
+      running: int64;
+      nonaffine: int64;
+    }
+    external domain_get : handle -> int -> t = "stub_xc_get_runstate_info2"
+  end
+end
+
+include Runstateinfo.V1
+
 external domain_sethandle: handle -> domid -> string -> unit
   = "stub_xc_domain_sethandle"
 

@@ -87,6 +87,7 @@ define(`create_domain_common', `
 		settsc
 		setscheduler
 		setclaim
+		get_runstate_info
 		set_vnumainfo
 		get_vnumainfo
 		cacheflush
