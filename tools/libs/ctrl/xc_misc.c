@@ -602,6 +602,26 @@ int xc_getcpuinfo(xc_interface *xch, int max_cpus,
     return rc;
 }
 
+int xc_iommu_op(xc_interface *xch, struct pv_iommu_op *ops, unsigned int count)
+{
+    DECLARE_HYPERCALL_BOUNCE(ops, count * sizeof(*ops),
+                             XC_HYPERCALL_BUFFER_BOUNCE_BOTH);
+    int ret;
+
+    if ( xc_hypercall_bounce_pre(xch, ops) )
+    {
+        PERROR("Could not bounce memory for IOMMU hypercall");
+        return -1;
+    }
+
+    ret = xencall2(xch->xcall, __HYPERVISOR_iommu_op,
+                   HYPERCALL_BUFFER_AS_ARG(ops), count);
+
+    xc_hypercall_bounce_post(xch, ops);
+
+    return ret;
+}
+
 int xc_livepatch_upload(xc_interface *xch,
                         char *name,
                         unsigned char *payload,
