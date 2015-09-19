@@ -12,6 +12,8 @@
 #include <asm/msr.h>
 #include <asm/trampoline.h>
 
+#include <acpi/cpufreq/cpufreq.h>
+
 #include "cpu.h"
 
 /*
@@ -687,6 +689,10 @@ static void cf_check init_intel(struct cpuinfo_x86 *c)
 
 	if (c == &boot_cpu_data && cpu_has(c, X86_FEATURE_ERMS))
 		setup_force_cpu_cap(X86_FEATURE_XEN_REP_MOVSB);
+
+	/* Default to performance cpufreq governor */
+	if (!cpufreq_opt_governor)
+		cpufreq_opt_governor = &cpufreq_gov_performance;
 }
 
 const struct cpu_dev __initconst_cf_clobber intel_cpu_dev = {
