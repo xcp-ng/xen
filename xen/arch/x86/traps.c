@@ -921,16 +921,13 @@ static void _domain_cpuid(struct domain *currd,
         cpuid_count(leaf, subleaf, eax, ebx, ecx, edx);
 }
 
-void pv_cpuid(struct cpu_user_regs *regs)
+void pv_cpuid(uint32_t leaf, uint32_t subleaf,
+              uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx)
 {
-    uint32_t leaf, subleaf, a, b, c, d;
+    uint32_t a, b, c, d;
+    const struct cpu_user_regs *regs = guest_cpu_user_regs();
     struct vcpu *curr = current;
     struct domain *currd = curr->domain;
-
-    leaf = a = regs->eax;
-    b = regs->ebx;
-    subleaf = c = regs->ecx;
-    d = regs->edx;
 
     if ( cpuid_hypervisor_leaves(leaf, subleaf, &a, &b, &c, &d) )
         goto out;
@@ -1217,17 +1214,21 @@ void pv_cpuid(struct cpu_user_regs *regs)
     case 0x8000001e: /* Extended topology reporting */
     unsupported:
         a = b = c = d = 0;
-        break;
+        goto out;
     }
 
- out:
     /* VPMU may decide to modify some of the leaves */
     vpmu_do_cpuid(leaf, &a, &b, &c, &d);
 
-    regs->eax = a;
-    regs->ebx = b;
-    regs->ecx = c;
-    regs->edx = d;
+ out:
+    if ( eax )
+        *eax = a;
+    if ( ebx )
+        *ebx = b;
+    if ( ecx )
+        *ecx = c;
+    if ( edx )
+        *edx = d;
 }
 
 static int emulate_invalid_rdtscp(struct cpu_user_regs *regs)
@@ -1288,7 +1289,7 @@ static int emulate_forced_invalid_op(struct cpu_user_regs *regs)
 
     eip += sizeof(instr);
 
-    pv_cpuid(regs);
+    pv_cpuid_regs(regs);
 
     instruction_done(regs, eip, 0);
 
@@ -3181,7 +3182,7 @@ static int emulate_privileged_op(struct cpu_user_regs *regs)
              !guest_kernel_mode(v, regs) )
             goto fail;
 
-        pv_cpuid(regs);
+        pv_cpuid_regs(regs);
         break;
 
     default:
