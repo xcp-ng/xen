@@ -20,6 +20,7 @@
 #include "ssdt_s4.h"
 #include "ssdt_tpm.h"
 #include "ssdt_pm.h"
+#include "ssdt_laptop_slate.h"
 #include "../config.h"
 #include "../util.h"
 #include "../vnuma.h"
@@ -398,6 +399,14 @@ static int construct_secondary_tables(unsigned long *table_ptrs,
         table_ptrs[nr_tables++] = (unsigned long)ssdt;
     } else {
         printf("S4 disabled\n");
+    }
+
+    if ( !strncmp(xenstore_read("platform/acpi_laptop_slate", "0"), "1", 1) )
+    {
+        ssdt = mem_alloc(sizeof(ssdt_laptop_slate), 16);
+        if (!ssdt) return -1;
+        memcpy(ssdt, ssdt_laptop_slate, sizeof(ssdt_laptop_slate));
+        table_ptrs[nr_tables++] = (unsigned long)ssdt;
     }
 
     /* TPM TCPA and SSDT. */
