@@ -46,6 +46,8 @@ static const struct feature_name {
     unsigned int bit;
 } feature_names[] __initconstrel = INIT_FEATURE_NAMES;
 
+int8_t __initdata opt_avx512 = -1;
+
 /*
  * Parse a list of cpuid feature names -> bool, calling the callback for any
  * matches found.
@@ -66,6 +68,12 @@ static int __init always_inline parse_cpuid(
         ss = strchr(s, ',');
         if ( !ss )
             ss = strchr(s, '\0');
+
+        if ( (val = parse_boolean("avx512", s, ss)) >= 0 )
+        {
+            opt_avx512 = val;
+            goto next;
+        }
 
         /* Skip the 'no-' prefix for name comparisons. */
         feat = s;
@@ -110,6 +118,7 @@ static int __init always_inline parse_cpuid(
         if ( mid )
             rc = -EINVAL;
 
+    next:
         s = ss + 1;
     } while ( *ss );
 
