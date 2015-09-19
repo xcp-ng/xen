@@ -509,6 +509,25 @@ config SUPPRESS_DUPLICATE_SYMBOL_WARNINGS
 	  to produce many duplicate names) may select this to avoid the
 	  build becoming overly verbose.
 
+config PAYLOAD_SIGNING
+	bool "Verify signed LivePatch payloads"
+	default n
+	depends on LIVEPATCH
+	select CRYPTO
+	help
+	  Verify signed LivePatch payloads using an RSA public key built
+	  into the Xen hypervisor. Selecting this option requires a
+	  public key in PEM format to be available for embedding during
+	  the build.
+
+config PAYLOAD_SIG_KEY
+	string "File name of payload signing public key"
+	default "signing_key.pem"
+	depends on PAYLOAD_SIGNING
+	help
+	  The file name of an RSA public key in PEM format to be used for
+	  verifying signed LivePatch payloads.
+
 config CMDLINE
 	string "Built-in hypervisor command string" if EXPERT
 	default ""
