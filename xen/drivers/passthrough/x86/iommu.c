@@ -285,7 +285,7 @@ static bool __hwdom_init hwdom_iommu_map(const struct domain *d,
 
 void __hwdom_init arch_iommu_hwdom_init(struct domain *d)
 {
-    unsigned long i, top, max_pfn;
+    unsigned long i, top, max_pfn, ram_offset;
     unsigned int flush_flags = 0;
 
     BUG_ON(!is_hardware_domain(d));
@@ -312,19 +312,26 @@ void __hwdom_init arch_iommu_hwdom_init(struct domain *d)
 
     max_pfn = (GB(4) >> PAGE_SHIFT) - 1;
     top = max(max_pdx, pfn_to_pdx(max_pfn) + 1);
+    ram_offset = can_use_iommu_check(d) ? bfn_foreign_offset : 0;
 
     for ( i = 0; i < top; i++ )
     {
         unsigned long pfn = pdx_to_pfn(i);
+        unsigned long offset = 0;
         int rc;
 
         if ( !hwdom_iommu_map(d, pfn, max_pfn) )
             continue;
 
+        if ( page_get_ram_type(_mfn(pfn)) == RAM_TYPE_CONVENTIONAL )
+            offset = ram_offset;
+        else if ( ram_offset && pfn >= ram_offset )
+            continue;
+
         if ( paging_mode_translate(d) )
             rc = set_identity_p2m_entry(d, pfn, p2m_access_rw, 0);
         else
-            rc = iommu_map(d, _dfn(pfn), _mfn(pfn), PAGE_ORDER_4K,
+            rc = iommu_map(d, _dfn(pfn + offset), _mfn(pfn), PAGE_ORDER_4K,
                            IOMMUF_readable | IOMMUF_writable, &flush_flags);
 
         if ( rc )
