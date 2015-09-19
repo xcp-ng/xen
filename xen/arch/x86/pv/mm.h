@@ -36,47 +36,54 @@ static inline l1_pgentry_t guest_get_eff_l1e(unsigned long linear)
  * How to write an entry to the guest pagetables.
  * Returns false for failure (pointer not valid), true for success.
  */
-static inline bool update_intpte(intpte_t *p, intpte_t old, intpte_t new,
-                                 mfn_t mfn, struct vcpu *v, bool preserve_ad)
+static inline bool _update_intpte(intpte_t *p, intpte_t *old, intpte_t new,
+                                  mfn_t mfn, struct vcpu *v,
+                                  bool preserve_ad, bool use_cmpxchg)
 {
     bool rv = true;
 
 #ifndef PTE_UPDATE_WITH_CMPXCHG
-    if ( !preserve_ad )
+    if ( !preserve_ad && !use_cmpxchg )
     {
         rv = paging_write_guest_entry(v, p, new, mfn);
     }
     else
 #endif
     {
-        intpte_t t = old;
+        intpte_t t = *old;
 
         for ( ; ; )
         {
             intpte_t _new = new;
 
             if ( preserve_ad )
-                _new |= old & (_PAGE_ACCESSED | _PAGE_DIRTY);
+                _new |= *old & (_PAGE_ACCESSED | _PAGE_DIRTY);
 
             rv = paging_cmpxchg_guest_entry(v, p, &t, _new, mfn);
             if ( unlikely(rv == 0) )
             {
                 gdprintk(XENLOG_WARNING,
                          "Failed to update %" PRIpte " -> %" PRIpte
-                         ": saw %" PRIpte "\n", old, _new, t);
+                         ": saw %" PRIpte "\n", *old, _new, t);
                 break;
             }
 
-            if ( t == old )
+            if ( t == *old )
                 break;
 
             /* Allowed to change in Accessed/Dirty flags only. */
-            BUG_ON((t ^ old) & ~(intpte_t)(_PAGE_ACCESSED|_PAGE_DIRTY));
+            BUG_ON((t ^ *old) & ~(intpte_t)(_PAGE_ACCESSED|_PAGE_DIRTY));
 
-            old = t;
+            *old = t;
         }
     }
     return rv;
+}
+
+static inline bool update_intpte(intpte_t *p, intpte_t old, intpte_t new,
+                                 mfn_t mfn, struct vcpu *v, bool preserve_ad)
+{
+    return _update_intpte(p, &old, new, mfn, v, preserve_ad, false);
 }
 
 /*
