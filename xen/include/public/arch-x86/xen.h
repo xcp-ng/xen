@@ -314,6 +314,24 @@ struct xen_arch_domainconfig {
 #define XEN_ACPI_GPE0_CPUHP_BIT      2
 #endif
 
+/*
+ * Representations of architectural CPUID and MSR information.  Used as the
+ * serialised version of Xen's internal representation.
+ */
+typedef struct xen_cpuid_leaf {
+#define XEN_CPUID_NO_SUBLEAF 0xffffffffu
+    uint32_t leaf, subleaf;
+    uint32_t a, b, c, d;
+} xen_cpuid_leaf_t;
+DEFINE_XEN_GUEST_HANDLE(xen_cpuid_leaf_t);
+
+typedef struct xen_msr_entry {
+    uint32_t idx;
+    uint32_t flags; /* Reserved MBZ. */
+    uint64_t val;
+} xen_msr_entry_t;
+DEFINE_XEN_GUEST_HANDLE(xen_msr_entry_t);
+
 #endif /* !__ASSEMBLY__ */
 
 /*
