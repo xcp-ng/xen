@@ -638,7 +638,9 @@ cscope:
 
 .PHONY: _MAP
 _MAP: $(TARGET)
-	$(NM) -n $(TARGET)-syms | grep -v '\(compiled\)\|\(\.o$$\)\|\( [aUw] \)\|\(\.\.ng$$\)\|\(LASH[RL]DI\)' > System.map
+	{ $(NM) -n $(TARGET)-syms | grep -v '\(compiled\)\|\(\.o$$\)\|\( [aUw] \)\|\(\.\.ng$$\)\|\(LASH[RL]DI\)'; \
+	awk < arch/$(SRCARCH)/include/asm/asm-offsets.h \
+	'/^#define __ASM_OFFSETS_H__/ { next } ; /^#define / { printf "%016x - +%s\n", $$3, $$2 }'; } > System.map
 
 %.o %.i %.s: %.c tools_fixdep FORCE
 	$(Q)$(MAKE) $(build)=$(*D) $(*D)/$(@F)
