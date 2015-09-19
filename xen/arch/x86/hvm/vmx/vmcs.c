@@ -458,6 +458,9 @@ static int vmx_init_vmcs_config(bool bsp)
     opt = (VM_EXIT_SAVE_GUEST_PAT | VM_EXIT_LOAD_HOST_PAT |
            VM_EXIT_LOAD_HOST_EFER | VM_EXIT_CLEAR_BNDCFGS);
     min |= VM_EXIT_IA32E_MODE;
+    if ( opt_force_software_vmcs_shadow )
+        opt &= ~VM_EXIT_LOAD_HOST_EFER;
+
     caps.vmexit_control = adjust_vmx_controls(
         "VMExit Control", min, opt, MSR_IA32_VMX_EXIT_CTLS, &mismatch);
 
@@ -501,6 +504,9 @@ static int vmx_init_vmcs_config(bool bsp)
     min = 0;
     opt = (VM_ENTRY_LOAD_GUEST_PAT | VM_ENTRY_LOAD_GUEST_EFER |
            VM_ENTRY_LOAD_BNDCFGS);
+    if ( opt_force_software_vmcs_shadow )
+        opt &= ~VM_ENTRY_LOAD_GUEST_EFER;
+
     caps.vmentry_control = adjust_vmx_controls(
         "VMEntry Control", min, opt, MSR_IA32_VMX_ENTRY_CTLS, &mismatch);
 
