@@ -1148,6 +1148,29 @@ static uint32_t encode_sbdf(int domain, int bus, int dev, int func)
 		((uint32_t)func   &    0x7);
 }
 
+CAMLprim value stub_xc_hvm_check_pvdriver(value xch, value domid)
+{
+	CAMLparam2(xch, domid);
+	xc_domaininfo_t info;
+	unsigned long irq;
+	int ret;
+
+	ret = xc_domain_getinfolist(_H(xch), _D(domid), 1, &info);
+	if (ret != 1 || info.domain != _D(domid)) {
+		caml_failwith("Domain does not exist.");
+	}
+
+	if (!(info.flags & XEN_DOMINF_hvm_guest)) {
+		caml_failwith("Domain is not HVM guest.");
+	}
+
+	xc_get_hvm_param(_H(xch), _D(domid), HVM_PARAM_CALLBACK_IRQ, &irq);
+	if (irq != 0)
+		CAMLreturn(Val_true);
+	else
+		CAMLreturn(Val_false);
+}
+
 CAMLprim value stub_xc_domain_test_assign_device(value xch, value domid, value desc)
 {
 	CAMLparam3(xch, domid, desc);
