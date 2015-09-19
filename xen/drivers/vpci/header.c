@@ -378,7 +378,10 @@ static void cf_check cmd_write(
          */
         modify_bars(pdev, cmd, false);
     else
+    {
         pci_conf_write16(pdev->sbdf, reg, cmd);
+        pdev->memory_enabled = !!(cmd & PCI_COMMAND_MEMORY);
+    }
 }
 
 static void cf_check bar_write(
