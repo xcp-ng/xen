@@ -651,6 +651,9 @@ static inline bool altp2m_vcpu_emulate_ve(struct vcpu *v)
     return false;
 }
 
+/* introspection extensions commandline argument value */
+extern bool_t opt_introspection_extn;
+
 /* Check CR4/EFER values */
 const char *hvm_efer_valid(const struct vcpu *v, uint64_t value,
                            signed int cr0_pg);
