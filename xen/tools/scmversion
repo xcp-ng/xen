@@ -39,6 +39,22 @@ scm_version()
 
 	# Check for git and a git repo.
 	if test -d .git && head=`git rev-parse --verify --short HEAD 2>/dev/null`; then
+
+		if test -d .git/patches/.git; then
+			# Guilt patch queue - Grab the revisions separately
+			for BRANCH in patches qparent patchqueue; do
+				head=`git rev-parse --verify --quiet --short=12 $BRANCH` && break || :
+			done
+
+			if test -n $head; then
+
+				pqhead=`git --git-dir=.git/patches/.git rev-parse --verify --short=12 HEAD`
+
+				printf '%s, pq %s' "$head" "$pqhead"
+				return
+			fi
+		fi
+
 		date=`git show -s --pretty="%ad" HEAD`
 
 		printf '%s %s%s' "$date" git: $head
