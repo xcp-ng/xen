@@ -28,6 +28,7 @@
 #include <xen/pci_ids.h>
 #include <xen/pci_regs.h>
 #include <xen/keyhandler.h>
+#include <xen/dmi.h>
 #include <asm/msi.h>
 #include <asm/irq.h>
 #include <asm/pci.h>
@@ -539,4 +540,54 @@ void pci_vtd_quirk(const struct pci_dev *pdev)
                    bar, seg, bus, dev, func);
         break;
     }
+}
+
+static int __initdata rmrr_quirk_match;
+static int __initdata rmrr_dmi_checked;
+static int __init dmi_rmrr_quirk_match(/*const*/ struct dmi_system_id *id)
+{
+    rmrr_quirk_match = 1;
+    return 0;
+}
+
+static struct dmi_system_id __initdata rmrr_dmi_quirks[] =
+{
+    {
+        .callback = dmi_rmrr_quirk_match,
+        .ident    = "HP Gen 8",
+        .matches  = {
+            DMI_MATCH(DMI_SYS_VENDOR, "HP"),
+            DMI_MATCH(DMI_PRODUCT_NAME,   "Gen8")
+        }
+    },
+	{}
+};
+
+#define PCI_CLASS_AUDIO_DEVICE    0x0403
+
+int __init rmrr_hp_quirks(u16 seg, u8 bus, u8 dev, u8 func)
+{
+    u16 class_device;
+    /* Only match HP systems and RMRR units */
+    if ( !rmrr_quirk_match )
+        return 0;
+
+    class_device = pci_conf_read16(seg, bus, dev, func, PCI_CLASS_DEVICE);
+
+    /* Match PCI audio class device not on function 0 */
+    if ( func != 0 && class_device == PCI_CLASS_AUDIO_DEVICE )
+        return 1;
+
+    return 0;
+}
+
+int __init rmrr_device_quirks(u16 seg, u8 bus, u8 dev, u8 func)
+{
+    if ( !rmrr_dmi_checked )
+    {
+        dmi_check_system(rmrr_dmi_quirks);
+        rmrr_dmi_checked = 1;
+    }
+
+    return rmrr_hp_quirks(seg, bus, dev, func);
 }
