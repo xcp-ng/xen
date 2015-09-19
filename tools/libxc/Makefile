@@ -39,6 +39,7 @@ CTRL_SRCS-y       += xc_memshr.c
 CTRL_SRCS-y       += xc_hcall_buf.c
 CTRL_SRCS-y       += xc_foreign_memory.c
 CTRL_SRCS-y       += xc_kexec.c
+CTRL_SRCS-y       += xc_iommu.c
 CTRL_SRCS-y       += xc_resource.c
 CTRL_SRCS-$(CONFIG_X86) += xc_psr.c
 CTRL_SRCS-$(CONFIG_X86) += xc_pagetab.c
