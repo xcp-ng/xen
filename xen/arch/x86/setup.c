@@ -26,6 +26,7 @@
 #include <xen/nodemask.h>
 #include <xen/virtual_region.h>
 #include <xen/watchdog.h>
+#include <xen/lockdown.h>
 #include <public/version.h>
 #ifdef CONFIG_COMPAT
 #include <compat/platform.h>
