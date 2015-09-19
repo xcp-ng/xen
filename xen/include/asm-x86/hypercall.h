@@ -128,6 +128,9 @@ do_set_segment_base(
     unsigned int which,
     unsigned long base);
 
+extern long do_iommu_op(
+    XEN_GUEST_HANDLE_PARAM(void) arg, unsigned int count);
+
 #ifdef CONFIG_COMPAT
 
 #include <compat/arch-x86/xen.h>
