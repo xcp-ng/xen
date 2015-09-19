@@ -95,7 +95,8 @@ extern enum system_state {
     SYS_STATE_smp_boot,
     SYS_STATE_active,
     SYS_STATE_suspend,
-    SYS_STATE_resume
+    SYS_STATE_resume,
+    SYS_STATE_reboot,
 } system_state;
 
 bool_t is_active_kernel_text(unsigned long addr);

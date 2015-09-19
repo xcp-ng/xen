@@ -2532,7 +2532,7 @@ static int __init cf_check setup_dump_irqs(void)
 __initcall(setup_dump_irqs);
 
 /* Reset irq affinities to match the given CPU mask. */
-void fixup_irqs(const cpumask_t *mask, bool verbose)
+void fixup_irqs(const cpumask_t *mask)
 {
     unsigned int irq;
     static int warned;
@@ -2636,7 +2636,8 @@ void fixup_irqs(const cpumask_t *mask, bool verbose)
 
         spin_unlock(&desc->lock);
 
-        if ( !verbose )
+        if ( system_state == SYS_STATE_reboot ||
+             system_state == SYS_STATE_suspend )
             continue;
 
         if ( !set_affinity )
