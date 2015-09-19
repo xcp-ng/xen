@@ -22,6 +22,11 @@
 #include <xen/virtual_region.h>
 #include <xen/vmap.h>
 #include <xen/wait.h>
+#include <xen/mpi.h>
+#include <xen/sha2.h>
+#include <xen/rsa.h>
+#include <xen/param.h>
+#include <xen/lockdown.h>
 #include <xen/livepatch_elf.h>
 #include <xen/livepatch.h>
 #include <xen/livepatch_payload.h>
@@ -72,6 +77,17 @@ static struct livepatch_work livepatch_work;
  */
 static DEFINE_PER_CPU(bool, work_to_do);
 static DEFINE_PER_CPU(struct tasklet, livepatch_tasklet);
+
+
+static int check_signature(const struct livepatch_elf *elf, void *raw, uint64_t size);
+
+
+#ifdef CONFIG_PAYLOAD_SIGNING
+/* The public key contained with Xen used to verify payload signatures. */
+extern const uint8_t xen_livepatch_key_data[];
+static struct rsa_public_key builtin_payload_key;
+#endif
+
 
 static int get_name(const struct xen_livepatch_name *name, char *n)
 {
@@ -523,11 +539,15 @@ static int check_special_sections(const struct livepatch_elf *elf)
 {
     unsigned int i;
     static const char *const names[] = { ELF_LIVEPATCH_DEPENDS,
-                                         ELF_BUILD_ID_NOTE};
+                                         ELF_BUILD_ID_NOTE,
+                                         ELF_XEN_SIGNATURE};
 
     for ( i = 0; i < ARRAY_SIZE(names); i++ )
     {
         const struct livepatch_elf_sec *sec;
+
+        if ( !strcmp(names[i], ELF_XEN_SIGNATURE) && !is_locked_down() )
+            continue;
 
         sec = livepatch_elf_sec_by_name(elf, names[i]);
         if ( !sec )
@@ -1095,6 +1115,10 @@ static int load_payload_data(struct payload *payload, void *raw, size_t len)
     if ( rc )
        goto out;
 
+    rc = check_signature(&elf, raw, len);
+    if ( rc && is_locked_down() )
+        goto out;
+
     rc = move_payload(payload, &elf);
     if ( rc )
         goto out;
@@ -1134,6 +1158,124 @@ static int load_payload_data(struct payload *payload, void *raw, size_t len)
 
     return rc;
 }
+
+#ifdef CONFIG_PAYLOAD_SIGNING
+
+struct payload_signature {
+    uint16_t version;
+    uint8_t algo;        /* Public-key crypto algorithm */
+    uint8_t hash;        /* Digest algorithm */
+    uint32_t sig_len;    /* Length of signature data */
+};
+
+static int check_rsa_sha256_signature(void *data, size_t datalen,
+                                      void *sig, uint32_t siglen)
+{
+    struct sha2_256_state hash;
+    MPI s;
+    int ret;
+
+    s = mpi_read_raw_data(sig, siglen);
+    if ( !s )
+    {
+        printk(XENLOG_ERR LIVEPATCH "Failed to mpi_read_raw_data\n");
+        return -ENOMEM;
+    }
+
+    sha2_256_init(&hash);
+
+    sha2_256_update(&hash, data, datalen);
+
+    ret = rsa_sha256_verify(&builtin_payload_key, &hash, s);
+    if (ret)
+        printk(XENLOG_ERR LIVEPATCH "rsa_sha256_verify failed: %d\n", ret);
+    mpi_free(s);
+    return ret;
+}
+
+static int check_signature(const struct livepatch_elf *elf, void *raw, size_t size)
+{
+    static const char notename[] = "Xen";
+    struct payload_signature *siginfo;
+    livepatch_elf_note note;
+    size_t nsize;
+    int rc;
+
+    rc = livepatch_elf_note_by_names(elf, ELF_XEN_SIGNATURE, notename, 0, &note);
+    if ( rc )
+    {
+        printk(XENLOG_ERR LIVEPATCH "Note section not found! err = %d\n", rc);
+        return rc;
+    }
+
+    /* We expect only one signature, find a second is an error! */
+    rc = livepatch_elf_next_note_by_name(notename, 0, &note);
+    if ( rc != -ENOENT )
+    {
+        if ( rc )
+        {
+            printk(XENLOG_ERR LIVEPATCH "Error while checking for notes! err = %d\n", rc);
+            return rc;
+        }
+        else
+        {
+            printk(XENLOG_ERR LIVEPATCH "Error, found second signature note! There can be only one!\n");
+            return -EINVAL;
+        }
+    }
+
+    nsize = note.size;
+    if ( nsize <= sizeof(*siginfo) )
+    {
+        printk(XENLOG_ERR LIVEPATCH "Payload signature too small.\n");
+        return -EINVAL;
+    }
+
+    siginfo = xmalloc_bytes(nsize);
+    if ( siginfo == NULL )
+        return -ENOMEM;
+
+    memcpy(siginfo, note.data, nsize);
+
+    if ( siginfo->version != SIGNATURE_SUPPORTED_VERSION )
+    {
+       printk(XENLOG_ERR LIVEPATCH "Bad signature version %d\n", siginfo->version);
+       rc = -EINVAL;
+       goto out;
+    }
+
+    if ( siginfo->sig_len == 0 ||
+       nsize - sizeof(*siginfo) < siginfo->sig_len )
+    {
+       printk(XENLOG_ERR LIVEPATCH "Payload signature size bad. ns=%"PRIx64" si=%d\n",
+              nsize, siginfo->sig_len);
+       rc = -EINVAL;
+       goto out;
+    }
+
+    if ( siginfo->algo != SIGNATURE_ALGORITHM_RSA ||
+         siginfo->hash != SIGNATURE_HASH_SHA256 )
+    {
+        printk(XENLOG_ERR LIVEPATCH "Bad payload signature. (v:%x, a:%x, h:%x)\n",
+               siginfo->version, siginfo->algo, siginfo->hash);
+        rc = -EINVAL;
+        goto out;
+    }
+
+    /* Remove signature form data, as can't be verified with it. */
+    memset((void *)note.data + sizeof(*siginfo), 0, siginfo->sig_len);
+    rc = check_rsa_sha256_signature(raw, size, siginfo + 1, siginfo->sig_len);
+out:
+    xfree(siginfo);
+    return rc;
+
+}
+#else
+static int check_signature(const struct livepatch_elf *elf, void *raw, uint64_t size)
+{
+    return -EINVAL;
+}
+#endif
 
 static int livepatch_upload(struct xen_sysctl_livepatch_upload *upload)
 {
@@ -2239,6 +2381,34 @@ static void cf_check livepatch_printall(unsigned char key)
     spin_unlock(&payload_lock);
 }
 
+#ifdef CONFIG_PAYLOAD_SIGNING
+static int __init load_builtin_payload_key(void)
+{
+    const uint8_t *ptr;
+    uint32_t len;
+
+    rsa_public_key_init(&builtin_payload_key);
+
+    ptr = xen_livepatch_key_data;
+
+    memcpy(&len, ptr, sizeof(len));
+    ptr += sizeof(len);
+    builtin_payload_key.n = mpi_read_raw_data(ptr, len);
+    ptr += len;
+
+    memcpy(&len, ptr, sizeof(len));
+    ptr += sizeof(len);
+    builtin_payload_key.e = mpi_read_raw_data(ptr, len);
+
+    return rsa_public_key_prepare(&builtin_payload_key);
+}
+#else
+static int __init load_builtin_payload_key(void)
+{
+    return 0;
+}
+#endif
+
 static int cf_check cpu_callback(
     struct notifier_block *nfb, unsigned long action, void *hcpu)
 {
@@ -2257,6 +2427,11 @@ static struct notifier_block cpu_nfb = {
 static int __init cf_check livepatch_init(void)
 {
     unsigned int cpu;
+    int err;
+
+    err = load_builtin_payload_key();
+    if (err)
+        return err;
 
     for_each_online_cpu ( cpu )
     {

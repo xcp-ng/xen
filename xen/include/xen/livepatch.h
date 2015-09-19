@@ -38,6 +38,7 @@ struct xen_sysctl_livepatch_op;
 #define ELF_LIVEPATCH_DEPENDS     ".livepatch.depends"
 #define ELF_LIVEPATCH_XEN_DEPENDS ".livepatch.xen_depends"
 #define ELF_BUILD_ID_NOTE         ".note.gnu.build-id"
+#define ELF_XEN_SIGNATURE         ".note.Xen.signature"
 #define ELF_LIVEPATCH_LOAD_HOOKS      ".livepatch.hooks.load"
 #define ELF_LIVEPATCH_UNLOAD_HOOKS    ".livepatch.hooks.unload"
 #define ELF_LIVEPATCH_PREAPPLY_HOOK   ".livepatch.hooks.preapply"
@@ -48,6 +49,10 @@ struct xen_sysctl_livepatch_op;
 #define ELF_LIVEPATCH_POSTREVERT_HOOK ".livepatch.hooks.postrevert"
 /* Arbitrary limit for payload size and .bss section size. */
 #define LIVEPATCH_MAX_SIZE     MB(2)
+
+#define SIGNATURE_SUPPORTED_VERSION 1
+#define SIGNATURE_ALGORITHM_RSA 0
+#define SIGNATURE_HASH_SHA256 0
 
 struct livepatch_symbol {
     const char *name;

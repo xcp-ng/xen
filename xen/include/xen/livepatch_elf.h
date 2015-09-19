@@ -39,6 +39,16 @@ struct livepatch_elf {
     unsigned int symtab_idx;
 };
 
+typedef struct {
+    uint32_t size;                       /* Note size */
+    uint32_t type;                       /* Note type */
+    const void *data;                    /* Pointer to note */
+
+    /* Private */
+    const Elf_Note *next;
+    const void *end;
+} livepatch_elf_note;
+
 const struct livepatch_elf_sec *
 livepatch_elf_sec_by_name(const struct livepatch_elf *elf,
                           const char *name);
@@ -47,6 +57,14 @@ void livepatch_elf_free(struct livepatch_elf *elf);
 
 int livepatch_elf_resolve_symbols(struct livepatch_elf *elf);
 int livepatch_elf_perform_relocs(struct livepatch_elf *elf);
+
+int livepatch_elf_note_by_names(const struct livepatch_elf *elf,
+                                const char *sec_name,
+                                const char *note_name, const int type,
+                                livepatch_elf_note *note);
+int livepatch_elf_next_note_by_name( const char *note_name, const int type,
+                                     livepatch_elf_note *note);
+
 
 static inline bool livepatch_elf_ignore_section(const Elf_Shdr *sec)
 {

@@ -8,6 +8,60 @@
 #include <xen/livepatch_elf.h>
 #include <xen/livepatch.h>
 
+
+int livepatch_elf_note_by_names(const struct livepatch_elf *elf,
+                        const char *sec_name,
+                        const char *note_name, const int type,
+                        livepatch_elf_note *note)
+{
+     const struct livepatch_elf_sec *sec = livepatch_elf_sec_by_name(elf, sec_name);
+     if ( !sec )
+           return -ENOENT;
+
+     note->end = sec->addr + sec->sec->sh_size;
+     note->next = sec->addr;
+
+     return livepatch_elf_next_note_by_name(note_name, type, note);
+}
+
+int livepatch_elf_next_note_by_name(const char *note_name, const int type,
+                                    livepatch_elf_note *note)
+{
+     const Elf_Note *pkd_note = note->next;
+     size_t notenamelen = strlen(note_name) + 1;
+     size_t note_hd_size;
+     size_t note_size;
+     size_t remaining;
+     while ( (void *) pkd_note < note->end )
+     {
+
+         remaining = note->end - (void *) pkd_note;
+         if ( remaining < sizeof(livepatch_elf_note) )
+             return -EINVAL;
+
+         note_hd_size = sizeof(Elf_Note) + ( ( pkd_note->namesz + 3 ) & ~0x3 );
+         note_size = note_hd_size + ( ( pkd_note->descsz + 3 ) & ~0x3);
+         if ( remaining < note_size )
+             return -EINVAL;
+
+         if ( (notenamelen == pkd_note->namesz) &&
+              (pkd_note->namesz == 0 ||
+              memcmp(note_name, (const void *) pkd_note + sizeof(Elf_Note), notenamelen) == 0) &&
+              (type == -1 || pkd_note->type == type) )
+         {
+                 /* MATCH */
+                 note->size = pkd_note->descsz;
+                 note->type = pkd_note->type;
+                 note->data = (void*) pkd_note + note_hd_size;
+                 note->next = (void*) pkd_note + note_size;
+                 return 0;
+         }
+         pkd_note = (Elf_Note *) ((void*) pkd_note + note_size);
+     }
+     return -ENOENT;
+
+}
+
 const struct livepatch_elf_sec *
 livepatch_elf_sec_by_name(const struct livepatch_elf *elf,
                           const char *name)

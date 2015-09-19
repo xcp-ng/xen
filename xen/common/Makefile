@@ -29,6 +29,7 @@ obj-$(CONFIG_LLC_COLORING) += llc-coloring.o
 obj-y += lockdown.o
 obj-$(CONFIG_MEM_ACCESS) += mem_access.o
 obj-y += memory.o
+obj-$(CONFIG_PAYLOAD_SIGNING) += mpi.o
 obj-y += multicall.o
 obj-y += notifier.o
 obj-$(CONFIG_NUMA) += numa.o
