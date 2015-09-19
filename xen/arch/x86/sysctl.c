@@ -309,6 +309,55 @@ long arch_do_sysctl(
         break;
     }
 
+    case XEN_SYSCTL_get_cpu_policy:
+    {
+        /* Only respond to host policy requests. */
+        if ( sysctl->u.cpu_policy.index > XEN_SYSCTL_cpu_policy_host )
+        {
+            ret = -ENOSYS;
+            break;
+        }
+
+        /* Process the CPUID leaves.  None to hand back. */
+        sysctl->u.cpu_policy.nr_leaves = 0;
+        if ( __copy_field_to_guest(u_sysctl, sysctl,
+                                   u.cpu_policy.nr_leaves) )
+        {
+            ret = -EFAULT;
+            break;
+        }
+
+        /* Process the MSR entries.  Max of 1 to hand back. */
+        if ( guest_handle_is_null(sysctl->u.cpu_policy.msr_policy) )
+            sysctl->u.cpu_policy.nr_msrs = 1;
+        else if ( sysctl->u.cpu_policy.nr_msrs < 1 )
+        {
+            ret = -ENOBUFS;
+            break;
+        }
+        else if ( cpu_has_tsx_ctrl == 1 )
+        {
+            struct xen_msr_entry msr = {
+                .idx = MSR_ARCH_CAPABILITIES,
+                .val = ARCH_CAPS_TSX_CTRL,
+            };
+
+            if ( (ret = copy_to_guest_offset(sysctl->u.cpu_policy.msr_policy,
+                                             0, &msr, 1)) )
+                break;
+
+            sysctl->u.cpu_policy.nr_msrs = 1;
+        }
+        else
+            sysctl->u.cpu_policy.nr_msrs = 0;
+
+        if ( __copy_field_to_guest(u_sysctl, sysctl,
+                                   u.cpu_policy.nr_msrs)  )
+            ret = -EFAULT;
+
+        break;
+    }
+
     default:
         ret = -ENOSYS;
         break;
