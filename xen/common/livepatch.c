@@ -1044,9 +1044,6 @@ static int build_symbol_table(struct payload *payload,
             {
                 printk(XENLOG_ERR LIVEPATCH "%s: duplicate new symbol: %s\n",
                        elf->name, symtab[i].name);
-                xfree(symtab);
-                xfree(strtab);
-                return -EEXIST;
             }
             symtab[i].new_symbol = 1;
             dprintk(XENLOG_DEBUG, LIVEPATCH "%s: new symbol %s\n",
