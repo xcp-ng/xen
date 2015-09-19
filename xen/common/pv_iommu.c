@@ -21,7 +21,12 @@
 #include <asm/event.h>
 #include <xen/guest_access.h>
 #include <public/pv-iommu.h>
+#include <xsm/xsm.h>
 
+#ifdef CONFIG_X86
+#include <asm/m2b.h>
+#include <asm/setup.h>
+#endif
 #define ret_t long
 
 static int get_paged_frame(unsigned long gfn, unsigned long *frame,
@@ -79,6 +84,7 @@ void do_iommu_sub_op(struct pv_iommu_op *op)
 {
     struct domain *d = current->domain;
     struct domain *rd = NULL;
+    int ret;
 
     /* Only order 0 pages supported */
     if ( IOMMU_get_page_order(op->flags) != 0 )
@@ -182,7 +188,270 @@ void do_iommu_sub_op(struct pv_iommu_op *op)
             op->status = 0;
             break;
         }
+#ifdef CONFIG_X86
+        case IOMMUOP_map_foreign_page:
+        {
+            unsigned long mfn, tmp;
+            unsigned int flags = 0;
+            struct page_info *page = NULL;
+            struct m2b_entry *m2b_e;
+            int locked;
 
+            /* Check if calling domain can create IOMMU mappings */
+            if ( !can_use_iommu_check(d) )
+            {
+                op->status = -EPERM;
+                goto finish;
+            }
+
+
+            rd = rcu_lock_domain_by_any_id(op->u.map_foreign_page.domid);
+            if ( !rd )
+            {
+                op->status = -ENXIO;
+                goto finish;
+            }
+
+            /* Only HVM domains can have their pages foreign mapped */
+            if ( is_pv_domain(rd) )
+            {
+                op->status = -EPERM;
+                goto finish;
+            }
+
+            if ( d->domain_id == op->u.map_foreign_page.domid ||
+                    op->u.map_foreign_page.domid == DOMID_SELF )
+            {
+                op->status = -EPERM;
+                goto finish;
+            }
+
+            /* Check for privilege over remote domain*/
+            if ( xsm_iommu_control(XSM_DM_PRIV, rd, op->subop_id) )
+            {
+                op->status = -EPERM;
+                goto finish;
+            }
+
+            /* Lookup page struct backing gfn */
+            if ( get_paged_frame(op->u.map_foreign_page.gfn, &mfn, &page, 0,
+                        rd) )
+            {
+                op->status = -ENXIO;
+                goto finish;
+            }
+            /* Check M2B for existing mapping */
+            m2b_e = lookup_m2b_entry(page, d,
+                        op->u.map_foreign_page.ioserver,
+                        op->u.map_foreign_page.bfn);
+
+            /* M2B already exists for domid, gfn, ioserver combination */
+            if ( m2b_e )
+            {
+                put_page(page);
+                op->status = 0;
+                goto finish;
+            }
+
+            if ( !mfn_valid(mfn) || xen_in_range(mfn) ||
+                 is_xen_heap_page(page)  ||
+                 (page->count_info & PGC_allocated) ||
+                 ( (page->count_info & PGC_count_mask) < 2 ))
+            {
+                put_page(page);
+                op->status = -EPERM;
+                goto finish;
+            }
+
+            /* Check for conflict with existing BFN mapping */
+            if ( !iommu_lookup_page(d, op->u.map_foreign_page.bfn, &tmp) )
+            {
+                put_page(page);
+                op->status = -EPERM;
+                goto finish;
+            }
+
+            if ( op->flags & IOMMU_OP_readable )
+                flags |= IOMMUF_readable;
+
+            if ( op->flags & IOMMU_OP_writeable )
+                flags |= IOMMUF_writable;
+
+            if ( iommu_map_page(d, op->u.map_foreign_page.bfn, mfn, flags) )
+            {
+                put_page(page);
+                op->status = -EIO;
+                goto finish;
+            }
+            /* Add M2B entry */
+            locked = page_lock(page);
+            ret = add_m2b_entry(page, d,
+                        op->u.map_foreign_page.ioserver,
+                        op->u.map_foreign_page.bfn);
+            atomic_inc(&rd->m2b_count);
+            if ( locked )
+                page_unlock(page);
+            if ( ret )
+            {
+                if ( iommu_unmap_page(d, op->u.map_foreign_page.bfn) )
+                    domain_crash(d);
+
+                put_page(page);
+                op->status = -ENOMEM;
+                goto finish;
+            }
+
+            op->status = 0;
+            break;
+        }
+        case IOMMUOP_lookup_foreign_page:
+        {
+            unsigned long mfn;
+            struct page_info *page = NULL;
+            struct m2b_entry *m2b_e;
+            int rc;
+            int locked;
+
+            if ( d->domain_id == op->u.lookup_foreign_page.domid ||
+                 op->u.lookup_foreign_page.domid == DOMID_SELF )
+            {
+                op->status = -EPERM;
+                goto finish;
+            }
+
+            rd = rcu_lock_domain_by_any_id(op->u.lookup_foreign_page.domid);
+
+            if ( !rd )
+            {
+                op->status = -ENXIO;
+                goto finish;
+            }
+
+            /* Only HVM domains can have their pages foreign mapped */
+            if ( is_pv_domain(rd) )
+            {
+                op->status = -EPERM;
+                goto finish;
+            }
+
+            /* Check for privilege */
+            if ( xsm_iommu_control(XSM_DM_PRIV, rd, op->subop_id) )
+            {
+                op->status = -EPERM;
+                goto finish;
+            }
+
+            /* Lookup page struct backing gfn */
+            if ( (rc = get_paged_frame(op->u.lookup_foreign_page.gfn, &mfn, &page, 0,
+                                 rd)) )
+            {
+                op->status = -ENXIO; // Should this be something else?
+                goto finish;
+            }
+            /* Check M2B for existing mapping */
+            m2b_e = lookup_m2b_entry(page, d,
+                                     op->u.lookup_foreign_page.ioserver,
+                                     BFN_ANY);
+
+            /* M2B already exists for domid, gfn, ioserver combination */
+            if ( m2b_e )
+            {
+                put_page(page);
+                op->u.lookup_foreign_page.bfn = m2b_e->bfn;
+                op->status = 0;
+                goto finish;
+            }
+
+            /* Only create BFN mappings for guest mapped memory */
+            if ( !(page->count_info & PGC_allocated) ||
+                 ( (page->count_info & PGC_count_mask) < 2 ))
+            {
+                    put_page(page);
+                    op->status = -EPERM;
+                    goto finish;
+            }
+
+            /* Check if IOMMU is disabled/bypassed */
+            if ( !can_use_iommu_check(d) )
+            {
+                /* Add M2B entry using MFN */
+                locked = page_lock(page);
+                ret = add_m2b_entry(page, d,
+                                    op->u.lookup_foreign_page.ioserver, mfn);
+                atomic_inc(&rd->m2b_count);
+                if ( locked )
+                    page_unlock(page);
+                if ( ret )
+                {
+                   put_page(page);
+                   op->status = -ENOMEM;
+                   goto finish;
+                }
+                op->u.lookup_foreign_page.bfn = mfn;
+            }
+            op->status = 0;
+            break;
+        }
+        case IOMMUOP_unmap_foreign_page:
+        {
+            struct m2b_entry *m2b_e;
+            struct page_info *page;
+            unsigned long mfn;
+            int locked;
+
+
+            if ( !can_use_iommu_check(d) )
+            {
+                page = mfn_to_page(op->u.unmap_foreign_page.bfn);
+            }
+            else
+            {
+                /* Check if there is a valid BFN mapping for this domain */
+                if ( iommu_lookup_page(d, op->u.unmap_foreign_page.bfn, &mfn) )
+                {
+                   op->status = -ENOENT;
+                   goto finish;
+                }
+                /* Use MFN from B2M mapping to lookup page */
+                page = mfn_to_page(mfn);
+            }
+
+            if ( !page )
+            {
+               op->status = -ENOENT;
+               goto finish;
+            }
+
+            /* Try to remove the M2B mapping */
+            locked = page_lock(page);
+            ret = del_m2b_entry(page, d,
+                                op->u.unmap_foreign_page.ioserver,
+                                op->u.unmap_foreign_page.bfn);
+            atomic_dec(&page_get_owner(page)->m2b_count);
+            if ( locked )
+            page_unlock(page);
+            if ( ret )
+            {
+               op->status = -ENOENT;
+               goto finish;
+            }
+
+            if ( can_use_iommu_check(d) )
+            {
+                /* Check if there are any M2B mappings left for this domain */
+                m2b_e = lookup_m2b_entry(page, d,
+                                         IOSERVER_ANY,
+                                         op->u.unmap_foreign_page.bfn);
+
+                /* No M2B left for this bfn so IOMMU unmap it */
+                if ( !m2b_e )
+                {
+                    if ( iommu_unmap_page(d, op->u.map_foreign_page.bfn) )
+                        domain_crash(d);
+                }
+            }
+        }
+#endif
         default:
             op->status = -ENODEV;
             break;
