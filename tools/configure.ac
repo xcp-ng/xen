@@ -374,6 +374,14 @@ AC_CHECK_LIB([argp], [argp_usage], [argp_ldflags="-largp"])
 ], [AC_MSG_ERROR([Could not find argp])])
 AC_SUBST(argp_ldflags)
 
+AC_CHECK_HEADER([json/json.h], [
+    AC_DEFINE([INCLUDE_JSON_H], [<json/json.h>], [Define json header to use])
+], [
+    AC_CHECK_HEADER([json-c/json.h], [
+        AC_DEFINE([INCLUDE_JSON_H], [<json-c/json.h>], [Define json header to use])
+    ], [AC_MSG_ERROR([Could not find libjson])])
+])
+
 # FDT is needed only on ARM
 case "$host_cpu" in
 arm*|aarch64)
