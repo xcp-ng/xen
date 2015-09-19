@@ -819,6 +819,22 @@ Controls EPT related features.
 
 Specify which console gdbstub should use. See **console**.
 
+### gnttab
+> `= List of [ max_ver:<integer>, transitive ]`
+
+> Default: `gnttab=max_ver:2,no-transitive`
+
+Control various aspects of the grant table behaviour available to guests.
+
+* `max_ver` Select the maximum grant table version to offer to guests.  Valid
+version are 1 and 2.
+* `transitive` Permit or disallow the use of transitive grants.  Note that the
+use of grant table v2 without transitive grants is an ABI breakage from the
+guests point of view.
+
+*Warning:*
+Due to XSA-226, the use of transitive grants is outside of security support.
+
 ### gnttab\_max\_frames
 > `= <integer>`
 
