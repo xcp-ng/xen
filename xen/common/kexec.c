@@ -34,6 +34,7 @@
 #ifdef CONFIG_COMPAT
 #include <compat/kexec.h>
 #endif
+#include <xen/lockdown.h>
 
 bool __read_mostly kexecing;
 
@@ -1110,6 +1111,11 @@ static int kexec_load(XEN_GUEST_HANDLE_PARAM(void) uarg)
     if ( copy_from_guest(&load, uarg, 1) )
         return -EFAULT;
 
+    if ( load.type != KEXEC_TYPE_DEFAULT_EFI &&
+         load.type != KEXEC_TYPE_CRASH_EFI &&
+         is_locked_down() )
+        return -EPERM;
+
     if ( load.nr_segments >= KEXEC_SEGMENT_MAX )
         return -EINVAL;
 
@@ -1245,7 +1251,9 @@ static int do_kexec_op_internal(unsigned long op,
                 ret = kexec_get_range(uarg);
         break;
     case KEXEC_CMD_kexec_load_v1:
-        if ( compat )
+        if ( is_locked_down() )
+            ret = -EPERM;
+        else if ( compat )
             ret = kexec_load_v1_compat(uarg);
         else
             ret = kexec_load_v1(uarg);
