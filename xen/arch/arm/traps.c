@@ -1550,8 +1550,9 @@ static bool_t check_multicall_32bit_clean(struct multicall_entry *multi)
     return true;
 }
 
-enum mc_disposition do_multicall_call(struct multicall_entry *multi)
+enum mc_disposition arch_do_multicall_call(struct mc_state *state)
 {
+    struct multicall_entry *multi = &state->call;
     arm_hypercall_fn_t call = NULL;
 
     if ( multi->op >= ARRAY_SIZE(arm_hypercall_table) )
@@ -1576,7 +1577,7 @@ enum mc_disposition do_multicall_call(struct multicall_entry *multi)
                          multi->args[4]);
 
     return likely(!psr_mode_is_user(guest_cpu_user_regs()))
-           ? mc_continue : mc_preempt;
+        ? mc_continue : mc_preempt;
 }
 
 /*

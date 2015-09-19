@@ -5,7 +5,7 @@ extern enum mc_disposition {
     mc_continue,
     mc_exit,
     mc_preempt,
-} do_multicall_call(struct multicall_entry *call);
+} arch_do_multicall_call(struct mc_state *state);
 
 #endif /* __ASM_ARM_MULTICALL_H__ */
 /*
