@@ -619,6 +619,12 @@ static XSM_INLINE int xsm_vm_event_control(
     return xsm_default_action(action, current->domain, d);
 }
 
+static XSM_INLINE int xsm_iommu_control(XSM_DEFAULT_ARG struct domain *d, unsigned long op)
+{
+    XSM_ASSERT_ACTION(XSM_DM_PRIV);
+    return xsm_default_action(action, current->domain, d);
+}
+
 #ifdef CONFIG_MEM_ACCESS
 static XSM_INLINE int xsm_mem_access(XSM_DEFAULT_ARG struct domain *d)
 {
