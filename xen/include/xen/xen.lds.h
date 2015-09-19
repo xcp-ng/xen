@@ -99,7 +99,8 @@
        *(.comment.*) \
        *(.note.*)
 #else
-#define DISCARD_EFI_SECTIONS
+#define DISCARD_EFI_SECTIONS \
+       *(.sbat)
 #endif
 
 /* Sections to be discarded. */
