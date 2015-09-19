@@ -37,7 +37,7 @@ enum xsm_bootparam {
     XSM_BOOTPARAM_SILO,
 };
 
-static enum xsm_bootparam __initdata xsm_bootparam = XSM_BOOTPARAM_DUMMY;
+static enum xsm_bootparam __initdata xsm_bootparam = XSM_BOOTPARAM_SILO;
 
 static int __init parse_xsm_param(const char *s)
 {
