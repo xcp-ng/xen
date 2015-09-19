@@ -29,6 +29,7 @@
 #include <asm/p2m.h>
 #include <public/memory.h>
 #include <xsm/xsm.h>
+#include <asm/m2b.h>
 
 struct memop_args {
     /* INPUT */
@@ -331,6 +332,16 @@ int guest_remove_page(struct domain *d, unsigned long gmfn)
     if ( !rc && !is_domain_direct_mapped(d) &&
          test_and_clear_bit(_PGC_allocated, &page->count_info) )
         put_page(page);
+
+#ifdef CONFIG_X86
+    /* Check for M2B mapping */
+    if ( is_hvm_domain(d) &&
+            test_bit(_PGC_foreign_map, &page->count_info) )
+    {
+        /* Notifiy ioserver with M2B mappings */
+        notify_m2b_entries(page);
+    }
+#endif
 
     put_page(page);
     put_gfn(d, gmfn);

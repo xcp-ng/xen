@@ -65,6 +65,7 @@
 #include <compat/vcpu.h>
 #include <asm/psr.h>
 #include <asm/spec_ctrl.h>
+#include <asm/m2b.h>
 
 DEFINE_PER_CPU(struct vcpu *, curr_vcpu);
 
@@ -2645,7 +2646,7 @@ int domain_relinquish_resources(struct domain *d)
                 return ret;
         }
 
-        d->arch.relmem = RELMEM_xen;
+        d->arch.relmem = RELMEM_m2b;
 
         spin_lock(&d->page_alloc_lock);
         page_list_splice(&d->arch.relmem_list, &d->page_list);
@@ -2653,6 +2654,15 @@ int domain_relinquish_resources(struct domain *d)
         spin_unlock(&d->page_alloc_lock);
 
         /* Fallthrough. Relinquish every page of memory. */
+
+    case RELMEM_m2b:
+
+        ret = m2b_domain_destroy(d, d->m2b_destroy_mfn);
+        if ( ret )
+            return ret;
+        d->arch.relmem = RELMEM_xen;
+        /* fallthrough */
+
     case RELMEM_xen:
         ret = relinquish_memory(d, &d->xenpage_list, ~0UL);
         if ( ret )

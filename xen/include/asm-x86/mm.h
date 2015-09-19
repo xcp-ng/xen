@@ -65,6 +65,12 @@ struct page_info
          */
         struct page_sharing_info *sharing;
     };
+    /* For foreign mapped pages, we use a doubly-linked list
+     * of all the {pfn,domain, ioserver} tuples that map this page.
+     * This list is allocated and freed from a page is foreign
+     * mapped/unmapped.
+     */
+    struct pv_iommu_info *pv_iommu;
 
     /* Reference count and various PGC_xxx flags and fields. */
     unsigned long count_info;
@@ -246,8 +252,12 @@ struct page_info
 #define _PGC_pinned_by_tools PG_shift(10)
 #define PGC_pinned_by_tools PG_mask(1, 10)
 
+/* Page has foreign mappings? */
+#define _PGC_foreign_map  PG_shift(11)
+#define PGC_foreign_map   PG_mask(1, 11)
+
  /* Count of references to this frame. */
-#define PGC_count_width   PG_shift(10)
+#define PGC_count_width   PG_shift(11)
 #define PGC_count_mask    ((1UL<<PGC_count_width)-1)
 
 struct spage_info

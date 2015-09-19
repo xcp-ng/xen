@@ -483,6 +483,10 @@ struct domain
     domain_runstate_info_t runstate;
 
     unsigned int cores_per_socket;
+
+    /* Progress of cleaning m2b for domain destroy */
+    unsigned long m2b_destroy_mfn;
+    atomic_t m2b_count;
 };
 
 /* Protect updates/reads (resp.) of domain_list and domain_hash. */
