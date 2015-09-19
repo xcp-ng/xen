@@ -1659,6 +1659,8 @@ void hvm_vcpu_down(struct vcpu *v)
     for_each_vcpu ( d, v )
         if ( !(v->pause_flags & VPF_down) )
             online_count++;
+
+    vlapic_adjust_i8259_target(d);
     domain_unlock(d);
 
     /* ... Shut down the domain if not. */
