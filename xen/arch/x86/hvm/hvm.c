@@ -4998,10 +4998,15 @@ static int hvm_allow_get_param(struct domain *d,
     case HVM_PARAM_VM_GENERATION_ID_ADDR:
     case HVM_PARAM_STORE_PFN:
     case HVM_PARAM_STORE_EVTCHN:
-    case HVM_PARAM_CONSOLE_PFN:
-    case HVM_PARAM_CONSOLE_EVTCHN:
     case HVM_PARAM_ALTP2M:
     case HVM_PARAM_X87_FIP_WIDTH:
+        break;
+    case HVM_PARAM_CONSOLE_PFN:
+    case HVM_PARAM_CONSOLE_EVTCHN:
+        if ( current->domain == d &&
+             d->arch.hvm_domain.params[HVM_PARAM_CONSOLE_PFN] == 0 &&
+             d->arch.hvm_domain.params[HVM_PARAM_CONSOLE_EVTCHN] == 0 )
+            rc = -EINVAL;
         break;
     /*
      * The following parameters must not be read by the guest
