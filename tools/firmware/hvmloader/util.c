@@ -1009,6 +1009,13 @@ void hvmloader_acpi_build_tables(struct acpi_config *config,
         config->table_flags |= ACPI_HAS_TPM;
         config->tis_hdr = (uint16_t *)ACPI_TIS_HDR_ADDRESS;
         break;
+    case 2:
+        config->table_flags |= ACPI_HAS_TPM;
+        config->crb_hdr = (uint16_t *)ACPI_CRB_HDR_ADDRESS;
+
+        mem_hole_populate_ram(TPM_LOG_AREA_ADDRESS >> PAGE_SHIFT, TPM_LOG_SIZE >> PAGE_SHIFT);
+        memset((void *)(TPM_LOG_AREA_ADDRESS), 0, TPM_LOG_SIZE);
+        break;
     }
 
     config->numa.nr_vmemranges = nr_vmemranges;
