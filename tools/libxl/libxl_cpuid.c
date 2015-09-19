@@ -433,7 +433,7 @@ void libxl__cpuid_legacy(libxl_ctx *ctx, uint32_t domid,
     if (info->type == LIBXL_DOMAIN_TYPE_HVM)
         pae = libxl_defbool_val(info->u.hvm.pae);
 
-    xc_cpuid_apply_policy(ctx->xch, domid, NULL, 0, pae);
+    xc_cpuid_apply_policy(ctx->xch, domid, NULL, 0, pae, 0);
 
     if (!cpuid)
         return;
