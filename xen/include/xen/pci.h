@@ -124,6 +124,8 @@ struct pci_dev {
     uint8_t msi_maxvec;
     uint8_t phantom_stride;
 
+    uint16_t sriov_pos;
+
     nodeid_t node; /* NUMA node */
 
     /* Device to be quarantined, don't automatically re-assign to dom0 */
@@ -286,6 +288,8 @@ const char *parse_pci_seg(const char *s, unsigned int *seg_p,
 
 int check_ioports_vs_pci_bars(
     struct domain *d, unsigned int port_start, unsigned int port_end);
+int check_iomem_vs_pci_bars(
+    struct domain *d, xen_pfn_t mfn_start, xen_pfn_t mfn_end);
 
 #define PCI_BAR_VF      (1u << 0)
 #define PCI_BAR_LAST    (1u << 1)

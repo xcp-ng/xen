@@ -413,7 +413,8 @@ long do_domctl(XEN_GUEST_HANDLE_PARAM(xen_domctl_t) u_domctl)
         iocaps_double_lock(d, true);
 
         if ( !iomem_access_permitted(current->domain,
-                                     mfn, mfn + nr_mfns - 1) )
+                                     mfn, mfn + nr_mfns - 1) ||
+             check_iomem_vs_pci_bars(d, mfn, mfn + nr_mfns - 1) )
             ret = -EPERM;
         else if ( allow )
             ret = iomem_permit_access(d, mfn, mfn + nr_mfns - 1);

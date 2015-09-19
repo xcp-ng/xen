@@ -348,6 +348,9 @@ static struct pci_dev *alloc_pdev(struct pci_seg *pseg, u8 bus, u8 devfn)
         return NULL;
     }
 
+    pdev->sriov_pos =
+        pci_find_ext_capability(pdev->sbdf, PCI_EXT_CAP_ID_SRIOV);
+
     list_add(&pdev->alldevs_list, &pseg->alldevs_list);
 
     /* update bus2bridge */
@@ -579,6 +582,34 @@ struct pci_dev *pci_get_pdev(const struct domain *d, pci_sbdf_t sbdf)
     return NULL;
 }
 
+static bool is_nvidia_legacy_vgpu(uint16_t device_id)
+{
+    switch ( device_id )
+    {
+    /* list of Nvidia device IDs implementing legacy vGPU */
+    case 0x13bd: /* GM107GL [Tesla M10] */
+    case 0x13f2:
+    case 0x13f3:
+    case 0x15f7:
+    case 0x15f8:
+    case 0x15f9:
+    case 0x1b38:
+    case 0x1bb3:
+    case 0x1bb4:
+    case 0x1db1: /* GV100GL [Tesla V100-SXM2-16GB] */
+    case 0x1db3: /* GV100GL [Tesla V100-FHHL-16GB] */
+    case 0x1db4: /* GV100GL [Tesla V100-PCIE-16GB] */
+    case 0x1db5: /* GV100GL [Tesla V100-SXM2-32GB] */
+    case 0x1db6: /* GV100GL [Tesla V100-PCIE-32GB] */
+    case 0x1df6: /* GV100GL [Tesla V100S-PCIE-32GB] */
+    case 0x1e30: /* TU102GL [Quadro RTX 6000/8000] */
+    case 0x1e78: /* TU102GL [Quadro RTX 6000/8000] */
+    case 0x1eb8: /* TU104GL [Tesla T4] */
+        return true;
+    }
+    return false;
+}
+
 static bool need_cache(const struct pci_dev *pdev, unsigned int num_bars)
 {
     for ( unsigned int i = 0; i < num_bars; i++ )
@@ -586,6 +617,101 @@ static bool need_cache(const struct pci_dev *pdev, unsigned int num_bars)
             return true;
 
     return false;
+}
+
+static bool cache_virtfn(struct pci_dev *pdev)
+{
+    int vf;
+    pci_sbdf_t sbdf = pdev->sbdf;
+    unsigned int base, pos;
+    uint16_t ctrl, num_vf, offset, stride;
+
+    if ( !need_cache(pdev, PCI_SRIOV_NUM_BARS) )
+        return true;
+
+    vf = pdev->sbdf.bdf;
+    sbdf.bus = pdev->info.physfn.bus;
+    sbdf.devfn = pdev->info.physfn.devfn;
+
+    pos = pdev->pf_pdev->sriov_pos;
+    if ( !pos )
+        return false;
+
+    ctrl = pci_conf_read16(sbdf, pos + PCI_SRIOV_CTRL);
+    num_vf = pci_conf_read16(sbdf, pos + PCI_SRIOV_NUM_VF);
+    offset = pci_conf_read16(sbdf, pos + PCI_SRIOV_VF_OFFSET);
+    stride = pci_conf_read16(sbdf, pos + PCI_SRIOV_VF_STRIDE);
+
+    if ( !(ctrl & PCI_SRIOV_CTRL_VFE) ||
+         !(ctrl & PCI_SRIOV_CTRL_MSE) ||
+         !num_vf || !offset || (num_vf > 1 && !stride) )
+        return false;
+
+    base = pos + PCI_SRIOV_BAR;
+    vf -= sbdf.bdf + offset;
+    if ( vf < 0 )
+        return false;
+    if ( stride )
+    {
+        if ( vf % stride )
+            return false;
+        vf /= stride;
+    }
+    if ( vf >= num_vf )
+        return false;
+
+    for ( unsigned i = 0; i < PCI_SRIOV_NUM_BARS; i++ )
+    {
+        uint64_t addr, size;
+
+        if ( pdev->bar[i].type != PCI_BAR_TYPE_EMPTY )
+            continue;
+
+        size = pdev->pf_pdev->physfn.vf_rlen[i];
+        pdev->bar[i].type = PCI_BAR_TYPE_MEM32;
+        pdev->bar[i].size = size;
+        pdev->bar[i].addr = 0;
+        if ( !size )
+            continue;
+
+        addr = pci_conf_read32(sbdf, base + i * 4);
+        /*
+         * there should not be any I/O BAR for VF, a warning message
+         * is printed in pci_add_device.
+         */
+        if ( (addr & PCI_BASE_ADDRESS_SPACE) !=
+              PCI_BASE_ADDRESS_SPACE_MEMORY )
+        {
+            pdev->bar[i].type = PCI_BAR_TYPE_IO;
+            pdev->bar[i].size = 0;
+            continue;
+        }
+
+        if ( (addr & PCI_BASE_ADDRESS_MEM_TYPE_MASK) ==
+              PCI_BASE_ADDRESS_MEM_TYPE_64 &&
+             i < (PCI_SRIOV_NUM_BARS - 1) )
+        {
+            pdev->bar[i].type = PCI_BAR_TYPE_MEM64_LO;
+            ++i;
+            pdev->bar[i].type = PCI_BAR_TYPE_MEM64_HI;
+            pdev->bar[i].addr = 0;
+            pdev->bar[i].size = 0;
+
+            addr &= PCI_BASE_ADDRESS_MEM_MASK;
+
+            addr += vf * size +
+                ((uint64_t)pci_conf_read32(sbdf,
+                                           base + i * 4) << 32);
+            pdev->bar[i - 1].addr = addr;
+        }
+        else
+        {
+            addr = (addr & PCI_BASE_ADDRESS_MEM_MASK) + vf * size;
+            pdev->bar[i].addr = addr;
+        }
+    }
+
+    return true;
 }
 
 static bool cache_pdev(struct pci_dev *pdev)
@@ -653,6 +779,84 @@ static bool cache_pdev(struct pci_dev *pdev)
                      PCI_BAR_ROM);
 
     return true;
+}
+
+static int check_iomem_access_vgpu(
+    struct domain *d, xen_pfn_t mfn_start, xen_pfn_t mfn_end, bool vgpu)
+{
+    struct pci_dev *pdev;
+    int rc = 0;
+
+    read_lock(&d->pci_lock);
+    list_for_each_entry ( pdev, &d->pdev_list, domain_list )
+    {
+        /* filter out no vGPU if vGPU is required */
+        if ( vgpu &&
+             (pci_conf_read16(pdev->sbdf, PCI_VENDOR_ID) != PCI_VENDOR_ID_NVIDIA ||
+              !is_nvidia_legacy_vgpu(pci_conf_read16(pdev->sbdf, PCI_DEVICE_ID))) )
+            continue;
+
+        if ( pdev->info.is_virtfn )
+        {
+            if ( !cache_virtfn(pdev) )
+                continue;
+        }
+        else
+        {
+            if ( !cache_pdev(pdev) )
+                continue;
+        }
+
+        for ( unsigned i = 0; i <= PCI_HEADER_NORMAL_NR_BARS; ++i )
+        {
+            uint64_t addr, size;
+
+            if ( pdev->bar[i].type != PCI_BAR_TYPE_MEM64_LO &&
+                 pdev->bar[i].type != PCI_BAR_TYPE_MEM32 &&
+                 pdev->bar[i].type != PCI_BAR_TYPE_ROM )
+                continue;
+
+            addr = pdev->bar[i].addr;
+            size = pdev->bar[i].size;
+
+            if ( !addr || !size )
+                continue;
+
+            if ( mfn_start >= (addr >> PAGE_SHIFT) &&
+                 mfn_end <= ((addr + size - 1) >> PAGE_SHIFT) )
+                goto out;
+        }
+    }
+
+    rc = -ENOENT;
+
+out:
+    read_unlock(&d->pci_lock);
+    return rc;
+}
+
+/*
+ * When Lockdown mode is active, we further restrict MMIO mappings to being
+ * part of an BAR of an assigned device.
+ *
+ * For pre-SRIOV Nvidia graphics sharing, the GPU is owned by dom0.  Allow
+ * mappings of such devices too.
+ */
+int check_iomem_vs_pci_bars(
+    struct domain *d, xen_pfn_t mfn_start, xen_pfn_t mfn_end)
+{
+    int rc;
+
+    if ( !is_locked_down() )
+        return 0;
+
+    rc = check_iomem_access_vgpu(d, mfn_start, mfn_end, false);
+    if ( rc == 0 ||
+         current->domain == d ||
+         !is_hardware_domain(current->domain) )
+        return rc;
+
+    return check_iomem_access_vgpu(current->domain, mfn_start, mfn_end, true);
 }
 
 /*
@@ -852,8 +1056,7 @@ int pci_add_device(u16 seg, u8 bus, u8 devfn,
 
     if ( !pdev->info.is_virtfn && !pdev->physfn.vf_rlen[0] )
     {
-        unsigned int pos = pci_find_ext_capability(pdev->sbdf,
-                                                   PCI_EXT_CAP_ID_SRIOV);
+        unsigned int pos = pdev->sriov_pos;
         uint16_t ctrl = pci_conf_read16(pdev->sbdf, pos + PCI_SRIOV_CTRL);
 
         if ( !pos )

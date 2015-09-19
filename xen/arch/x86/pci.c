@@ -93,7 +93,7 @@ int pci_conf_write_intercept(unsigned int seg, unsigned int bdf,
      * Avoid expensive operations when no hook is going to do anything
      * for the access anyway.
      */
-    if ( !bar_change && (reg < 64 || reg >= 256) )
+    if ( !bar_change && reg < 64 )
         return 0;
 
     pcidevs_lock();
@@ -101,9 +101,22 @@ int pci_conf_write_intercept(unsigned int seg, unsigned int bdf,
     pdev = pci_get_pdev(NULL, PCI_SBDF(seg, bdf));
     if ( pdev )
     {
+        /* Invalidate all VFs cache if BARs are changed for PF */
+        if ( !pdev->info.is_virtfn && pdev->sriov_pos != 0 )
+        {
+            unsigned base = pdev->sriov_pos + PCI_SRIOV_BAR;
+
+            if ( reg + size > base && reg < base + PCI_SRIOV_NUM_BARS * 4 )
+            {
+                struct pci_dev *vf_pdev;
+
+                list_for_each_entry(vf_pdev, &pdev->vf_list, vf_list)
+                    pdev_invalidate_cache(vf_pdev);
+            }
+        }
         if ( bar_change )
             pdev_invalidate_cache(pdev);
-        else
+        else if ( reg >= 64 && reg < 256 )
             rc = pci_msi_conf_write_intercept(pdev, reg, size, data);
     }
 
