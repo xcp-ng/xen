@@ -10,6 +10,8 @@
 
 #include <public/sysctl.h>
 
+extern int8_t opt_avx512;
+
 extern const uint32_t known_features[FSCAPINTS];
 
 /*
