@@ -234,6 +234,7 @@ struct csched_private {
 
 static void csched_tick(void *_cpu);
 static void csched_acct(void *dummy);
+DEFINE_PER_CPU(atomic_t, runqueue_count);
 
 static inline int
 __vcpu_on_runq(struct csched_vcpu *svc)
@@ -287,6 +288,7 @@ __runq_insert(struct csched_vcpu *svc)
     }
 
     list_add_tail(&svc->runq_elem, iter);
+    atomic_inc(&per_cpu(runqueue_count, svc->vcpu->processor));
 }
 
 static inline void
@@ -294,6 +296,7 @@ __runq_remove(struct csched_vcpu *svc)
 {
     BUG_ON( !__vcpu_on_runq(svc) );
     list_del_init(&svc->runq_elem);
+    atomic_dec(&per_cpu(runqueue_count, svc->vcpu->processor));
 }
 
 
@@ -587,6 +590,7 @@ init_pdata(struct csched_private *prv, struct csched_pcpu *spc, int cpu)
     /* Start off idling... */
     BUG_ON(!is_idle_vcpu(curr_on_cpu(cpu)));
     cpumask_set_cpu(cpu, prv->idlers);
+    atomic_set(&per_cpu(runqueue_count, cpu), 0);
 }
 
 static void
@@ -1706,6 +1710,17 @@ csched_load_balance(struct csched_private *prv, int cpu,
                 goto next_node;
             do
             {
+                spinlock_t *lock;
+
+                /*
+                 * Ignore peer cpu with only one task on its runqueue,
+                 * this will race with adding/removing tasks but the
+                 * lock for the runqueue is still taken below
+                 */
+                if (atomic_read(&per_cpu(runqueue_count, peer_cpu)) < 2) {
+                    peer_cpu = cpumask_cycle(peer_cpu, &workers);
+                    continue;
+                }
                 /*
                  * Get ahold of the scheduler lock for this peer CPU.
                  *
@@ -1713,7 +1728,7 @@ csched_load_balance(struct csched_private *prv, int cpu,
                  * could cause a deadlock if the peer CPU is also load
                  * balancing and trying to lock this CPU.
                  */
-                spinlock_t *lock = pcpu_schedule_trylock(peer_cpu);
+                lock = pcpu_schedule_trylock(peer_cpu);
 
                 if ( !lock )
                 {
@@ -1944,6 +1959,7 @@ csched_dump_pcpu(const struct scheduler *ops, int cpu)
     runq = &spc->runq;
 
     cpumask_scnprintf(cpustr, sizeof(cpustr), per_cpu(cpu_sibling_mask, cpu));
+    printk(" qcnt %d", atomic_read(&per_cpu(runqueue_count, cpu)));
     printk(" sort=%d, sibling=%s, ", spc->runq_sort_last, cpustr);
     cpumask_scnprintf(cpustr, sizeof(cpustr), per_cpu(cpu_core_mask, cpu));
     printk("core=%s\n", cpustr);
