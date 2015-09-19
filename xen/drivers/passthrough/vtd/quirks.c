@@ -355,15 +355,15 @@ static void __init tylersburg_intremap_quirk(void)
             if ( rev >= 0x22 )
                 continue;
             printk(XENLOG_WARNING VTDPREFIX
-                   "Disabling IOMMU due to Intel 5500/5520 chipset errata #47 and #53\n");
-            iommu_enable = false;
+                   "Disabling Interrupt remapping due to Intel 5500/5520 chipset errata #47 and #53\n");
+            iommu_intremap = false;
             break;
 
         case 0x34058086:
             printk(XENLOG_WARNING VTDPREFIX
-                   "Disabling IOMMU due to Intel X58 chipset %s\n",
+                   "Disabling Interrupt remapping due to Intel X58 chipset %s\n",
                    rev < 0x22 ? "errata #62 and #69" : "erratum #69");
-            iommu_enable = false;
+            iommu_intremap = false;
             break;
         }
 
