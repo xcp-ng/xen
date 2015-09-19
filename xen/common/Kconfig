@@ -587,4 +587,12 @@ config BUDDY_ALLOCATOR_SIZE
 	  Amount of memory reserved for the buddy allocator to serve Xen heap,
 	  working alongside the colored one.
 
+config LOCKDOWN_DEFAULT
+	bool "Enable lockdown mode by default"
+	default n
+	help
+	  Lockdown mode prevents attacks from a rogue dom0 userspace from
+	  compromising the system. This is automatically enabled when Secure
+	  Boot is enabled.
+
 endmenu
