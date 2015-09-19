@@ -46,6 +46,7 @@
 #include <xen/xsm/flask_op.h>
 #include <xen/kexec.h>
 #include <xen/platform.h>
+#include <xen/pv-iommu.h>
 
 #include "xentoollog.h"
 
@@ -2469,6 +2470,8 @@ int xc_kexec_unload(xc_interface *xch, int type);
  * Otherwise, negative return value indicates error.
  */
 int xc_kexec_status(xc_interface *xch, int type);
+
+int xc_iommu_op(xc_interface *xch, struct pv_iommu_op *ops, unsigned int count);
 
 typedef xenpf_resource_entry_t xc_resource_entry_t;
 
