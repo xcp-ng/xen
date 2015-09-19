@@ -2751,6 +2751,9 @@ void fixup_irqs(void)
 
         spin_unlock(&desc->lock);
 
+	if ( system_state == SYS_STATE_suspend )
+            continue;
+
         if ( !set_affinity )
             printk("Cannot set affinity for IRQ%u\n", irq);
         else if ( break_affinity )
