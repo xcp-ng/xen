@@ -349,6 +349,8 @@ struct vm_event_domain
 
 struct evtchn_port_ops;
 
+typedef struct xen_domctl_runstate_info domain_runstate_info_t;
+
 struct domain
 {
     domid_t          domain_id;
@@ -549,6 +551,11 @@ struct domain
     /* Argo interdomain communication support */
     struct argo_domain *argo;
 #endif
+
+    /* Domain runstates */
+    spinlock_t runstate_lock;
+    atomic_t runstate_missed_changes;
+    domain_runstate_info_t runstate;
 };
 
 /* Protect updates/reads (resp.) of domain_list and domain_hash. */
@@ -959,6 +966,8 @@ int vcpu_set_soft_affinity(struct vcpu *v, const cpumask_t *affinity);
 void restore_vcpu_affinity(struct domain *d);
 
 void vcpu_runstate_get(struct vcpu *v, struct vcpu_runstate_info *runstate);
+void domain_runstate_get(struct domain *d, domain_runstate_info_t *runstate);
+
 uint64_t get_cpu_idle_time(unsigned int cpu);
 void sched_guest_idle(void (*idle) (void), unsigned int cpu);
 void scheduler_enable(void);
