@@ -80,6 +80,7 @@ struct acpi_config {
 
     uint8_t tpm_version;
     const uint16_t *tis_hdr;
+    const uint16_t *crb_hdr;
     /*
      * Address where acpi_info should be placed.
      * This must match the OperationRegion(BIOS, SystemMemory, ....)
