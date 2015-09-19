@@ -1324,6 +1324,10 @@ void vlapic_adjust_i8259_target(struct domain *d)
         if ( __vlapic_accept_pic_intr(v) )
             goto found;
 
+    for_each_vcpu ( d, v )
+        if ( is_vcpu_online(v) )
+            goto found;
+
     v = d->vcpu ? d->vcpu[0] : NULL;
 
  found:
