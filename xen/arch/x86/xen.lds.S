@@ -366,6 +366,8 @@ SECTIONS
   PROVIDE(ALT_START = 0);
   VIRT_START &= 0;
   ALT_START &= 0;
+
+  .sbat (NOLOAD) : { *(.sbat) }
 #elif defined(XEN_BUILD_EFI)
   /*
    * Due to the way EFI support is currently implemented, these two symbols
