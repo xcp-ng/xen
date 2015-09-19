@@ -77,6 +77,7 @@ void iommu_teardown(struct domain *d);
 int iommu_map_page(struct domain *d, unsigned long gfn, unsigned long mfn,
                    unsigned int flags);
 int iommu_unmap_page(struct domain *d, unsigned long gfn);
+int iommu_lookup_page(struct domain *d, unsigned long bfn, unsigned long *mfn);
 
 enum iommu_feature
 {
@@ -169,6 +170,7 @@ struct iommu_ops {
     int (*map_page)(struct domain *d, unsigned long gfn, unsigned long mfn,
                     unsigned int flags);
     int (*unmap_page)(struct domain *d, unsigned long gfn);
+    int (*lookup_page)(struct domain *d, unsigned long bfn, unsigned long *mfn);
     void (*free_page_table)(struct page_info *);
 #ifdef CONFIG_X86
     void (*update_ire_from_apic)(unsigned int apic, unsigned int reg, unsigned int value);
