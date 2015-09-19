@@ -59,6 +59,9 @@ SECTIONS
   __image_base__ = .;
 #else
   . = __image_base__;
+  /DISCARD/ : {
+    *(.text.header)
+  }
 #endif
 
 #if 0
