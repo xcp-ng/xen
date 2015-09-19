@@ -2012,47 +2012,51 @@ void page_unlock(struct page_info *page)
 
 /* How to write an entry to the guest pagetables.
  * Returns 0 for failure (pointer not valid), 1 for success. */
-static inline int update_intpte(intpte_t *p, 
-                                intpte_t old, 
-                                intpte_t new,
-                                unsigned long mfn,
-                                struct vcpu *v,
-                                int preserve_ad)
+static inline int _update_intpte(
+    intpte_t *p, intpte_t *old, intpte_t new,
+    unsigned long mfn, struct vcpu *v, int preserve_ad, int use_cmpxchg)
 {
     int rv = 1;
 #ifndef PTE_UPDATE_WITH_CMPXCHG
-    if ( !preserve_ad )
+    if ( !preserve_ad && !use_cmpxchg )
     {
         rv = paging_write_guest_entry(v, p, new, _mfn(mfn));
     }
     else
 #endif
     {
-        intpte_t t = old;
+        intpte_t t = *old;
         for ( ; ; )
         {
             intpte_t _new = new;
             if ( preserve_ad )
-                _new |= old & (_PAGE_ACCESSED | _PAGE_DIRTY);
+                _new |= *old & (_PAGE_ACCESSED | _PAGE_DIRTY);
 
             rv = paging_cmpxchg_guest_entry(v, p, &t, _new, _mfn(mfn));
             if ( unlikely(rv == 0) )
             {
                 MEM_LOG("Failed to update %" PRIpte " -> %" PRIpte
-                        ": saw %" PRIpte, old, _new, t);
+                        ": saw %" PRIpte, *old, _new, t);
                 break;
             }
 
-            if ( t == old )
+            if ( t == *old )
                 break;
 
             /* Allowed to change in Accessed/Dirty flags only. */
-            BUG_ON((t ^ old) & ~(intpte_t)(_PAGE_ACCESSED|_PAGE_DIRTY));
+            BUG_ON((t ^ *old) & ~(intpte_t)(_PAGE_ACCESSED|_PAGE_DIRTY));
 
-            old = t;
+            *old = t;
         }
     }
     return rv;
+}
+
+static inline int update_intpte(
+    intpte_t *p, intpte_t old, intpte_t new,
+    unsigned long mfn, struct vcpu *v, int preserve_ad)
+{
+    return _update_intpte(p, &old, new, mfn, v, preserve_ad, 0);
 }
 
 /* Macro that wraps the appropriate type-changes around update_intpte().
@@ -4348,7 +4352,7 @@ static int destroy_grant_pte_mapping(
     }
 
     if ( unlikely((l1e_get_flags(ol1e) ^ grant_pte_flags) &
-                  ~(_PAGE_AVAIL | PAGE_CACHE_ATTRS)) )
+                  ~(_PAGE_AVAIL | PAGE_CACHE_ATTRS | _PAGE_ACCESSED | _PAGE_DIRTY)) )
         MEM_LOG("PTE flags %x at %"PRIx64" don't match grant (%x)\n",
                 l1e_get_flags(ol1e), addr, grant_pte_flags);
 
@@ -4429,7 +4433,7 @@ static int create_grant_va_mapping(
 
 static int replace_grant_va_mapping(
     unsigned long addr, unsigned long frame, unsigned int grant_pte_flags,
-    l1_pgentry_t nl1e, struct vcpu *v)
+    l1_pgentry_t nl1e, struct vcpu *v, int *page_accessed)
 {
     l1_pgentry_t *pl1e, ol1e;
     unsigned long gl1mfn;
@@ -4481,17 +4485,27 @@ static int replace_grant_va_mapping(
     }
 
     if ( unlikely((l1e_get_flags(ol1e) ^ grant_pte_flags) &
-                  ~(_PAGE_AVAIL | PAGE_CACHE_ATTRS)) )
+                  ~(_PAGE_AVAIL | PAGE_CACHE_ATTRS | _PAGE_ACCESSED | _PAGE_DIRTY)) )
         MEM_LOG("PTE flags %x for %"PRIx64" don't match grant (%x)",
                 l1e_get_flags(ol1e), addr, grant_pte_flags);
 
     /* Delete pagetable entry. */
-    if ( unlikely(!UPDATE_ENTRY(l1, pl1e, ol1e, nl1e, gl1mfn, v, 0)) )
+    if ( unlikely(!_update_intpte(&pl1e->l1, &ol1e.l1, nl1e.l1, gl1mfn, v, 0, 1)) )
     {
         MEM_LOG("Cannot delete PTE entry for %"PRIx64, addr);
         rc = GNTST_general_error;
         goto unlock_and_out;
     }
+
+    /*
+     * Calculate a synthetic _PAGE_ACCESSED bit, which controls whether the
+     * TLB flush is performed or skipped for grant unmap.
+     *
+     * Note: The use of a locked cmpxchg makes this is safe on AMD processors,
+     * as locked accesses are ordered WRT the pagewalk, unlike normal
+     * accesses.
+     */
+    *page_accessed = !!(l1e_get_flags(ol1e) & _PAGE_ACCESSED);
 
  unlock_and_out:
     page_unlock(l1pg);
@@ -4503,10 +4517,10 @@ static int replace_grant_va_mapping(
 
 static int destroy_grant_va_mapping(
     unsigned long addr, unsigned long frame, unsigned int grant_pte_flags,
-    struct vcpu *v)
+    struct vcpu *v, int *page_accessed)
 {
     return replace_grant_va_mapping(addr, frame, grant_pte_flags,
-                                    l1e_empty(), v);
+                                    l1e_empty(), v, page_accessed);
 }
 
 static int create_grant_p2m_mapping(uint64_t addr, unsigned long frame,
@@ -4541,7 +4555,7 @@ int create_grant_host_mapping(uint64_t addr, unsigned long frame,
         return create_grant_p2m_mapping(addr, frame, flags, cache_flags);
 
     grant_pte_flags =
-        _PAGE_PRESENT | _PAGE_ACCESSED | _PAGE_DIRTY | _PAGE_GNTTAB;
+        _PAGE_PRESENT | _PAGE_GNTTAB;
     if ( cpu_has_nx )
         grant_pte_flags |= _PAGE_NX_BIT;
 
@@ -4592,7 +4606,8 @@ static int replace_grant_p2m_mapping(
 }
 
 int replace_grant_host_mapping(
-    uint64_t addr, unsigned long frame, uint64_t new_addr, unsigned int flags)
+    uint64_t addr, unsigned long frame, uint64_t new_addr, unsigned int flags,
+    int *page_accessed)
 {
     struct vcpu *curr = current;
     l1_pgentry_t *pl1e, ol1e;
@@ -4632,7 +4647,8 @@ int replace_grant_host_mapping(
     }
 
     if ( !new_addr )
-        return destroy_grant_va_mapping(addr, frame, grant_pte_flags, curr);
+        return destroy_grant_va_mapping(addr, frame, grant_pte_flags,
+                                        curr, page_accessed);
 
     pl1e = guest_map_l1e(new_addr, &gl1mfn);
     if ( !pl1e )
@@ -4680,7 +4696,8 @@ int replace_grant_host_mapping(
     put_page(l1pg);
     guest_unmap_l1e(pl1e);
 
-    rc = replace_grant_va_mapping(addr, frame, grant_pte_flags, ol1e, curr);
+    rc = replace_grant_va_mapping(addr, frame, grant_pte_flags,
+                                  ol1e, curr, page_accessed);
     if ( rc && !paging_mode_refcounts(curr->domain) )
         put_page_from_l1e(ol1e, curr->domain);
 
