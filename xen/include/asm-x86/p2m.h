@@ -174,7 +174,8 @@ typedef unsigned int p2m_query_t;
 
 #define p2m_is_any_ram(_t)  (p2m_to_mask(_t) &                   \
                              (P2M_RAM_TYPES | P2M_GRANT_TYPES |  \
-                              p2m_to_mask(p2m_map_foreign)))
+                              p2m_to_mask(p2m_map_foreign) |     \
+                              p2m_to_mask(p2m_mmio_write_dm)) )
 
 #define p2m_allows_invalid_mfn(t) (p2m_to_mask(t) & P2M_INVALID_MFN_TYPES)
 
