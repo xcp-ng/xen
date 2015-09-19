@@ -277,6 +277,7 @@ ret_t do_platform_op(XEN_GUEST_HANDLE_PARAM(xen_platform_op_t) u_xenpf_op)
     }
     break;
 
+#if 0 /* Currently unsafe to use, not trivial to fix, and not needed. */
     case XENPF_microcode_update:
     {
         XEN_GUEST_HANDLE(const_void) data;
@@ -303,6 +304,7 @@ ret_t do_platform_op(XEN_GUEST_HANDLE_PARAM(xen_platform_op_t) u_xenpf_op)
         spin_unlock(&vcpu_alloc_lock);
     }
     break;
+#endif
 
     case XENPF_platform_quirk:
     {
