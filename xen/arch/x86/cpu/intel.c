@@ -364,6 +364,38 @@ static void probe_c3_errata(const struct cpuinfo_x86 *c)
 }
 
 /*
+ * Detect Intel Nehalem CPU's with C-states enabled and restrict to C1 due to
+ * Intel Errata BA80, AAK120, AAM108, AAO67, BD59, AAY54
+ */
+static void nehalem_cpu_cstate_workaround(struct cpuinfo_x86 *c)
+{
+    static bool_t nehalem_cstate_errata_workaround_warning = 0;
+
+    if ( c->x86_vendor == X86_VENDOR_INTEL && c->x86 == 6 )
+    {
+        switch ( c->x86_model )
+        {
+        /* Nehalem */
+        case 0x1A:
+        case 0x1E:
+        case 0x1F:
+        case 0x2E:
+        /* Westmere */
+        case 0x25:
+        case 0x2C:
+            if ( !nehalem_cstate_errata_workaround_warning )
+            {
+                printk(XENLOG_WARNING "Disabling C-states C3 and C6 on Nehalem"
+                        " Processors due to errata\n");
+                nehalem_cstate_errata_workaround_warning = 1;
+            }
+            max_cstate = 1;
+            break;
+        }
+    }
+}
+
+/*
  * P4 Xeon errata 037 workaround.
  * Hardware prefetcher may cause stale data to be loaded into the cache.
  *
@@ -389,6 +421,8 @@ static void Intel_errata_workarounds(struct cpuinfo_x86 *c)
 		__set_bit(X86_FEATURE_CLFLUSH_MONITOR, c->x86_capability);
 
 	probe_c3_errata(c);
+
+	nehalem_cpu_cstate_workaround(c);
 }
 
 
