@@ -283,7 +283,14 @@
  */
 #define XS_ELFNOTE_PV_IOMMU               0
 
-#define XS_ELFNOTE_MAX XS_ELFNOTE_PV_IOMMU
+/*
+ * If this is present, Dom0 support hypercall filtering,
+ * needed for Secure Boot.
+ * The number contains a version of the filter.
+ */
+#define XS_ELFNOTE_PRIVCMD_FILTERING      1
+
+#define XS_ELFNOTE_MAX XS_ELFNOTE_PRIVCMD_FILTERING
 
 #endif /* __XEN_PUBLIC_ELFNOTE_H__ */
 

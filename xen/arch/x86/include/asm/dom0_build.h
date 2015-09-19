@@ -8,6 +8,8 @@
 
 extern unsigned int dom0_memflags;
 
+int dom0_check_parms(const struct elf_dom_parms *parms,
+                     bool is_pv_shim);
 unsigned long dom0_compute_nr_pages(struct domain *d,
                                     struct elf_dom_parms *parms,
                                     unsigned long initrd_len);

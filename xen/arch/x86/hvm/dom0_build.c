@@ -697,6 +697,9 @@ static int __init pvh_load_kernel(
     if ( !check_and_adjust_load_address(d, &elf, &parms) )
         return -ENOSPC;
 
+    if ( (rc = dom0_check_parms(&parms, false)) != 0 )
+        return rc;
+
     elf_set_vcpu(&elf, v);
     rc = elf_load_binary(&elf);
     if ( rc < 0 )
