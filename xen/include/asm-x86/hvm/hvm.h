@@ -624,6 +624,8 @@ static inline bool hvm_altp2m_supported(void)
     return hvm_funcs.altp2m_supported;
 }
 
+extern bool_t opt_pod_enabled;
+
 /* updates the current hardware p2m */
 static inline void altp2m_vcpu_update_p2m(struct vcpu *v)
 {
