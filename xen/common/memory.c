@@ -1165,6 +1165,10 @@ long do_memory_op(unsigned long cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
         if ( unlikely(start_extent >= reservation.nr_extents) )
             return start_extent;
 
+        if ( unlikely(!opt_pod_enabled) &&
+             (reservation.mem_flags & XENMEMF_populate_on_demand) )
+            return start_extent;
+
         d = rcu_lock_domain_by_any_id(reservation.domid);
         if ( d == NULL )
             return start_extent;
