@@ -34,6 +34,12 @@ extern bool_t opt_hvm_fep;
 #define opt_hvm_fep 0
 #endif
 
+#ifdef CONFIG_HVM
+extern bool opt_pod_enabled;
+#else
+#define opt_pod_enabled false
+#endif
+
 /* Interrupt acknowledgement sources. */
 enum hvm_intsrc {
     hvm_intsrc_none,
