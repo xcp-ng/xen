@@ -97,6 +97,9 @@ unsigned long __section(".bss.page_aligned") __aligned(PAGE_SIZE)
 static bool_t __initdata opt_hap_enabled = 1;
 boolean_param("hap", opt_hap_enabled);
 
+bool opt_pod_enabled = true;
+boolean_param("pod", opt_pod_enabled);
+
 #ifndef opt_hvm_fep
 /* Permit use of the Forced Emulation Prefix in HVM guests */
 bool_t __read_mostly opt_hvm_fep;
