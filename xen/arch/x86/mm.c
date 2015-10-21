@@ -4945,6 +4945,12 @@ long arch_memory_op(unsigned long cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
 
         if ( cmd == XENMEM_set_pod_target )
         {
+            if ( unlikely(!opt_pod_enabled) )
+            {
+                rc = -EOPNOTSUPP;
+                goto pod_target_out_unlock;
+            }
+
             if ( target.target_pages > d->max_pages )
             {
                 rc = -EINVAL;
