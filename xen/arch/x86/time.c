@@ -1182,18 +1182,11 @@ static void __get_cmos_time(struct rtc_time *rtc)
 
 static unsigned long get_cmos_time(void)
 {
-    unsigned long res, flags;
+    unsigned long flags;
     struct rtc_time rtc;
     unsigned int seconds = 60;
     static bool __read_mostly cmos_rtc_probe;
     boolean_param("cmos-rtc-probe", cmos_rtc_probe);
-
-    if ( efi_enabled(EFI_RS) )
-    {
-        res = efi_get_time();
-        if ( res )
-            return res;
-    }
 
     if ( likely(!(acpi_gbl_FADT.boot_flags & ACPI_FADT_NO_CMOS_RTC)) )
         cmos_rtc_probe = false;
