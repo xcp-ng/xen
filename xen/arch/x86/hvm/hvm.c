@@ -4367,8 +4367,14 @@ int hvm_do_hypercall(struct cpu_user_regs *regs)
     switch ( mode )
     {
     case 8:        
+        if ( opt_introspection_extn && eax == __HYPERVISOR_hvm_op &&
+             regs->rdi == HVMOP_guest_request_vm_event )
+            break;
     case 4:
     case 2:
+        if ( opt_introspection_extn && eax == __HYPERVISOR_hvm_op &&
+             regs->ebx == HVMOP_guest_request_vm_event )
+            break;
         hvm_get_segment_register(curr, x86_seg_ss, &sreg);
         if ( unlikely(sreg.attr.fields.dpl) )
         {
