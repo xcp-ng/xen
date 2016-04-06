@@ -380,6 +380,7 @@ class Grub2ConfigFile(_GrubConfigFile):
             lines = buf.split("\n")
 
         in_function = False
+        in_if = False
         img = None
         title = ""
         menu_level=0
@@ -396,9 +397,18 @@ class Grub2ConfigFile(_GrubConfigFile):
             if l.startswith('function'):
                 in_function = True
                 continue
-            if in_function:
+            elif l.startswith('if'):
+                # Try to handle single-line if statements
+                if 'fi' in [i.strip() for i in l.split(';')]:
+                    continue
+
+                in_if = True
+                continue
+            if in_function or in_if:
                 if l.startswith('}'):
                     in_function = False
+                elif l.startswith('fi'):
+                    in_if = False
                 continue
 
             # new image
