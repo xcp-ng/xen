@@ -1,7 +1,7 @@
 XEN_ROOT = $(CURDIR)/../..
 include $(XEN_ROOT)/tools/Rules.mk
 
-SUBDIRS-y = common ufs reiserfs iso9660 fat zfs
+SUBDIRS-y = common ufs reiserfs iso9660 fat zfs btrfs
 SUBDIRS-$(CONFIG_X86) += xfs
 ifneq ($(EXTFS_LIBS), )
     SUBDIRS-y += ext2fs-lib
