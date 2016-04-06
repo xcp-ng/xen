@@ -70,6 +70,7 @@ BuildRequires: e2fsprogs-devel
 #libext4fs
 BuildRequires: e4fsprogs-devel
 %endif
+BuildRequires: lzo-devel
 
 # For xenguest
 BuildRequires: json-c-devel libempserver
@@ -552,6 +553,7 @@ chmod -x %{buildroot}/boot/xen-syms-*
 %endif
 
 %files dom0-libs
+%{_libdir}/fs/btrfs/fsimage.so
 %{_libdir}/fs/ext2fs-lib/fsimage.so
 %{_libdir}/fs/fat/fsimage.so
 %{_libdir}/fs/iso9660/fsimage.so
