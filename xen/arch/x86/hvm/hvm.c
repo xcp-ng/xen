@@ -794,11 +794,109 @@ static int hvm_load_tsc_adjust(struct domain *d, hvm_domain_context_t *h)
 HVM_REGISTER_SAVE_RESTORE(TSC_ADJUST, hvm_save_tsc_adjust,
                           hvm_load_tsc_adjust, 1, HVMSR_PER_VCPU);
 
+void hvm_save_one_cpu_ctxt(struct vcpu *v, struct hvm_hw_cpu *ctxt)
+{
+    struct segment_register seg;
+
+    /* Architecture-specific vmcs/vmcb bits */
+    hvm_funcs.save_cpu_ctxt(v, ctxt);
+
+    ctxt->tsc = hvm_get_guest_tsc_fixed(v, v->domain->arch.hvm.sync_tsc);
+
+    ctxt->msr_tsc_aux = hvm_msr_tsc_aux(v);
+
+    hvm_get_segment_register(v, x86_seg_idtr, &seg);
+    ctxt->idtr_limit = seg.limit;
+    ctxt->idtr_base = seg.base;
+
+    hvm_get_segment_register(v, x86_seg_gdtr, &seg);
+    ctxt->gdtr_limit = seg.limit;
+    ctxt->gdtr_base = seg.base;
+
+    hvm_get_segment_register(v, x86_seg_cs, &seg);
+    ctxt->cs_sel = seg.sel;
+    ctxt->cs_limit = seg.limit;
+    ctxt->cs_base = seg.base;
+    ctxt->cs_arbytes = seg.attr;
+
+    hvm_get_segment_register(v, x86_seg_ds, &seg);
+    ctxt->ds_sel = seg.sel;
+    ctxt->ds_limit = seg.limit;
+    ctxt->ds_base = seg.base;
+    ctxt->ds_arbytes = seg.attr;
+
+    hvm_get_segment_register(v, x86_seg_es, &seg);
+    ctxt->es_sel = seg.sel;
+    ctxt->es_limit = seg.limit;
+    ctxt->es_base = seg.base;
+    ctxt->es_arbytes = seg.attr;
+
+    hvm_get_segment_register(v, x86_seg_ss, &seg);
+    ctxt->ss_sel = seg.sel;
+    ctxt->ss_limit = seg.limit;
+    ctxt->ss_base = seg.base;
+    ctxt->ss_arbytes = seg.attr;
+
+    hvm_get_segment_register(v, x86_seg_fs, &seg);
+    ctxt->fs_sel = seg.sel;
+    ctxt->fs_limit = seg.limit;
+    ctxt->fs_base = seg.base;
+    ctxt->fs_arbytes = seg.attr;
+
+    hvm_get_segment_register(v, x86_seg_gs, &seg);
+    ctxt->gs_sel = seg.sel;
+    ctxt->gs_limit = seg.limit;
+    ctxt->gs_base = seg.base;
+    ctxt->gs_arbytes = seg.attr;
+
+    hvm_get_segment_register(v, x86_seg_tr, &seg);
+    ctxt->tr_sel = seg.sel;
+    ctxt->tr_limit = seg.limit;
+    ctxt->tr_base = seg.base;
+    ctxt->tr_arbytes = seg.attr;
+
+    hvm_get_segment_register(v, x86_seg_ldtr, &seg);
+    ctxt->ldtr_sel = seg.sel;
+    ctxt->ldtr_limit = seg.limit;
+    ctxt->ldtr_base = seg.base;
+    ctxt->ldtr_arbytes = seg.attr;
+
+    if ( v->fpu_initialised )
+    {
+        memcpy(ctxt->fpu_regs, v->arch.fpu_ctxt, sizeof(ctxt->fpu_regs));
+        ctxt->flags = XEN_X86_FPU_INITIALISED;
+    }
+
+    ctxt->rax = v->arch.user_regs.rax;
+    ctxt->rbx = v->arch.user_regs.rbx;
+    ctxt->rcx = v->arch.user_regs.rcx;
+    ctxt->rdx = v->arch.user_regs.rdx;
+    ctxt->rbp = v->arch.user_regs.rbp;
+    ctxt->rsi = v->arch.user_regs.rsi;
+    ctxt->rdi = v->arch.user_regs.rdi;
+    ctxt->rsp = v->arch.user_regs.rsp;
+    ctxt->rip = v->arch.user_regs.rip;
+    ctxt->rflags = v->arch.user_regs.rflags;
+    ctxt->r8  = v->arch.user_regs.r8;
+    ctxt->r9  = v->arch.user_regs.r9;
+    ctxt->r10 = v->arch.user_regs.r10;
+    ctxt->r11 = v->arch.user_regs.r11;
+    ctxt->r12 = v->arch.user_regs.r12;
+    ctxt->r13 = v->arch.user_regs.r13;
+    ctxt->r14 = v->arch.user_regs.r14;
+    ctxt->r15 = v->arch.user_regs.r15;
+    ctxt->dr0 = v->arch.debugreg[0];
+    ctxt->dr1 = v->arch.debugreg[1];
+    ctxt->dr2 = v->arch.debugreg[2];
+    ctxt->dr3 = v->arch.debugreg[3];
+    ctxt->dr6 = v->arch.debugreg[6];
+    ctxt->dr7 = v->arch.debugreg[7];
+}
+
 static int hvm_save_cpu_ctxt(struct domain *d, hvm_domain_context_t *h)
 {
     struct vcpu *v;
     struct hvm_hw_cpu ctxt;
-    struct segment_register seg;
 
     for_each_vcpu ( d, v )
     {
@@ -809,99 +907,7 @@ static int hvm_save_cpu_ctxt(struct domain *d, hvm_domain_context_t *h)
 
         memset(&ctxt, 0, sizeof(ctxt));
 
-        /* Architecture-specific vmcs/vmcb bits */
-        hvm_funcs.save_cpu_ctxt(v, &ctxt);
-
-        ctxt.tsc = hvm_get_guest_tsc_fixed(v, d->arch.hvm.sync_tsc);
-
-        ctxt.msr_tsc_aux = hvm_msr_tsc_aux(v);
-
-        hvm_get_segment_register(v, x86_seg_idtr, &seg);
-        ctxt.idtr_limit = seg.limit;
-        ctxt.idtr_base = seg.base;
-
-        hvm_get_segment_register(v, x86_seg_gdtr, &seg);
-        ctxt.gdtr_limit = seg.limit;
-        ctxt.gdtr_base = seg.base;
-
-        hvm_get_segment_register(v, x86_seg_cs, &seg);
-        ctxt.cs_sel = seg.sel;
-        ctxt.cs_limit = seg.limit;
-        ctxt.cs_base = seg.base;
-        ctxt.cs_arbytes = seg.attr;
-
-        hvm_get_segment_register(v, x86_seg_ds, &seg);
-        ctxt.ds_sel = seg.sel;
-        ctxt.ds_limit = seg.limit;
-        ctxt.ds_base = seg.base;
-        ctxt.ds_arbytes = seg.attr;
-
-        hvm_get_segment_register(v, x86_seg_es, &seg);
-        ctxt.es_sel = seg.sel;
-        ctxt.es_limit = seg.limit;
-        ctxt.es_base = seg.base;
-        ctxt.es_arbytes = seg.attr;
-
-        hvm_get_segment_register(v, x86_seg_ss, &seg);
-        ctxt.ss_sel = seg.sel;
-        ctxt.ss_limit = seg.limit;
-        ctxt.ss_base = seg.base;
-        ctxt.ss_arbytes = seg.attr;
-
-        hvm_get_segment_register(v, x86_seg_fs, &seg);
-        ctxt.fs_sel = seg.sel;
-        ctxt.fs_limit = seg.limit;
-        ctxt.fs_base = seg.base;
-        ctxt.fs_arbytes = seg.attr;
-
-        hvm_get_segment_register(v, x86_seg_gs, &seg);
-        ctxt.gs_sel = seg.sel;
-        ctxt.gs_limit = seg.limit;
-        ctxt.gs_base = seg.base;
-        ctxt.gs_arbytes = seg.attr;
-
-        hvm_get_segment_register(v, x86_seg_tr, &seg);
-        ctxt.tr_sel = seg.sel;
-        ctxt.tr_limit = seg.limit;
-        ctxt.tr_base = seg.base;
-        ctxt.tr_arbytes = seg.attr;
-
-        hvm_get_segment_register(v, x86_seg_ldtr, &seg);
-        ctxt.ldtr_sel = seg.sel;
-        ctxt.ldtr_limit = seg.limit;
-        ctxt.ldtr_base = seg.base;
-        ctxt.ldtr_arbytes = seg.attr;
-
-        if ( v->fpu_initialised )
-        {
-            memcpy(ctxt.fpu_regs, v->arch.fpu_ctxt, sizeof(ctxt.fpu_regs));
-            ctxt.flags = XEN_X86_FPU_INITIALISED;
-        }
-
-        ctxt.rax = v->arch.user_regs.rax;
-        ctxt.rbx = v->arch.user_regs.rbx;
-        ctxt.rcx = v->arch.user_regs.rcx;
-        ctxt.rdx = v->arch.user_regs.rdx;
-        ctxt.rbp = v->arch.user_regs.rbp;
-        ctxt.rsi = v->arch.user_regs.rsi;
-        ctxt.rdi = v->arch.user_regs.rdi;
-        ctxt.rsp = v->arch.user_regs.rsp;
-        ctxt.rip = v->arch.user_regs.rip;
-        ctxt.rflags = v->arch.user_regs.rflags;
-        ctxt.r8  = v->arch.user_regs.r8;
-        ctxt.r9  = v->arch.user_regs.r9;
-        ctxt.r10 = v->arch.user_regs.r10;
-        ctxt.r11 = v->arch.user_regs.r11;
-        ctxt.r12 = v->arch.user_regs.r12;
-        ctxt.r13 = v->arch.user_regs.r13;
-        ctxt.r14 = v->arch.user_regs.r14;
-        ctxt.r15 = v->arch.user_regs.r15;
-        ctxt.dr0 = v->arch.debugreg[0];
-        ctxt.dr1 = v->arch.debugreg[1];
-        ctxt.dr2 = v->arch.debugreg[2];
-        ctxt.dr3 = v->arch.debugreg[3];
-        ctxt.dr6 = v->arch.debugreg[6];
-        ctxt.dr7 = v->arch.debugreg[7];
+        hvm_save_one_cpu_ctxt(v, &ctxt);
 
         if ( hvm_save_entry(CPU, v->vcpu_id, h, &ctxt) != 0 )
             return 1; 
