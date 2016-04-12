@@ -549,6 +549,26 @@ long arch_do_domctl(
              !is_hvm_domain(d) )
             break;
 
+        if ( domctl->u.hvmcontext_partial.type == HVM_SAVE_CODE(CPU) &&
+             domctl->u.hvmcontext_partial.instance < d->max_vcpus )
+        {
+            struct vcpu *v = d->vcpu[domctl->u.hvmcontext_partial.instance];
+            struct hvm_hw_cpu ctx;
+
+            vcpu_pause(v);
+
+            hvm_save_one_cpu_ctxt(v, &ctx);
+
+            vcpu_unpause(v);
+
+            if ( copy_to_guest(domctl->u.hvmcontext_partial.buffer,
+                               (void *)&ctx, sizeof(ctx)) )
+                ret = -EFAULT;
+            else
+                ret = 0;
+            break;
+        }
+
         domain_pause(d);
         ret = hvm_save_one(d, domctl->u.hvmcontext_partial.type,
                            domctl->u.hvmcontext_partial.instance,
