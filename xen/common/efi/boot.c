@@ -1232,7 +1232,8 @@ static void __init efi_exit_boot(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *Syste
          */
         if ( (desc->Attribute & EFI_MEMORY_RUNTIME) ||
              desc->Type == EfiRuntimeServicesCode ||
-             desc->Type == EfiRuntimeServicesData )
+             desc->Type == EfiRuntimeServicesData ||
+             desc->type == EfiACPIMemoryNVS )
             desc->VirtualStart = desc->PhysicalStart;
         else
             desc->VirtualStart = INVALID_VIRTUAL_ADDRESS;
@@ -1709,6 +1710,7 @@ void __init efi_init_memory(void)
              */
             case EfiRuntimeServicesCode:
             case EfiRuntimeServicesData:
+            case EfiACPIMemoryNVS:
                 printk(XENLOG_WARNING
                        "Setting RUNTIME attribute for %013" PRIx64 "-%013" PRIx64 "\n",
                        desc->PhysicalStart, desc->PhysicalStart + len - 1);
