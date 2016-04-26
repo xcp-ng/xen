@@ -1709,6 +1709,7 @@ void __init efi_init_memory(void)
              */
             case EfiRuntimeServicesCode:
             case EfiRuntimeServicesData:
+            case EfiACPIMemoryNVS:
                 printk(XENLOG_WARNING
                        "Setting RUNTIME attribute for %013" PRIx64 "-%013" PRIx64 "\n",
                        desc->PhysicalStart, desc->PhysicalStart + len - 1);
