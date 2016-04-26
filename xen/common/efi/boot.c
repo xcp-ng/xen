@@ -100,6 +100,7 @@ static SIMPLE_TEXT_OUTPUT_INTERFACE *__initdata StdErr;
 static UINT32 __initdata mdesc_ver;
 static bool_t __initdata map_bs;
 static bool_t __initdata map_res = 1;
+static bool_t __initdata map_nvs = 1;
 
 static struct file __initdata cfg;
 static struct file __initdata kernel;
@@ -1281,6 +1282,8 @@ void __init efi_init_memory(void)
               (!map_bs ||
                (desc->Type != EfiBootServicesCode &&
                 desc->Type != EfiBootServicesData)) &&
+              (!map_nvs ||
+               desc->Type != EfiACPIMemoryNVS) &&
               (!map_res ||
                desc->Type != EfiReservedMemoryType)) )
             continue;
