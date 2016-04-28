@@ -238,15 +238,14 @@ static int set_mem_type(struct domain *d,
         [HVMMEM_ram_rw]  = p2m_ram_rw,
         [HVMMEM_ram_ro]  = p2m_ram_ro,
         [HVMMEM_mmio_dm] = p2m_mmio_dm,
-        [HVMMEM_unused] = p2m_invalid,
+        [HVMMEM_mmio_write_dm] = p2m_mmio_write_dm,
     };
 
     if ( (data->first_pfn > last_pfn) ||
          (last_pfn > domain_get_maximum_gpfn(d)) )
         return -EINVAL;
 
-    if ( data->mem_type >= ARRAY_SIZE(memtype) ||
-         unlikely(data->mem_type == HVMMEM_unused) )
+    if ( data->mem_type >= ARRAY_SIZE(memtype) )
         return -EINVAL;
 
     while ( iter < data->nr )
