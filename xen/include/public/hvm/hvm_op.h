@@ -87,12 +87,7 @@ typedef enum {
     HVMMEM_ram_rw,             /* Normal read/write guest RAM */
     HVMMEM_ram_ro,             /* Read-only; writes are discarded */
     HVMMEM_mmio_dm,            /* Reads and write go to the device model */
-#if __XEN_INTERFACE_VERSION__ < 0x00040700
     HVMMEM_mmio_write_dm       /* Read-only; writes go to the device model */
-#else
-    HVMMEM_unused              /* Placeholder; setting memory to this type
-                                  will fail for code after 4.7.0 */
-#endif
 } hvmmem_type_t;
 
 /* Hint from PV drivers for pagetable destruction. */
