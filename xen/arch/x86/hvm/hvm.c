@@ -5329,6 +5329,8 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE_PARAM(void) arg)
             get_gfn_query_unlocked(d, a.pfn, &t);
             if ( p2m_is_mmio(t) )
                 a.mem_type =  HVMMEM_mmio_dm;
+            else if ( t == p2m_mmio_write_dm )
+                a.mem_type = HVMMEM_mmio_write_dm;
             else if ( p2m_is_readonly(t) )
                 a.mem_type =  HVMMEM_ram_ro;
             else if ( p2m_is_ram(t) )
