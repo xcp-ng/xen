@@ -844,11 +844,20 @@ void vcpu_end_shutdown_deferral(struct vcpu *v);
  * from any processor.
  */
 void __domain_crash(struct domain *d);
+
+#if defined(NDEBUG) && defined(CONFIG_LIVEPATCH)
+#define print_domain_crash(func) \
+    printk(#func " called from %pS\n", \
+           ({ void *ip; asm ("lea (%%rip), %0" : "=r" (ip)); ip; }))
+#else
+#define print_domain_crash(func) \
+    printk(#func " called from %s:%d\n", __FILE__, __LINE__)
+#endif
+
 #define domain_crash(d, ...)                                        \
     do {                                                            \
         if ( count_args(__VA_ARGS__) == 0 )                         \
-            printk(XENLOG_ERR "domain_crash called from %s:%d\n",   \
-                   __FILE__, __LINE__);                             \
+            print_domain_crash(domain_crash);                       \
         else                                                        \
             printk(XENLOG_ERR __VA_ARGS__);                         \
         __domain_crash(d);                                          \
