@@ -173,16 +173,6 @@
 struct domain;
 struct vcpu;
 
-/*
- * Default implementation of macro that returns current
- * instruction pointer ("program counter").
- */
-#define current_text_addr() ({                      \
-    void *pc;                                       \
-    asm ( "leaq 1f(%%rip),%0\n1:" : "=r" (pc) );    \
-    pc;                                             \
-})
-
 struct x86_cpu_id {
     uint16_t vendor;
     uint16_t family;

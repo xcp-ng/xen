@@ -499,6 +499,18 @@ void __init init_constructors(void)
 }
 
 /*
+ * The GCC docs state that the function must be marked noinline to have the
+ * expected result:
+ * "When inlining the expected behavior is that the function returns the
+ * address of the function that is returned to. To work around this behavior
+ * use the noinline function attribute."
+ */
+noinline void *current_text_addr(void)
+{
+    return __builtin_return_address(0);
+}
+
+/*
  * Local variables:
  * mode: C
  * c-file-style: "BSD"
