@@ -222,6 +222,15 @@ void cf_check dump_execstate(struct cpu_user_regs *);
 
 void init_constructors(void);
 
+static inline void *current_text_addr(void)
+{
+    void *ip;
+
+    asm volatile ("lea 0(%%rip), %0" : "=r" (ip));
+
+    return ip;
+}
+
 /*
  * bsearch - binary search an array of elements
  * @key: pointer to item being searched for
