@@ -191,6 +191,8 @@ void dump_execstate(struct cpu_user_regs *);
 
 void init_constructors(void);
 
+void *current_text_addr(void);
+
 void *bsearch(const void *key, const void *base, size_t num, size_t size,
               int (*cmp)(const void *key, const void *elt));
 
