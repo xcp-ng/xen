@@ -612,8 +612,17 @@ void vcpu_end_shutdown_deferral(struct vcpu *v);
  * from any processor.
  */
 void __domain_crash(struct domain *d);
+
+#if defined(NDEBUG) && defined(CONFIG_LIVEPATCH)
+#define print_domain_crash(func) \
+    printk(#func " called from %pS\n", current_text_addr());
+#else
+#define print_domain_crash(func) \
+    printk(#func " called from %s:%d\n", __FILE__, __LINE__);
+#endif
+
 #define domain_crash(d) do {                                              \
-    printk("domain_crash called from %s:%d\n", __FILE__, __LINE__);       \
+    print_domain_crash(domain_crash);                                     \
     __domain_crash(d);                                                    \
 } while (0)
 
@@ -623,7 +632,7 @@ void __domain_crash(struct domain *d);
  */
 void noreturn __domain_crash_synchronous(void);
 #define domain_crash_synchronous() do {                                   \
-    printk("domain_crash_sync called from %s:%d\n", __FILE__, __LINE__);  \
+    print_domain_crash(domain_crash_sync);                                \
     __domain_crash_synchronous();                                         \
 } while (0)
 
