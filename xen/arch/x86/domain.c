@@ -629,6 +629,8 @@ int arch_domain_create(struct domain *d, unsigned int domcr_flags,
     if ( config == NULL && !is_idle_domain(d) )
         return -EINVAL;
 
+    percpu_rwlock_resource_init(&d->arch.emulate_lock, emulate_locked_rwlock);
+
     d->arch.s3_integrity = !!(domcr_flags & DOMCRF_s3_integrity);
 
     INIT_LIST_HEAD(&d->arch.pdev_list);
