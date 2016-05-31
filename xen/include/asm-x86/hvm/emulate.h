@@ -68,6 +68,9 @@ int hvmemul_do_pio_buffer(uint16_t port,
 void hvm_dump_emulation_state(const char *prefix,
                               struct hvm_emulate_ctxt *hvmemul_ctxt);
 
+void emulate_smp_lock(bool_t locked);
+void emulate_smp_unlock(bool_t locked);
+
 #endif /* __ASM_X86_HVM_EMULATE_H__ */
 
 /*

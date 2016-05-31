@@ -25,6 +25,8 @@
 #include <asm/hvm/svm/svm.h>
 #include <asm/vm_event.h>
 
+DEFINE_PERCPU_RWLOCK_GLOBAL(emulate_locked_rwlock);
+
 static void hvmtrace_io_assist(const ioreq_t *p)
 {
     unsigned int size, event;
@@ -1697,6 +1699,32 @@ static int hvmemul_vmfunc(
     return rc;
 }
 
+void emulate_smp_lock(bool_t locked)
+{
+    if ( opt_introspection_extn )
+    {
+        struct domain *d = current->domain;
+
+        if ( locked )
+            percpu_write_lock(emulate_locked_rwlock, &d->arch.emulate_lock);
+        else
+            percpu_read_lock(emulate_locked_rwlock, &d->arch.emulate_lock);
+    }
+}
+
+void emulate_smp_unlock(bool_t locked)
+{
+    if ( opt_introspection_extn )
+    {
+        struct domain *d = current->domain;
+
+        if ( locked )
+            percpu_write_unlock(emulate_locked_rwlock, &d->arch.emulate_lock);
+        else
+            percpu_read_unlock(emulate_locked_rwlock, &d->arch.emulate_lock);
+    }
+}
+
 static const struct x86_emulate_ops hvm_emulate_ops = {
     .read          = hvmemul_read,
     .insn_fetch    = hvmemul_insn_fetch,
@@ -1723,6 +1751,8 @@ static const struct x86_emulate_ops hvm_emulate_ops = {
     .put_fpu       = hvmemul_put_fpu,
     .invlpg        = hvmemul_invlpg,
     .vmfunc        = hvmemul_vmfunc,
+    .smp_lock      = emulate_smp_lock,
+    .smp_unlock    = emulate_smp_unlock,
 };
 
 static const struct x86_emulate_ops hvm_emulate_ops_no_write = {
@@ -1751,6 +1781,8 @@ static const struct x86_emulate_ops hvm_emulate_ops_no_write = {
     .put_fpu       = hvmemul_put_fpu,
     .invlpg        = hvmemul_invlpg,
     .vmfunc        = hvmemul_vmfunc,
+    .smp_lock      = emulate_smp_lock,
+    .smp_unlock    = emulate_smp_unlock,
 };
 
 static int _hvm_emulate_one(struct hvm_emulate_ctxt *hvmemul_ctxt,
