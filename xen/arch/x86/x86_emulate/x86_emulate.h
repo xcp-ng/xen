@@ -412,6 +412,14 @@ struct x86_emulate_ops
     /* vmfunc: Emulate VMFUNC via given set of EAX ECX inputs */
     int (*vmfunc)(
         struct x86_emulate_ctxt *ctxt);
+
+    /* smp_lock: Take a write lock if locked, read lock otherwise. */
+    void (*smp_lock)(
+        bool_t locked);
+
+    /* smp_unlock: Write unlock if locked, read unlock otherwise. */
+    void (*smp_unlock)(
+        bool_t locked);
 };
 
 struct cpu_user_regs;

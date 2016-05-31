@@ -306,6 +306,8 @@ static const struct x86_emulate_ops hvm_shadow_emulator_ops = {
     .insn_fetch = hvm_emulate_insn_fetch,
     .write      = hvm_emulate_write,
     .cmpxchg    = hvm_emulate_cmpxchg,
+    .smp_lock   = emulate_smp_lock,
+    .smp_unlock = emulate_smp_unlock,
 };
 
 static int
@@ -374,6 +376,8 @@ static const struct x86_emulate_ops pv_shadow_emulator_ops = {
     .insn_fetch = pv_emulate_read,
     .write      = pv_emulate_write,
     .cmpxchg    = pv_emulate_cmpxchg,
+    .smp_lock   = emulate_smp_lock,
+    .smp_unlock = emulate_smp_unlock,
 };
 
 const struct x86_emulate_ops *shadow_init_emulation(
