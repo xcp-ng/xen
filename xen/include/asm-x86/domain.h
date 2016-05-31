@@ -278,6 +278,8 @@ struct monitor_write_data {
     uint64_t cr4;
 };
 
+DECLARE_PERCPU_RWLOCK_GLOBAL(emulate_locked_rwlock);
+
 struct arch_domain
 {
     struct page_info *perdomain_l3_pg;
@@ -420,6 +422,7 @@ struct arch_domain
     uint32_t emulation_flags;
 
     spinlock_t rexec_lock;
+    percpu_rwlock_t emulate_lock;
 } __cacheline_aligned;
 
 #define has_vlapic(d)      (!!((d)->arch.emulation_flags & XEN_X86_EMU_LAPIC))

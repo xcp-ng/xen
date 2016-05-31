@@ -9,6 +9,8 @@
 
 #define __packed __attribute__((packed))
 
+typedef bool bool_t;
+
 #include "x86_emulate/x86_emulate.h"
 #include "blowfish.h"
 
@@ -188,6 +190,14 @@ int get_fpu(
     return X86EMUL_OKAY;
 }
 
+static void smp_lock(bool_t locked)
+{
+}
+
+static void smp_unlock(bool_t locked)
+{
+}
+
 static struct x86_emulate_ops emulops = {
     .read       = read,
     .insn_fetch = fetch,
@@ -197,6 +207,8 @@ static struct x86_emulate_ops emulops = {
     .read_segment = read_segment,
     .read_cr    = read_cr,
     .get_fpu    = get_fpu,
+    .smp_lock   = smp_lock,
+    .smp_unlock = smp_unlock,
 };
 
 int main(int argc, char **argv)

@@ -1613,6 +1613,8 @@ x86_emulate(
     struct operand ea = { .type = OP_MEM, .reg = REG_POISON };
     ea.mem.seg = x86_seg_ds; /* gcc may reject anon union initializer */
 
+    ASSERT(ops->smp_lock && ops->smp_unlock);
+
     ctxt->retire.byte = 0;
 
     op_bytes = def_op_bytes = ad_bytes = def_ad_bytes = ctxt->addr_size/8;
@@ -1623,6 +1625,8 @@ x86_emulate(
         return X86EMUL_UNHANDLEABLE;
 #endif
     }
+
+    ops->smp_lock(lock_prefix);
 
     /* Prefix bytes. */
     for ( ; ; )
@@ -1656,7 +1660,12 @@ x86_emulate(
             override_seg = x86_seg_ss;
             break;
         case 0xf0: /* LOCK */
-            lock_prefix = 1;
+            if ( !lock_prefix )
+            {
+                ops->smp_unlock(lock_prefix);
+                lock_prefix = 1;
+                ops->smp_lock(lock_prefix);
+            }
             break;
         case 0xf2: /* REPNE/REPNZ */
             vex.pfx = vex_f2;
@@ -2170,7 +2179,10 @@ x86_emulate(
         generate_exception_if(mode_64bit() && !twobyte, EXC_UD, -1);
         fail_if(ops->read_segment == NULL);
         if ( (rc = ops->read_segment(src.val, &reg, ctxt)) != 0 )
+        {
+            ops->smp_unlock(lock_prefix);
             return rc;
+        }
         src.val = reg.sel;
         goto push;
     }
@@ -2187,7 +2199,10 @@ x86_emulate(
                               &dst.val, op_bytes, ctxt, ops)) != 0 )
             goto done;
         if ( (rc = load_seg(src.val, dst.val, 0, NULL, ctxt, ops)) != 0 )
+        {
+            ops->smp_unlock(lock_prefix);
             return rc;
+        }
         break;
 
     case 0x0e: /* push %%cs */
@@ -2483,6 +2498,12 @@ x86_emulate(
         break;
 
     case 0x86 ... 0x87: xchg: /* xchg */
+        if ( !lock_prefix )
+        {
+            ops->smp_unlock(lock_prefix);
+            lock_prefix = 1;
+            ops->smp_lock(lock_prefix);
+        }
         /* Write back the register source. */
         switch ( dst.bytes )
         {
@@ -2493,7 +2514,6 @@ x86_emulate(
         }
         /* Write back the memory destination with implicit LOCK prefix. */
         dst.val = src.val;
-        lock_prefix = 1;
         break;
 
     case 0xc6 ... 0xc7: /* mov (sole member of Grp11) */
@@ -3972,8 +3992,11 @@ x86_emulate(
     *ctxt->regs = _regs;
 
  done:
+    ops->smp_unlock(lock_prefix);
+
     _put_fpu();
     put_stub(stub);
+
     return rc;
 
  twobyte_insn:
@@ -4957,8 +4980,11 @@ x86_emulate(
     goto writeback;
 
  cannot_emulate:
+    ops->smp_unlock(lock_prefix);
+
     _put_fpu();
     put_stub(stub);
+
     return X86EMUL_UNHANDLEABLE;
 }
 
