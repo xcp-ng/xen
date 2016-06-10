@@ -624,9 +624,8 @@ int microcode_init_intel(void);
 int microcode_init_amd(void);
 
 enum get_cpu_vendor {
-   gcv_host_early,
-   gcv_host_late,
-   gcv_guest
+    gcv_host,
+    gcv_guest,
 };
 
 int get_cpu_vendor(const char vendor_id[], enum get_cpu_vendor);
