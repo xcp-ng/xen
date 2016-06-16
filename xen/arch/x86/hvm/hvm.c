@@ -4070,18 +4070,20 @@ void hvm_ud_intercept(struct cpu_user_regs *regs)
     if ( opt_hvm_fep )
     {
         struct vcpu *cur = current;
-        struct segment_register cs;
+        struct segment_register cs, ss;
         unsigned long addr;
         char sig[5]; /* ud2; .ascii "xen" */
 
         hvm_get_segment_register(cur, x86_seg_cs, &cs);
+        hvm_get_segment_register(cur, x86_seg_ss, &ss);
         if ( hvm_virtual_to_linear_addr(x86_seg_cs, &cs, regs->eip,
                                         sizeof(sig), hvm_access_insn_fetch,
                                         (hvm_long_mode_enabled(cur) &&
                                          cs.attr.fields.l) ? 64 :
                                         cs.attr.fields.db ? 32 : 16, &addr) &&
              (hvm_fetch_from_guest_virt_nofault(sig, addr, sizeof(sig),
-                                                0) == HVMCOPY_okay) &&
+                                                (ss.attr.fields.dpl == 3)
+                                                ? PFEC_user_mode : 0) == HVMCOPY_okay) &&
              (memcmp(sig, "\xf\xbxen", sizeof(sig)) == 0) )
         {
             regs->eip += sizeof(sig);
