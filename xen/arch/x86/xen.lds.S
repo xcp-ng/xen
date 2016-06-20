@@ -209,11 +209,6 @@ SECTIONS
        *(.initcall1.init)
        __initcall_end = .;
   } :text
-  .xsm_initcall.init : {
-       __xsm_initcall_start = .;
-       *(.xsm_initcall.init)
-       __xsm_initcall_end = .;
-  } :text
 
 #ifdef EFI
   . = ALIGN(MB(2));
