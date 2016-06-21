@@ -3853,7 +3853,6 @@ int hvm_msr_write_intercept(unsigned int msr, uint64_t msr_content,
     bool_t mtrr;
     unsigned int edx, ebx, index;
     int ret = X86EMUL_OKAY;
-    struct arch_domain *currad = &current->domain->arch;
 
     HVMTRACE_3D(MSR_WRITE, msr,
                (uint32_t)msr_content, (uint32_t)(msr_content >> 32));
@@ -3861,7 +3860,7 @@ int hvm_msr_write_intercept(unsigned int msr, uint64_t msr_content,
     hvm_cpuid(1, NULL, NULL, NULL, &edx);
     mtrr = !!(edx & cpufeat_mask(X86_FEATURE_MTRR));
 
-    if ( may_defer && unlikely(currad->monitor.mov_to_msr_enabled) )
+    if ( may_defer && unlikely(monitored_msr(v->domain, msr)) )
     {
         ASSERT(v->arch.vm_event);
 

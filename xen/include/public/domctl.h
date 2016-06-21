@@ -1107,8 +1107,7 @@ struct xen_domctl_monitor_op {
         } mov_to_cr;
 
         struct {
-            /* Enable the capture of an extended set of MSRs */
-            uint8_t extended_capture;
+            uint32_t msr;
         } mov_to_msr;
 
         struct {
