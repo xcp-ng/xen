@@ -1370,6 +1370,8 @@ int xc_domain_get_tsc_info(xc_interface *xch,
                            uint32_t *incarnation);
 
 int xc_domain_disable_migrate(xc_interface *xch, uint32_t domid);
+int xc_domain_query_disable_migrate(xc_interface *xch, uint32_t domid,
+                                    bool *migration_disabled);
 
 int xc_domain_maximum_gpfn(xc_interface *xch, uint32_t domid, xen_pfn_t *gpfns);
 
