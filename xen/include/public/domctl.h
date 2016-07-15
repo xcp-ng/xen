@@ -727,7 +727,7 @@ struct xen_domctl_hvmcontext_partial {
     XEN_GUEST_HANDLE_64(uint8) buffer;  /* OUT: buffer to write record into */
 };
 
-/* XEN_DOMCTL_disable_migrate */
+/* XEN_DOMCTL_{set,query}_disable_migrate */
 struct xen_domctl_disable_migrate {
     uint32_t disable; /* IN: 1: disable migration and restore */
 };
@@ -1182,7 +1182,7 @@ struct xen_domctl {
 #define XEN_DOMCTL_gethvmcontext_partial         55
 #define XEN_DOMCTL_vm_event_op                   56
 #define XEN_DOMCTL_mem_sharing_op                57
-#define XEN_DOMCTL_disable_migrate               58
+#define XEN_DOMCTL_set_disable_migrate           58
 #define XEN_DOMCTL_gettscinfo                    59
 #define XEN_DOMCTL_settscinfo                    60
 #define XEN_DOMCTL_getpageframeinfo3             61
@@ -1207,6 +1207,7 @@ struct xen_domctl {
 #define XEN_DOMCTL_vuart_op                      81
 #define XEN_DOMCTL_get_cpu_policy                82
 #define XEN_DOMCTL_set_cpu_policy                83
+#define XEN_DOMCTL_query_disable_migrate         97
 #define XEN_DOMCTL_gdbsx_guestmemio            1000
 #define XEN_DOMCTL_gdbsx_pausevcpu             1001
 #define XEN_DOMCTL_gdbsx_unpausevcpu           1002

@@ -1427,9 +1427,14 @@ long arch_do_domctl(
 
         break;
 
-    case XEN_DOMCTL_disable_migrate:
+    case XEN_DOMCTL_set_disable_migrate:
         d->disable_migrate = domctl->u.disable_migrate.disable;
         recalculate_cpuid_policy(d);
+        break;
+
+    case XEN_DOMCTL_query_disable_migrate:
+        domctl->u.disable_migrate.disable = d->disable_migrate;
+        copyback = 1;
         break;
 
     case XEN_DOMCTL_get_cpu_policy:

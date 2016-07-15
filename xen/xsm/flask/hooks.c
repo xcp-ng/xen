@@ -709,8 +709,11 @@ static int flask_domctl(struct domain *d, int cmd)
         return current_has_perm(d, SECCLASS_DOMAIN, DOMAIN__SETDEBUGGING);
 
     case XEN_DOMCTL_subscribe:
-    case XEN_DOMCTL_disable_migrate:
+    case XEN_DOMCTL_set_disable_migrate:
         return current_has_perm(d, SECCLASS_DOMAIN, DOMAIN__SET_MISC_INFO);
+
+    case XEN_DOMCTL_query_disable_migrate:
+        return current_has_perm(d, SECCLASS_DOMAIN, DOMAIN__GET_MISC_INFO);
 
     case XEN_DOMCTL_set_virq_handler:
         return current_has_perm(d, SECCLASS_DOMAIN, DOMAIN__SET_VIRQ_HANDLER);

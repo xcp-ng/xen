@@ -176,8 +176,10 @@ class domain
     getpodtarget
 # XENMEM_set_pod_target
     setpodtarget
-# XEN_DOMCTL_subscribe, XEN_DOMCTL_disable_migrate
+# XEN_DOMCTL_subscribe, XEN_DOMCTL_get_disable_migrate,
     set_misc_info
+# XEN_DOMCTL_query_disable_migrate
+    get_misc_info
 # XEN_DOMCTL_set_virq_handler
     set_virq_handler
 }

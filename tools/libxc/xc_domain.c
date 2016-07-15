@@ -830,10 +830,25 @@ int xc_domain_set_time_offset(xc_interface *xch,
 int xc_domain_disable_migrate(xc_interface *xch, uint32_t domid)
 {
     DECLARE_DOMCTL;
-    domctl.cmd = XEN_DOMCTL_disable_migrate;
+    domctl.cmd = XEN_DOMCTL_set_disable_migrate;
     domctl.domain = domid;
     domctl.u.disable_migrate.disable = 1;
     return do_domctl(xch, &domctl);
+}
+
+int xc_domain_query_disable_migrate(xc_interface *xch, uint32_t domid,
+                                    bool *migration_disabled)
+{
+    int ret;
+    DECLARE_DOMCTL;
+    domctl.cmd = XEN_DOMCTL_query_disable_migrate;
+    domctl.domain = domid;
+    ret = do_domctl(xch, &domctl);
+
+    if ( ret == 0 )
+        *migration_disabled = domctl.u.disable_migrate.disable;
+
+    return ret;
 }
 
 int xc_domain_set_tsc_info(xc_interface *xch,
