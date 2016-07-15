@@ -1092,8 +1092,13 @@ long do_domctl(XEN_GUEST_HANDLE_PARAM(xen_domctl_t) u_domctl)
         copyback = 1;
         break;
 
-    case XEN_DOMCTL_disable_migrate:
+    case XEN_DOMCTL_set_disable_migrate:
         d->disable_migrate = op->u.disable_migrate.disable;
+        break;
+
+    case XEN_DOMCTL_query_disable_migrate:
+        op->u.disable_migrate.disable = d->disable_migrate;
+        copyback = 1;
         break;
 
 #ifdef CONFIG_HAS_MEM_ACCESS

@@ -750,7 +750,7 @@ typedef struct xen_domctl_hvmcontext_partial {
 } xen_domctl_hvmcontext_partial_t;
 DEFINE_XEN_GUEST_HANDLE(xen_domctl_hvmcontext_partial_t);
 
-/* XEN_DOMCTL_disable_migrate */
+/* XEN_DOMCTL_{set,query}_disable_migrate */
 typedef struct xen_domctl_disable_migrate {
     uint32_t disable; /* IN: 1: disable migration and restore */
 } xen_domctl_disable_migrate_t;
@@ -1187,7 +1187,7 @@ struct xen_domctl {
 #define XEN_DOMCTL_gethvmcontext_partial         55
 #define XEN_DOMCTL_vm_event_op                   56
 #define XEN_DOMCTL_mem_sharing_op                57
-#define XEN_DOMCTL_disable_migrate               58
+#define XEN_DOMCTL_set_disable_migrate           58
 #define XEN_DOMCTL_gettscinfo                    59
 #define XEN_DOMCTL_settscinfo                    60
 #define XEN_DOMCTL_getpageframeinfo3             61
@@ -1208,6 +1208,7 @@ struct xen_domctl {
 #define XEN_DOMCTL_monitor_op                    77
 #define XEN_DOMCTL_psr_cat_op                    78
 #define XEN_DOMCTL_soft_reset                    79
+#define XEN_DOMCTL_query_disable_migrate         80
 #define XEN_DOMCTL_gdbsx_guestmemio            1000
 #define XEN_DOMCTL_gdbsx_pausevcpu             1001
 #define XEN_DOMCTL_gdbsx_unpausevcpu           1002
