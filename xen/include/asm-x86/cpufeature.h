@@ -36,6 +36,7 @@
 #define X86_FEATURE_SC_RSB_HVM		((FSCAPINTS+0)*32+ 17) /* RSB overwrite needed for HVM */
 #define X86_FEATURE_NO_XPTI		((FSCAPINTS+0)*32+ 18) /* XPTI mitigation not in use */
 #define X86_FEATURE_SC_MSR_IDLE		((FSCAPINTS+0)*32+ 19) /* (SC_MSR_PV || SC_MSR_HVM) && default_xen_spec_ctrl */
+#define X86_FEATURE_MFENCE_RDTSC	((FSCAPINTS+0)*32+ 20) /* MFENCE synchronizes RDTSC */
 
 #define cpufeat_word(idx)	((idx) / 32)
 #define cpufeat_bit(idx)	((idx) % 32)

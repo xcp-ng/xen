@@ -617,6 +617,9 @@ static void init_amd(struct cpuinfo_x86 *c)
 		}
 	}
 
+	/* MFENCE stops RDTSC speculation */
+	__set_bit(X86_FEATURE_MFENCE_RDTSC, c->x86_capability);
+
 	switch(c->x86)
 	{
 	case 0xf ... 0x17:
