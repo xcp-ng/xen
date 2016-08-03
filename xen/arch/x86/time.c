@@ -258,10 +258,10 @@ static u64 init_pit_and_calibrate_tsc(void)
     outb(CALIBRATE_LATCH & 0xff, PIT_CH2); /* LSB of count */
     outb(CALIBRATE_LATCH >> 8, PIT_CH2);   /* MSB of count */
 
-    start = rdtsc();
+    start = rdtsc_ordered();
     for ( count = 0; (inb(0x61) & 0x20) == 0; count++ )
         continue;
-    end = rdtsc();
+    end = rdtsc_ordered();
 
     /* Error if the CTC doesn't behave itself. */
     if ( count == 0 )
@@ -761,7 +761,7 @@ s_time_t get_s_time_fixed(u64 at_tsc)
     if ( at_tsc )
         tsc = at_tsc;
     else
-        tsc = rdtsc();
+        tsc = rdtsc_ordered();
     delta = tsc - t->local_tsc_stamp;
     now = t->stime_local_stamp + scale_delta(delta, &t->tsc_scale);
 
@@ -934,7 +934,7 @@ int cpu_frequency_change(u64 freq)
     /* TSC-extrapolated time may be bogus after frequency change. */
     /*t->stime_local_stamp = get_s_time();*/
     t->stime_local_stamp = t->stime_master_stamp;
-    curr_tsc = rdtsc();
+    curr_tsc = rdtsc_ordered();
     t->local_tsc_stamp = curr_tsc;
     set_time_scale(&t->tsc_scale, freq);
     local_irq_enable();
@@ -1249,7 +1249,7 @@ static void time_calibration_tsc_rendezvous(void *_r)
             if ( r->master_stime == 0 )
             {
                 r->master_stime = read_platform_stime();
-                r->master_tsc_stamp = rdtsc();
+                r->master_tsc_stamp = rdtsc_ordered();
             }
             atomic_inc(&r->semaphore);
 
@@ -1275,7 +1275,7 @@ static void time_calibration_tsc_rendezvous(void *_r)
         }
     }
 
-    c->local_tsc_stamp = rdtsc();
+    c->local_tsc_stamp = rdtsc_ordered();
     c->stime_local_stamp = get_s_time();
     c->stime_master_stamp = r->master_stime;
 
@@ -1305,7 +1305,7 @@ static void time_calibration_std_rendezvous(void *_r)
         mb(); /* receive signal /then/ read r->master_stime */
     }
 
-    c->local_tsc_stamp = rdtsc();
+    c->local_tsc_stamp = rdtsc_ordered();
     c->stime_local_stamp = get_s_time();
     c->stime_master_stamp = r->master_stime;
 
@@ -1339,7 +1339,7 @@ void init_percpu_time(void)
     t->tsc_scale = per_cpu(cpu_time, 0).tsc_scale;
 
     local_irq_save(flags);
-    t->local_tsc_stamp = rdtsc();
+    t->local_tsc_stamp = rdtsc_ordered();
     now = read_platform_stime();
     local_irq_restore(flags);
 
