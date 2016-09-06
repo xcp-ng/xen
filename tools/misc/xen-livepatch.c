@@ -103,9 +103,10 @@ static int list_func(int argc, char *argv[])
         rc = xc_livepatch_list(xch, MAX_LEN, idx, info, name, len, &done, &left);
         if ( rc )
         {
+            rc = errno;
             fprintf(stderr, "Failed to list %d/%d.\n"
                             "Error %d: %s\n",
-                    idx, left, errno, strerror(errno));
+                    idx, left, rc, strerror(rc));
             break;
         }
         for ( i = 0; i < done; i++ )
@@ -173,37 +174,40 @@ static int upload_func(int argc, char *argv[])
     fd = open(filename, O_RDONLY);
     if ( fd < 0 )
     {
+        int saved_errno = errno;
         fprintf(stderr, "Could not open %s.\n"
                         "Error %d: %s\n",
-                filename, errno, strerror(errno));
-        return errno;
+                filename, saved_errno, strerror(saved_errno));
+        return saved_errno;
     }
     if ( stat(filename, &buf) != 0 )
     {
+        int saved_errno = errno;
         fprintf(stderr, "Could not get size of %s.\n"
                         "Error %d: %s\n",
-                filename, errno, strerror(errno));
+                filename, saved_errno, strerror(saved_errno));
         close(fd);
-        return errno;
+        return saved_errno;
     }
 
     len = buf.st_size;
     fbuf = mmap(0, len, PROT_READ, MAP_PRIVATE, fd, 0);
     if ( fbuf == MAP_FAILED )
     {
+        int saved_errno = errno;
         fprintf(stderr, "Could not map %s.\n"
                         "Error %d: %s\n",
-                filename, errno, strerror(errno));
+                filename, saved_errno, strerror(saved_errno));
         close (fd);
-        return errno;
+        return saved_errno;
     }
     printf("Uploading %s... ", filename);
     rc = xc_livepatch_upload(xch, name, fbuf, len);
     if ( rc )
     {
+        rc = errno;
         printf("failed\n");
-        fprintf(stderr, "Error %d: %s\n",
-                errno, strerror(errno));
+        fprintf(stderr, "Error %d: %s\n", rc, strerror(rc));
     }
     else
         printf("completed\n");
@@ -214,8 +218,6 @@ static int upload_func(int argc, char *argv[])
         fprintf(stderr, "Could not unmap %s.\n"
                         "Error %d: %s\n",
                 filename, errno, strerror(errno));
-        if ( !rc )
-            rc = errno;
     }
     close(fd);
 
@@ -305,17 +307,18 @@ int action_func(int argc, char *argv[], unsigned int idx)
     rc = xc_livepatch_get(xch, name, &status);
     if ( rc )
     {
+        int saved_errno = errno;
         fprintf(stderr, "Failed to get status of %s.\n"
                         "Error %d: %s\n",
-                name, errno, strerror(errno));
-        return -1;
+                name, saved_errno, strerror(saved_errno));
+        return saved_errno;
     }
     if ( status.rc == -XEN_EAGAIN )
     {
         fprintf(stderr,
                 "Cannot execute %s.\n"
                 "Operation already in progress.\n", action_options[idx].name);
-        return -1;
+        return EAGAIN;
     }
 
     if ( status.state == action_options[idx].expected )
@@ -331,9 +334,11 @@ int action_func(int argc, char *argv[], unsigned int idx)
         rc = action_options[idx].function(xch, name, HYPERVISOR_TIMEOUT);
         if ( rc )
         {
+            int saved_errno = errno;
             printf("failed\n");
-            fprintf(stderr, "Error %d: %s\n", errno, strerror(errno));
-            return -1;
+            fprintf(stderr, "Error %d: %s\n",
+                    saved_errno, strerror(saved_errno));
+            return saved_errno;
         }
     }
     else
@@ -358,7 +363,7 @@ int action_func(int argc, char *argv[], unsigned int idx)
     {
         printf("failed\n");
         fprintf(stderr, "Operation didn't complete.\n");
-        return -1;
+        return EAGAIN;
     }
 
     if ( rc == 0 )
@@ -370,7 +375,7 @@ int action_func(int argc, char *argv[], unsigned int idx)
     {
         printf("failed\n");
         fprintf(stderr, "Error %d: %s\n", -rc, strerror(-rc));
-        return -1;
+        return -rc;
     }
     else
     {
@@ -484,7 +489,24 @@ int main(int argc, char *argv[])
 
     xc_interface_close(xch);
 
-    return !!ret;
+    /*
+     * Exitcode 0 for success.
+     * Exitcode 1 for an error.
+     * Exitcode 2 if the operation should be retried for any reason (e.g. a
+     * timeout or because another operation was in progress).
+     */
+
+#define EXIT_TIMEOUT (EXIT_FAILURE + 1)
+    switch ( ret )
+    {
+    case 0:
+        return EXIT_SUCCESS;
+    case EAGAIN:
+    case EBUSY:
+        return EXIT_TIMEOUT;
+    default:
+        return EXIT_FAILURE;
+    }
 }
 
 /*
