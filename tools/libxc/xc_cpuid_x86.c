@@ -25,6 +25,7 @@
 #include "xc_private.h"
 #include "xc_bitops.h"
 #include <xen/hvm/params.h>
+#include <xen-tools/libs.h>
 
 #define __AC(X,Y) (X##Y)
 #define _AC(X,Y)  __AC(X,Y)
@@ -101,12 +102,12 @@ const uint32_t *xc_get_static_cpu_featuremask(
         hvm_hap[FEATURESET_NR_ENTRIES] = INIT_HVM_HAP_FEATURES,
         deep_features[FEATURESET_NR_ENTRIES] = INIT_DEEP_FEATURES;
 
-    XC_BUILD_BUG_ON(ARRAY_SIZE(known) != FEATURESET_NR_ENTRIES);
-    XC_BUILD_BUG_ON(ARRAY_SIZE(special) != FEATURESET_NR_ENTRIES);
-    XC_BUILD_BUG_ON(ARRAY_SIZE(pv) != FEATURESET_NR_ENTRIES);
-    XC_BUILD_BUG_ON(ARRAY_SIZE(hvm_shadow) != FEATURESET_NR_ENTRIES);
-    XC_BUILD_BUG_ON(ARRAY_SIZE(hvm_hap) != FEATURESET_NR_ENTRIES);
-    XC_BUILD_BUG_ON(ARRAY_SIZE(deep_features) != FEATURESET_NR_ENTRIES);
+    BUILD_BUG_ON(ARRAY_SIZE(known) != FEATURESET_NR_ENTRIES);
+    BUILD_BUG_ON(ARRAY_SIZE(special) != FEATURESET_NR_ENTRIES);
+    BUILD_BUG_ON(ARRAY_SIZE(pv) != FEATURESET_NR_ENTRIES);
+    BUILD_BUG_ON(ARRAY_SIZE(hvm_shadow) != FEATURESET_NR_ENTRIES);
+    BUILD_BUG_ON(ARRAY_SIZE(hvm_hap) != FEATURESET_NR_ENTRIES);
+    BUILD_BUG_ON(ARRAY_SIZE(deep_features) != FEATURESET_NR_ENTRIES);
 
     switch ( mask )
     {
@@ -142,7 +143,7 @@ const uint32_t *xc_get_feature_deep_deps(uint32_t feature)
 
     unsigned int start = 0, end = ARRAY_SIZE(deep_deps);
 
-    XC_BUILD_BUG_ON(ARRAY_SIZE(deep_deps) != NR_DEEP_DEPS);
+    BUILD_BUG_ON(ARRAY_SIZE(deep_deps) != NR_DEEP_DEPS);
 
     /* deep_deps[] is sorted.  Perform a binary search. */
     while ( start < end )
