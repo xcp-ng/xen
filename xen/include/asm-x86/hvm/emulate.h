@@ -47,9 +47,10 @@ int hvm_emulate_one(
     struct hvm_emulate_ctxt *hvmemul_ctxt);
 int hvm_emulate_one_no_write(
     struct hvm_emulate_ctxt *hvmemul_ctxt);
-void hvm_mem_access_emulate_one(enum emul_kind kind,
+int hvm_mem_access_emulate_one(enum emul_kind kind,
     unsigned int trapnr,
-    unsigned int errcode);
+    unsigned int errcode,
+    bool_t treat_unhandleable);
 void hvm_emulate_prepare(
     struct hvm_emulate_ctxt *hvmemul_ctxt,
     struct cpu_user_regs *regs);
