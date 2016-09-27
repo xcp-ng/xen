@@ -66,9 +66,10 @@ bool __nonnull(1, 2) hvm_emulate_one_insn(
 int hvm_emulate_one(
     struct hvm_emulate_ctxt *hvmemul_ctxt,
     enum hvm_io_completion completion);
-void hvm_emulate_one_vm_event(enum emul_kind kind,
+int hvm_emulate_one_vm_event(enum emul_kind kind,
     unsigned int trapnr,
-    unsigned int errcode);
+    unsigned int errcode,
+    bool_t treat_unhandleable);
 /* Must be called once to set up hvmemul state. */
 void hvm_emulate_init_once(
     struct hvm_emulate_ctxt *hvmemul_ctxt,
