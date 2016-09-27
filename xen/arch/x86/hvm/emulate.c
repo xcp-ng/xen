@@ -2636,8 +2636,8 @@ int hvm_emulate_one_mmio(unsigned long mfn, unsigned long gla)
     return rc;
 }
 
-void hvm_emulate_one_vm_event(enum emul_kind kind, unsigned int trapnr,
-    unsigned int errcode)
+int hvm_emulate_one_vm_event(enum emul_kind kind, unsigned int trapnr,
+    unsigned int errcode, bool_t treat_unhandleable)
 {
     struct hvm_emulate_ctxt ctx = {{ 0 }};
     int rc;
@@ -2680,14 +2680,12 @@ void hvm_emulate_one_vm_event(enum emul_kind kind, unsigned int trapnr,
          * returning makes the current instruction cause a page fault again,
          * consistent with X86EMUL_RETRY.
          */
-        return;
+        return rc;
     case X86EMUL_UNIMPLEMENTED:
-        if ( hvm_monitor_emul_unimplemented() )
-            return;
-        /* fall-through */
     case X86EMUL_UNHANDLEABLE:
         hvm_dump_emulation_state(XENLOG_G_DEBUG, "Mem event", &ctx, rc);
-        hvm_inject_hw_exception(trapnr, errcode);
+        if ( treat_unhandleable )
+            hvm_inject_hw_exception(trapnr, errcode);
         break;
     case X86EMUL_EXCEPTION:
         hvm_inject_event(&ctx.ctxt.event);
@@ -2695,6 +2693,8 @@ void hvm_emulate_one_vm_event(enum emul_kind kind, unsigned int trapnr,
     }
 
     hvm_emulate_writeback(&ctx);
+
+    return rc;
 }
 
 void hvm_emulate_init_once(
