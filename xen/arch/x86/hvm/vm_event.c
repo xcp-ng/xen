@@ -85,8 +85,15 @@ void hvm_vm_event_do_resume(struct vcpu *v)
             vmx_start_reexecute_instruction(v, v->arch.vm_event->gpa,
                                             XENMEM_access_x);
         else
-            hvm_mem_access_emulate_one(kind, TRAP_invalid_op,
-                                       HVM_DELIVER_NO_ERROR_CODE);
+        {
+            int rc = hvm_mem_access_emulate_one(kind, TRAP_invalid_op,
+                                                HVM_DELIVER_NO_ERROR_CODE,
+                                                !opt_introspection_extn);
+
+            if ( opt_introspection_extn && rc == X86EMUL_UNHANDLEABLE )
+                vmx_start_reexecute_instruction(v, v->arch.vm_event->gpa,
+                                                XENMEM_access_rwx);
+        }
 
         v->arch.vm_event->emulate_flags = 0;
     }
