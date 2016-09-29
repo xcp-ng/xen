@@ -307,6 +307,27 @@ union vex {
         ptr[1] = rex | REX_PREFIX; \
 } while (0)
 
+union evex {
+    uint8_t raw[3];
+    struct {
+        uint8_t opcx:2;
+        uint8_t :2;
+        uint8_t R:1;
+        uint8_t b:1;
+        uint8_t x:1;
+        uint8_t r:1;
+        uint8_t pfx:2;
+        uint8_t evex:1;
+        uint8_t reg:4;
+        uint8_t w:1;
+        uint8_t opmsk:3;
+        uint8_t RX:1;
+        uint8_t bcst:1;
+        uint8_t lr:2;
+        uint8_t z:1;
+    };
+};
+
 #define rep_prefix()   (vex.pfx >= vex_f3)
 #define repe_prefix()  (vex.pfx == vex_f3)
 #define repne_prefix() (vex.pfx == vex_f2)
@@ -1597,6 +1618,7 @@ x86_emulate(
     uint8_t b, d, sib, sib_index, sib_base, twobyte = 0, rex_prefix = 0;
     uint8_t modrm = 0, modrm_mod = 0, modrm_reg = 0, modrm_rm = 0;
     union vex vex = {};
+    union evex evex = {};
     unsigned int op_bytes, def_op_bytes, ad_bytes, def_ad_bytes;
     bool_t lock_prefix = 0;
     bool_t tf = !!(ctxt->regs->eflags & EFLG_TF);
@@ -1711,7 +1733,7 @@ x86_emulate(
         modrm = insn_fetch_type(uint8_t);
         modrm_mod = (modrm & 0xc0) >> 6;
 
-        if ( !twobyte && ((b & ~1) == 0xc4) )
+        if ( (!twobyte && ((b & ~1) == 0xc4)) || (b == 0x62) )
             switch ( def_ad_bytes )
             {
             default:
@@ -1725,7 +1747,7 @@ x86_emulate(
                     break;
                 /* fall through */
             case 8:
-                /* VEX */
+                /* VEX / EVEX */
                 generate_exception_if(rex_prefix || vex.pfx, EXC_UD, -1);
                 /*
                  * With operand size override disallowed (see above), op_bytes
@@ -1762,6 +1784,14 @@ x86_emulate(
                         /* Operand size fixed at 4 (no override via W bit). */
                         op_bytes = 4;
                         vex.b = 1;
+                    }
+                    if ( b == 0x62 )
+                    {
+                        evex.raw[0] = vex.raw[0];
+                        evex.raw[1] = vex.raw[1];
+                        evex.raw[2] = insn_fetch_type(uint8_t);
+
+                        vex.opcx = evex.opcx;
                     }
                 }
                 if ( !vex.r )
