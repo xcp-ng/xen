@@ -245,7 +245,7 @@ static uint8_t twobyte_table[256] = {
     ImplicitOps, ImplicitOps, ImplicitOps, ImplicitOps,
     ImplicitOps, ImplicitOps, ImplicitOps, ImplicitOps,
     /* 0xD0 - 0xDF */
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, ImplicitOps|ModRM, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     /* 0xE0 - 0xEF */
     0, 0, 0, 0, 0, 0, 0, ImplicitOps|ModRM, 0, 0, 0, 0, 0, 0, 0, 0,
     /* 0xF0 - 0xFF */
@@ -4539,6 +4539,7 @@ x86_emulate(
     case 0x7f: /* movq mm,mm/m64 */
                /* {,v}movdq{a,u} xmm,xmm/m128 */
                /* vmovdq{a,u} ymm,ymm/m256 */
+    case 0xd6: /* {,v}movq xmm,xmm/m64 */
     {
         uint8_t *buf = get_stub(stub);
         struct fpu_insn_ctxt fic = { .insn_bytes = 5 };
@@ -4556,7 +4557,8 @@ x86_emulate(
             case vex_66:
             case vex_f3:
                 host_and_vcpu_must_have(sse2);
-                buf[0] = 0x66; /* movdqa */
+                /* Converting movdqu to movdqa here: Our buffer is aligned. */
+                buf[0] = 0x66;
                 get_fpu(X86EMUL_FPU_xmm, &fic);
                 ea.bytes = 16;
                 break;
@@ -4579,6 +4581,11 @@ x86_emulate(
             host_and_vcpu_must_have(avx);
             get_fpu(X86EMUL_FPU_ymm, &fic);
             ea.bytes = 16 << vex.l;
+        }
+        if ( b == 0xd6 )
+        {
+            generate_exception_if(vex.l, EXC_UD, -1);
+            ea.bytes = 8;
         }
         if ( ea.type == OP_MEM )
         {
