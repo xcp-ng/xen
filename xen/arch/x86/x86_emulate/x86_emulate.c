@@ -204,7 +204,7 @@ static uint8_t twobyte_table[256] = {
     /* 0x60 - 0x6F */
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ImplicitOps|ModRM,
     /* 0x70 - 0x7F */
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ImplicitOps|ModRM,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ImplicitOps|ModRM, ImplicitOps|ModRM,
     /* 0x80 - 0x87 */
     ImplicitOps, ImplicitOps, ImplicitOps, ImplicitOps,
     ImplicitOps, ImplicitOps, ImplicitOps, ImplicitOps,
@@ -4536,6 +4536,12 @@ x86_emulate(
     case 0x6f: /* movq mm/m64,mm */
                /* {,v}movdq{a,u} xmm/m128,xmm */
                /* vmovdq{a,u} ymm/m256,ymm */
+    case 0x7e: /* movd mm,r/m32 */
+               /* movq mm,r/m64 */
+               /* movd xmm,r/m32 */
+               /* movq xmm,r/m64 */
+               /* vmovd xmm,r/m32 */
+               /* vmovq xmm,r/m64 */
     case 0x7f: /* movq mm,mm/m64 */
                /* {,v}movdq{a,u} xmm,xmm/m128 */
                /* vmovdq{a,u} ymm,ymm/m256 */
@@ -4543,6 +4549,13 @@ x86_emulate(
     {
         uint8_t *buf = get_stub(stub);
         struct fpu_insn_ctxt fic = { .insn_bytes = 5 };
+
+        /*
+         * Undo the operand-size override effect of prefix 66 when it was
+         * determined to have another meaning.
+         */
+        if ( b == 0x7e && op_bytes == 2 )
+            op_bytes = 4;
 
         buf[0] = 0x3e;
         buf[1] = 0x3e;
@@ -4582,10 +4595,16 @@ x86_emulate(
             get_fpu(X86EMUL_FPU_ymm, &fic);
             ea.bytes = 16 << vex.l;
         }
-        if ( b == 0xd6 )
+        switch ( b )
         {
+        case 0x7e:
+            generate_exception_if(vex.l, EXC_UD, -1);
+            ea.bytes = op_bytes;
+            break;
+        case 0xd6:
             generate_exception_if(vex.l, EXC_UD, -1);
             ea.bytes = 8;
+            break;
         }
         if ( ea.type == OP_MEM )
         {
@@ -4596,15 +4615,22 @@ x86_emulate(
             if ( b == 0x6f )
                 rc = ops->read(ea.mem.seg, ea.mem.off+0, mmvalp,
                                ea.bytes, ctxt);
-            /* convert memory operand to (%rAX) */
+        }
+        if ( ea.type == OP_MEM || b == 0x7e )
+        {
+            /* Convert memory operand or GPR destination to (%rAX) */
             rex_prefix &= ~REX_B;
             vex.b = 1;
             buf[4] &= 0x38;
+            if ( ea.type == OP_MEM )
+                ea.reg = (void *)mmvalp;
+            else /* Ensure zero-extension of a 32-bit result. */
+                *ea.reg = 0;
         }
         if ( !rc )
         {
            copy_REX_VEX(buf, rex_prefix, vex);
-           asm volatile ( "INDIRECT_CALL %0" : : "r" (stub.func), "a" (mmvalp)
+           asm volatile ( "INDIRECT_CALL %0" : : "r" (stub.func), "a" (ea.reg)
                                              : "memory" );
         }
         put_fpu(&fic);
