@@ -111,7 +111,7 @@ _clean: delete-unfresh-files
 	$(MAKE) -f $(BASEDIR)/Rules.mk -C crypto clean
 	$(MAKE) -f $(BASEDIR)/Rules.mk -C arch/$(TARGET_ARCH) clean
 	$(MAKE) -f $(BASEDIR)/tools/kconfig/Makefile.kconfig ARCH=$(ARCH) SRCARCH=$(SRCARCH) clean
-	find . \( -name "*.o" -o -name ".*.d" \) -exec rm -f {} \;
+	find . \( -name "*.o" -o -name ".*.d" -o -name "*.gcno" \) -exec rm -f {} \;
 	rm -f include/asm $(TARGET) $(TARGET).gz $(TARGET).efi $(TARGET)-syms *~ core
 	rm -f include/asm-*/asm-offsets.h
 	rm -f .banner
