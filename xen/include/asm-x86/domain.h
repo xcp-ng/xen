@@ -597,6 +597,9 @@ struct arch_vcpu
     /* Restore all FPU state (lazy and non-lazy state) on context switch? */
     bool_t fully_eager_fpu;
 
+    /* Has the guest enabled CPUID faulting? */
+    bool cpuid_faulting;
+
     /*
      * The SMAP check policy when updating runstate_guest(v) and the
      * secondary system time.

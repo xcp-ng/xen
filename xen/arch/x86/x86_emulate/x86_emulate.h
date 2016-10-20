@@ -360,6 +360,17 @@ struct x86_emulate_ops
         unsigned int *edx,
         struct x86_emulate_ctxt *ctxt);
 
+    /*
+     * cpuid: Emulate a real CPUID including faulting behaviour, via given set
+     * of EAX-EDX inputs/outputs.
+     */
+    int (*cpuid_insn)(
+        unsigned int *eax,
+        unsigned int *ebx,
+        unsigned int *ecx,
+        unsigned int *edx,
+        struct x86_emulate_ctxt *ctxt);
+
     /* inject_hw_exception */
     int (*inject_hw_exception)(
         uint8_t vector,
