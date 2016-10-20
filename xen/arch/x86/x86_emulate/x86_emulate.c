@@ -4669,7 +4669,7 @@ x86_emulate(
         unsigned int eax = _regs.eax, ebx = _regs.ebx;
         unsigned int ecx = _regs.ecx, edx = _regs.edx;
         fail_if(ops->cpuid == NULL);
-        if ( (rc = ops->cpuid(&eax, &ebx, &ecx, &edx, ctxt)) != 0 )
+        if ( (rc = (ops->cpuid_insn ?: ops->cpuid)(&eax, &ebx, &ecx, &edx, ctxt)) != 0 )
             goto done;
         _regs.eax = eax; _regs.ebx = ebx;
         _regs.ecx = ecx; _regs.edx = edx;

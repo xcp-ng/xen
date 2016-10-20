@@ -1278,6 +1278,15 @@ static int emulate_forced_invalid_op(struct cpu_user_regs *regs)
     }
     if ( memcmp(instr, "\xf\xa2", sizeof(instr)) )
         return 0;
+
+    /* If cpuid faulting is enabled and CPL>0 inject a #GP in place of #UD. */
+    if ( current->arch.cpuid_faulting && !guest_kernel_mode(current, regs) )
+    {
+        regs->eip = eip;
+        do_guest_trap(TRAP_gp_fault, regs, 1);
+        return EXCRET_fault_fixed;
+    }
+
     eip += sizeof(instr);
 
     pv_cpuid(regs);
@@ -2764,7 +2773,7 @@ static int emulate_privileged_op(struct cpu_user_regs *regs)
     case 0x30: /* WRMSR */ {
         uint32_t eax = regs->eax;
         uint32_t edx = regs->edx;
-        uint64_t msr_content = ((uint64_t)edx << 32) | eax;
+        uint64_t msr_content = ((uint64_t)edx << 32) | eax, temp;
         vpmu_msr = 0;
         switch ( regs->_ecx )
         {
@@ -2912,6 +2921,18 @@ static int emulate_privileged_op(struct cpu_user_regs *regs)
         case MSR_ARCH_CAPABILITIES:
             /* The MSR is read-only. */
             goto fail;
+
+        case MSR_INTEL_MISC_FEATURES_ENABLES:
+            if ( boot_cpu_data.x86_vendor != X86_VENDOR_INTEL ||
+                 (msr_content & ~MSR_MISC_FEATURES_CPUID_FAULTING) ||
+                 rdmsr_safe(MSR_INTEL_MISC_FEATURES_ENABLES, temp) )
+                goto fail;
+            if ( (msr_content & MSR_MISC_FEATURES_CPUID_FAULTING) &&
+                 !this_cpu(cpuid_faulting_enabled) )
+                goto fail;
+            current->arch.cpuid_faulting =
+                !!(msr_content & MSR_MISC_FEATURES_CPUID_FAULTING);
+            break;
 
         case MSR_SPEC_CTRL:
             _domain_cpuid(currd, 7, 0, &dummy, &dummy, &dummy, &edx);
@@ -3090,6 +3111,17 @@ static int emulate_privileged_op(struct cpu_user_regs *regs)
             if ( !boot_cpu_has(X86_FEATURE_MSR_PLATFORM_INFO) )
                 goto fail;
             regs->eax = regs->edx = 0;
+            if ( this_cpu(cpuid_faulting_enabled) )
+                regs->eax = MSR_PLATFORM_INFO_CPUID_FAULTING;
+            break;
+
+        case MSR_INTEL_MISC_FEATURES_ENABLES:
+            if ( boot_cpu_data.x86_vendor != X86_VENDOR_INTEL ||
+                 rdmsr_safe(MSR_INTEL_MISC_FEATURES_ENABLES, val) )
+                goto fail;
+            regs->eax = regs->edx = 0;
+            if ( current->arch.cpuid_faulting )
+                regs->eax |= MSR_MISC_FEATURES_CPUID_FAULTING;
             break;
 
         case MSR_ARCH_CAPABILITIES:
@@ -3150,6 +3182,10 @@ static int emulate_privileged_op(struct cpu_user_regs *regs)
         break;
 
     case 0xa2: /* CPUID */
+        /* If cpuid faulting is enabled and CPL>0 leave the #GP untouched. */
+        if ( v->arch.cpuid_faulting && !guest_kernel_mode(v, regs) )
+            goto fail;
+
         pv_cpuid(regs);
         break;
 
