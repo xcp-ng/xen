@@ -1513,6 +1513,35 @@ static int hvmemul_cpuid(
     return X86EMUL_OKAY;
 }
 
+static int hvmemul_cpuid_insn(
+    unsigned int *eax,
+    unsigned int *ebx,
+    unsigned int *ecx,
+    unsigned int *edx,
+    struct x86_emulate_ctxt *ctxt)
+{
+    /*
+     * x86_emulate uses this function to query CPU features for its own internal
+     * use. Make sure we're actually emulating CPUID before emulating CPUID
+     * faulting.
+     */
+    if ( hvm_check_cpuid_faulting(current) )
+    {
+        struct hvm_emulate_ctxt *hvmemul_ctxt =
+            container_of(ctxt, struct hvm_emulate_ctxt, ctxt);
+
+        hvmemul_ctxt->exn_pending = 1;
+        hvmemul_ctxt->trap.vector = TRAP_gp_fault;
+        hvmemul_ctxt->trap.type = X86_EVENTTYPE_HW_EXCEPTION;
+        hvmemul_ctxt->trap.error_code = 0;
+        hvmemul_ctxt->trap.insn_len = 0;
+
+        return X86EMUL_EXCEPTION;
+    }
+
+    return hvmemul_cpuid(eax, ebx, ecx, edx, ctxt);
+}
+
 static int hvmemul_inject_hw_exception(
     uint8_t vector,
     int32_t error_code,
@@ -1683,6 +1712,7 @@ static const struct x86_emulate_ops hvm_emulate_ops = {
     .write_msr     = hvmemul_write_msr,
     .wbinvd        = hvmemul_wbinvd,
     .cpuid         = hvmemul_cpuid,
+    .cpuid_insn    = hvmemul_cpuid_insn,
     .inject_hw_exception = hvmemul_inject_hw_exception,
     .inject_sw_interrupt = hvmemul_inject_sw_interrupt,
     .get_fpu       = hvmemul_get_fpu,
@@ -1710,6 +1740,7 @@ static const struct x86_emulate_ops hvm_emulate_ops_no_write = {
     .write_msr     = hvmemul_write_msr_discard,
     .wbinvd        = hvmemul_wbinvd_discard,
     .cpuid         = hvmemul_cpuid,
+    .cpuid_insn    = hvmemul_cpuid_insn,
     .inject_hw_exception = hvmemul_inject_hw_exception,
     .inject_sw_interrupt = hvmemul_inject_sw_interrupt,
     .get_fpu       = hvmemul_get_fpu,

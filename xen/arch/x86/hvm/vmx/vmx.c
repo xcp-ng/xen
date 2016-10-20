@@ -2525,9 +2525,15 @@ static void vmx_cpuid_intercept(
     HVMTRACE_5D (CPUID, input, *eax, *ebx, *ecx, *edx);
 }
 
-static void vmx_do_cpuid(struct cpu_user_regs *regs)
+static int vmx_do_cpuid(struct cpu_user_regs *regs)
 {
     unsigned int eax, ebx, ecx, edx;
+
+    if ( hvm_check_cpuid_faulting(current) )
+    {
+        hvm_inject_hw_exception(TRAP_gp_fault, 0);
+        return 1;  /* Don't advance the guest IP! */
+    }
 
     eax = regs->eax;
     ebx = regs->ebx;
@@ -2540,6 +2546,8 @@ static void vmx_do_cpuid(struct cpu_user_regs *regs)
     regs->ebx = ebx;
     regs->ecx = ecx;
     regs->edx = edx;
+
+    return 0;
 }
 
 static void vmx_dr_access(unsigned long exit_qualification,
@@ -2778,9 +2786,13 @@ static int vmx_msr_read_intercept(unsigned int msr, uint64_t *msr_content)
         break;
 
     case MSR_INTEL_PLATFORM_INFO:
-        if ( !boot_cpu_has(X86_FEATURE_MSR_PLATFORM_INFO) )
-            goto gp_fault;
+        *msr_content = MSR_PLATFORM_INFO_CPUID_FAULTING;
+        break;
+
+    case MSR_INTEL_MISC_FEATURES_ENABLES:
         *msr_content = 0;
+        if ( current->arch.cpuid_faulting )
+            *msr_content |= MSR_MISC_FEATURES_CPUID_FAULTING;
         break;
 
     default:
@@ -3006,6 +3018,13 @@ static int vmx_msr_write_intercept(unsigned int msr, uint64_t msr_content)
     case MSR_IA32_DS_AREA:
          if ( vpmu_do_wrmsr(msr, msr_content, 0) )
             goto gp_fault;
+        break;
+
+    case MSR_INTEL_MISC_FEATURES_ENABLES:
+        if ( msr_content & ~MSR_MISC_FEATURES_CPUID_FAULTING )
+            goto gp_fault;
+        v->arch.cpuid_faulting =
+            !!(msr_content & MSR_MISC_FEATURES_CPUID_FAULTING);
         break;
 
     default:
@@ -3667,8 +3686,8 @@ void vmx_vmexit_handler(struct cpu_user_regs *regs)
         break;
     }
     case EXIT_REASON_CPUID:
-        is_pvh_vcpu(v) ? pv_cpuid(regs) : vmx_do_cpuid(regs);
-        update_guest_eip(); /* Safe: CPUID */
+        if ( !vmx_do_cpuid(regs) )
+            update_guest_eip(); /* Safe: CPUID */
         break;
     case EXIT_REASON_HLT:
         update_guest_eip(); /* Safe: HLT */
