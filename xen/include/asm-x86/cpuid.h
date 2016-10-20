@@ -64,6 +64,9 @@ DECLARE_PER_CPU(struct cpuidmasks, cpuidmasks);
 /* Default masking MSR values, calculated at boot. */
 extern struct cpuidmasks cpuidmask_defaults;
 
+/* Whether or not cpuid faulting is available for the current domain. */
+DECLARE_PER_CPU(bool, cpuid_faulting_enabled);
+
 /* Check that all previously present features are still available. */
 bool_t recheck_cpu_features(unsigned int cpu);
 
