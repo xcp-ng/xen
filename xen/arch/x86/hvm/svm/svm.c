@@ -2256,6 +2256,20 @@ static void svm_invlpg(struct vcpu *v, unsigned long vaddr)
     svm_asid_g_invlpg(v, vaddr);
 }
 
+static bool_t svm_get_pending_event(struct vcpu *v, struct hvm_trap *info)
+{
+    const struct vmcb_struct *vmcb = v->arch.hvm_svm.vmcb;
+
+    if ( vmcb->eventinj.fields.v )
+        return 0;
+
+    info->vector = vmcb->eventinj.fields.vector;
+    info->type = vmcb->eventinj.fields.type;
+    info->error_code = vmcb->eventinj.fields.errorcode;
+
+    return 1;
+}
+
 static struct hvm_function_table __initdata svm_function_table = {
     .name                 = "SVM",
     .cpu_up_prepare       = svm_cpu_up_prepare,
@@ -2286,6 +2300,7 @@ static struct hvm_function_table __initdata svm_function_table = {
     .inject_trap          = svm_inject_trap,
     .init_hypercall_page  = svm_init_hypercall_page,
     .event_pending        = svm_event_pending,
+    .get_pending_event    = svm_get_pending_event,
     .invlpg               = svm_invlpg,
     .cpuid_intercept      = svm_cpuid_intercept,
     .wbinvd_intercept     = svm_wbinvd_intercept,

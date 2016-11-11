@@ -432,6 +432,9 @@ void vm_event_resume(struct domain *d, struct vm_event_domain *ved)
             if ( rsp.flags & VM_EVENT_FLAG_TOGGLE_SINGLESTEP )
                 vm_event_toggle_singlestep(d, v);
 
+            if ( rsp.flags & VM_EVENT_FLAG_GET_NEXT_INTERRUPT )
+                vm_event_monitor_next_interrupt(v);
+
             vm_event_vcpu_unpause(v);
         }
     }

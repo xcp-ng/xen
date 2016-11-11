@@ -96,6 +96,11 @@
  * Requires the vCPU to be paused already (synchronous events only).
  */
 #define VM_EVENT_FLAG_SET_REGISTERS      (1 << 8)
+/*
+ * Have a one-shot VM_EVENT_REASON_INTERRUPT event sent for the first
+ * interrupt pending after resuming the VCPU.
+ */
+#define VM_EVENT_FLAG_GET_NEXT_INTERRUPT (1 << 10)
 
 /*
  * Reasons for the vm event request
@@ -119,6 +124,8 @@
 #define VM_EVENT_REASON_SINGLESTEP              7
 /* An event has been requested via HVMOP_guest_request_vm_event. */
 #define VM_EVENT_REASON_GUEST_REQUEST           8
+/* An interrupt has been delivered. */
+#define VM_EVENT_REASON_INTERRUPT               12
 
 /* Supported values for the vm_event_write_ctrlreg index. */
 #define VM_EVENT_X86_CR0    0
@@ -212,6 +219,14 @@ struct vm_event_mov_to_msr {
     uint64_t value;
 };
 
+struct vm_event_interrupt_x86 {
+    uint32_t vector;
+    uint32_t type;
+    uint32_t error_code;
+    uint32_t _pad;
+    uint64_t cr2;
+};
+
 #define MEM_PAGING_DROP_PAGE       (1 << 0)
 #define MEM_PAGING_EVICT_FAIL      (1 << 1)
 
@@ -249,6 +264,9 @@ typedef struct vm_event_st {
         struct vm_event_mov_to_msr            mov_to_msr;
         struct vm_event_debug                 software_breakpoint;
         struct vm_event_debug                 singlestep;
+        union {
+            struct vm_event_interrupt_x86     x86;
+        } interrupt;
     } u;
 
     union {
