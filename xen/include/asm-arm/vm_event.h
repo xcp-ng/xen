@@ -68,4 +68,10 @@ static inline uint32_t vm_event_monitor_get_capabilities(struct domain *d)
     return capabilities;
 }
 
+static inline
+void vm_event_monitor_next_interrupt(struct vcpu *v)
+{
+    /* Not supported on ARM. */
+}
+
 #endif /* __ASM_ARM_VM_EVENT_H__ */

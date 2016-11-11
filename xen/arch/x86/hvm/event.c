@@ -118,6 +118,21 @@ int hvm_event_breakpoint(unsigned long rip,
     return vm_event_monitor_traps(curr, 1, &req);
 }
 
+void hvm_event_interrupt(unsigned int vector, unsigned int type,
+                         unsigned int err, uint64_t cr2)
+{
+    vm_event_request_t req = {
+        .reason = VM_EVENT_REASON_INTERRUPT,
+        .vcpu_id = current->vcpu_id,
+        .u.interrupt.x86.vector = vector,
+        .u.interrupt.x86.type = type,
+        .u.interrupt.x86.error_code = err,
+        .u.interrupt.x86.cr2 = cr2,
+    };
+
+    vm_event_monitor_traps(current, 1, &req);
+}
+
 /*
  * Local variables:
  * mode: C

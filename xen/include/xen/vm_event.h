@@ -83,6 +83,8 @@ int vm_event_monitor_traps(struct vcpu *v, uint8_t sync,
 
 void vm_event_monitor_guest_request(void);
 
+void vm_event_monitor_next_interrupt(struct vcpu *v);
+
 #endif /* __VM_EVENT_H__ */
 
 

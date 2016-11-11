@@ -41,6 +41,8 @@ bool_t hvm_event_cr(unsigned int index, unsigned long value,
 void hvm_event_msr(unsigned int msr, uint64_t value);
 int hvm_event_breakpoint(unsigned long rip,
                          enum hvm_event_breakpoint_type type);
+void hvm_event_interrupt(unsigned int vector, unsigned int type,
+                         unsigned int err, uint64_t cr2);
 
 #endif /* __ASM_X86_HVM_EVENT_H__ */
 
