@@ -149,7 +149,11 @@ static const char *str_e8b[32] =
 
 static const char *str_7d0[32] =
 {
-    [0 ... 25] = "REZ",
+    [0 ... 1] = "REZ",
+
+    [ 2] = "avx512_4vnniw", [ 3] = "avx512_4fmaps",
+
+    [4 ... 25] = "REZ",
 
     [26] = "ibrsb",         [27] = "stibp",
     [28] = "REZ",           [29] = "arch_caps",
