@@ -253,7 +253,8 @@ def crunch_numbers(state):
         # 512bit registers, and the instructions themselves. All further AVX512 features
         # are built on top of AVX512F
         AVX512F: [AVX512DQ, AVX512IFMA, AVX512PF, AVX512ER, AVX512CD,
-                  AVX512BW, AVX512VL, AVX512VBMI, AVX512_4VNNIW, AVX512_4FMAPS],
+                  AVX512BW, AVX512VL, AVX512VBMI, AVX512_4VNNIW,
+                  AVX512_4FMAPS, AVX512_VPOPCNTDQ],
 
         # The features:
         #   * Single Thread Indirect Branch Predictors
