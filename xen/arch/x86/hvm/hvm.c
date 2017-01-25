@@ -5249,31 +5249,11 @@ static int do_altp2m_op(
     return rc;
 }
 
-/*
- * Note that this value is effectively part of the ABI, even if we don't need
- * to make it a formal part of it: A guest suspended for migration in the
- * middle of a continuation would fail to work if resumed on a hypervisor
- * using a different value.
- */
-#define HVMOP_op_mask 0xff
-
 long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE_PARAM(void) arg)
 {
-    unsigned long start_iter, mask;
     long rc = 0;
 
-    switch ( op & HVMOP_op_mask )
-    {
-    default:
-        mask = ~0UL;
-        break;
-    case HVMOP_set_mem_type:
-        mask = HVMOP_op_mask;
-        break;
-    }
-
-    start_iter = op & ~mask;
-    switch ( op &= mask )
+    switch ( op )
     {
     case HVMOP_set_evtchn_upcall_vector:
         rc = hvmop_set_evtchn_upcall_vector(
@@ -5339,92 +5319,6 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE_PARAM(void) arg)
         else
             rc = -EINVAL;
 
-        rcu_unlock_domain(d);
-        break;
-    }
-
-    case HVMOP_set_mem_type:
-    {
-        struct xen_hvm_set_mem_type a;
-        struct domain *d;
-        
-        /* Interface types to internal p2m types */
-        static const p2m_type_t memtype[] = {
-            [HVMMEM_ram_rw]  = p2m_ram_rw,
-            [HVMMEM_ram_ro]  = p2m_ram_ro,
-            [HVMMEM_mmio_dm] = p2m_mmio_dm,
-            [HVMMEM_unused] = p2m_invalid
-        };
-
-        if ( copy_from_guest(&a, arg, 1) )
-            return -EFAULT;
-
-        rc = rcu_lock_remote_domain_by_id(a.domid, &d);
-        if ( rc != 0 )
-            return rc;
-
-        rc = -EINVAL;
-        if ( !is_hvm_domain(d) )
-            goto setmemtype_fail;
-
-        rc = xsm_hvm_control(XSM_DM_PRIV, d, op);
-        if ( rc )
-            goto setmemtype_fail;
-
-        rc = -EINVAL;
-        if ( a.nr < start_iter ||
-             ((a.first_pfn + a.nr - 1) < a.first_pfn) ||
-             ((a.first_pfn + a.nr - 1) > domain_get_maximum_gpfn(d)) )
-            goto setmemtype_fail;
-            
-        if ( a.hvmmem_type >= ARRAY_SIZE(memtype) ||
-             unlikely(a.hvmmem_type == HVMMEM_unused) )
-            goto setmemtype_fail;
-
-        while ( a.nr > start_iter )
-        {
-            unsigned long pfn = a.first_pfn + start_iter;
-            p2m_type_t t;
-
-            get_gfn_unshare(d, pfn, &t);
-            if ( p2m_is_paging(t) )
-            {
-                put_gfn(d, pfn);
-                p2m_mem_paging_populate(d, pfn);
-                rc = -EAGAIN;
-                goto setmemtype_fail;
-            }
-            if ( p2m_is_shared(t) )
-            {
-                put_gfn(d, pfn);
-                rc = -EAGAIN;
-                goto setmemtype_fail;
-            }
-            if ( !p2m_is_ram(t) &&
-                 (!p2m_is_hole(t) || a.hvmmem_type != HVMMEM_mmio_dm) &&
-                 (t != p2m_mmio_write_dm || a.hvmmem_type != HVMMEM_ram_rw) )
-            {
-                put_gfn(d, pfn);
-                goto setmemtype_fail;
-            }
-
-            rc = p2m_change_type_one(d, pfn, t, memtype[a.hvmmem_type]);
-            put_gfn(d, pfn);
-            if ( rc )
-                goto setmemtype_fail;
-
-            /* Check for continuation if it's not the last interation */
-            if ( a.nr > ++start_iter && !(start_iter & HVMOP_op_mask) &&
-                 hypercall_preempt_check() )
-            {
-                rc = -ERESTART;
-                goto setmemtype_fail;
-            }
-        }
-
-        rc = 0;
-
-    setmemtype_fail:
         rcu_unlock_domain(d);
         break;
     }
@@ -5535,13 +5429,6 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE_PARAM(void) arg)
         rc = -ENOSYS;
         break;
     }
-    }
-
-    if ( rc == -ERESTART )
-    {
-        ASSERT(!(start_iter & mask));
-        rc = hypercall_create_continuation(__HYPERVISOR_hvm_op, "lh",
-                                           op | start_iter, arg);
     }
 
     return rc;
