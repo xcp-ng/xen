@@ -206,7 +206,7 @@ struct hvm_vcpu {
     void *fpu_exception_callback_arg;
 
     /* Pending hw/sw interrupt (.vector = -1 means nothing pending). */
-    struct hvm_trap     inject_trap;
+    struct hvm_trap     inject_event;
 
     struct viridian_vcpu viridian;
 };
