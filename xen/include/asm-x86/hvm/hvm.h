@@ -69,6 +69,9 @@ enum hvm_intblk {
 #define HVM_INTR_SHADOW_SMI    0x00000004
 #define HVM_INTR_SHADOW_NMI    0x00000008
 
+#define HVM_EVENT_VECTOR_UNSET    (-1)
+#define HVM_EVENT_VECTOR_UPDATING (-2)
+
 /*
  * HAP super page capabilities:
  * bit0: if 2MB super page is allowed?
