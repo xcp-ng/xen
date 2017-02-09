@@ -1733,7 +1733,7 @@ static inline unsigned long vmr(unsigned long field)
 {
     unsigned long val;
 
-    return __vmread_safe(field, &val) ? val : 0;
+    return vmread_safe(field, &val) ? 0 : val;
 }
 
 #define vmr16(fld) ({             \
