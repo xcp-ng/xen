@@ -372,6 +372,12 @@ static always_inline void stac(void)
 #define REX64_PREFIX "rex64/"
 #endif
 
+#ifdef __GCC_ASM_FLAG_OUTPUTS__
+# define ASM_FLAG_OUT(yes, no) yes
+#else
+# define ASM_FLAG_OUT(yes, no) no
+#endif
+
 #include <asm/spec_ctrl_asm.h>
 
 #endif /* __X86_ASM_DEFNS_H__ */
