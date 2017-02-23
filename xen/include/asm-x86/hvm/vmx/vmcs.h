@@ -20,6 +20,7 @@
 
 #include <asm/vpmu.h>
 #include <asm/hvm/io.h>
+#include <xen/stdbool.h>
 #include <irq_vectors.h>
 
 extern void vmcs_dump_vcpu(struct vcpu *v);
@@ -211,6 +212,9 @@ struct arch_vmx_struct {
     uint8_t              vmx_realmode;
     /* Are we emulating rather than VMENTERing? */
     uint8_t              vmx_emulate;
+
+    bool                 lbr_tsx_fixup_enabled;
+
     /* Bitmask of segments that we can't safely use in virtual 8086 mode */
     uint16_t             vm86_segment_mask;
     /* Shadow CS, SS, DS, ES, FS, GS, TR while in virtual 8086 mode */
