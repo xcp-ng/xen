@@ -100,6 +100,9 @@
 #define cpu_has_eist		boot_cpu_has(X86_FEATURE_EIST)
 #define cpu_has_hypervisor	boot_cpu_has(X86_FEATURE_HYPERVISOR)
 #define cpu_has_cmp_legacy	boot_cpu_has(X86_FEATURE_CMP_LEGACY)
+#define cpu_has_hle		boot_cpu_has(X86_FEATURE_HLE)
+#define cpu_has_rtm		boot_cpu_has(X86_FEATURE_RTM)
+#define cpu_has_pdcm		boot_cpu_has(X86_FEATURE_PDCM)
 #define cpu_has_lfence_dispatch boot_cpu_has(X86_FEATURE_LFENCE_DISPATCH)
 #define cpu_has_no_xpti         boot_cpu_has(X86_FEATURE_NO_XPTI)
 
