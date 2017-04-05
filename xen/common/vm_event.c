@@ -818,6 +818,8 @@ int vm_event_monitor_traps(struct vcpu *v, uint8_t sync,
         return rc;
     };
 
+    req->vcpu_id = v->vcpu_id;
+
     if ( sync )
     {
         req->flags |= VM_EVENT_FLAG_VCPU_PAUSED;
