@@ -36,7 +36,6 @@
 #include <xen/wait.h>
 #include <xen/mem_access.h>
 #include <xen/rangeset.h>
-#include <xen/vm_event.h>
 #include <xen/warning.h>
 #include <asm/shadow.h>
 #include <asm/hap.h>
@@ -62,6 +61,7 @@
 #include <asm/hvm/nestedhvm.h>
 #include <asm/hvm/event.h>
 #include <asm/hvm/ioreq.h>
+#include <asm/hvm/vm_event.h>
 #include <asm/hvm/vmx/vmx.h>
 #include <asm/altp2m.h>
 #include <asm/mtrr.h>
@@ -486,50 +486,7 @@ void hvm_do_resume(struct vcpu *v)
         return;
 
     if ( unlikely(v->arch.vm_event) )
-    {
-        struct monitor_write_data *w = &v->arch.vm_event->write_data;
-
-        if ( v->arch.vm_event->emulate_flags )
-        {
-            enum emul_kind kind = EMUL_KIND_NORMAL;
-
-            if ( v->arch.vm_event->emulate_flags &
-                 VM_EVENT_FLAG_SET_EMUL_READ_DATA )
-                kind = EMUL_KIND_SET_CONTEXT;
-            else if ( v->arch.vm_event->emulate_flags &
-                      VM_EVENT_FLAG_EMULATE_NOWRITE )
-                kind = EMUL_KIND_NOWRITE;
-
-            hvm_mem_access_emulate_one(kind, TRAP_invalid_op,
-                                       HVM_DELIVER_NO_ERROR_CODE);
-
-            v->arch.vm_event->emulate_flags = 0;
-        }
-
-        if ( w->do_write.msr )
-        {
-            hvm_msr_write_intercept(w->msr, w->value, 0);
-            w->do_write.msr = 0;
-        }
-
-        if ( w->do_write.cr0 )
-        {
-            hvm_set_cr0(w->cr0, 0);
-            w->do_write.cr0 = 0;
-        }
-
-        if ( w->do_write.cr4 )
-        {
-            hvm_set_cr4(w->cr4, 0);
-            w->do_write.cr4 = 0;
-        }
-
-        if ( w->do_write.cr3 )
-        {
-            hvm_set_cr3(w->cr3, 0);
-            w->do_write.cr3 = 0;
-        }
-    }
+        hvm_vm_event_do_resume(v);
 
     /* Inject pending hw/sw trap */
     if ( v->arch.hvm_vcpu.inject_event.vector >= 0 )
