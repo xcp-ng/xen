@@ -2471,7 +2471,8 @@ int hvm_set_cr4(unsigned long value, bool_t may_defer)
     }
 
     if ( may_defer && unlikely(v->domain->arch.monitor.write_ctrlreg_enabled &
-                               monitor_ctrlreg_bitmask(VM_EVENT_X86_CR4)) )
+                               monitor_ctrlreg_bitmask(VM_EVENT_X86_CR4)) &&
+         (!opt_introspection_extn || (old_cr ^ value) != X86_CR4_PGE) )
     {
         ASSERT(v->arch.vm_event);
 
