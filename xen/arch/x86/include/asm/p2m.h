@@ -866,11 +866,20 @@ void p2m_flush_nestedp2m(struct domain *d);
 /* Flushes the np2m specified by np2m_base (if it exists) */
 void np2m_flush_base(struct vcpu *v, unsigned long np2m_base);
 
+struct p2m_domain *np2m_get_by_base_locked(struct vcpu *v, uint64_t np2m_base);
+
 void hap_p2m_init(struct p2m_domain *p2m);
 void shadow_p2m_init(struct p2m_domain *p2m);
 
 void cf_check nestedp2m_write_p2m_entry_post(
     struct p2m_domain *p2m, unsigned int oflags);
+void
+nestedhap_fix_p2m(struct vcpu *v, struct p2m_domain *p2m,
+                  paddr_t L2_gpa, paddr_t L0_gpa,
+                  unsigned int page_order, p2m_type_t p2mt, p2m_access_t p2ma);
+int nestedhap_walk_L0_p2m(
+    struct p2m_domain *p2m, paddr_t L1_gpa, paddr_t *L0_gpa, p2m_type_t *p2mt,
+    p2m_access_t *p2ma, unsigned int *page_order, struct npfec npfec);
 
 /*
  * Alternate p2m: shadow p2m tables used for alternate memory views
