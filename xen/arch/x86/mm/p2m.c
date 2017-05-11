@@ -1436,6 +1436,29 @@ void np2m_flush_base(struct vcpu *v, unsigned long np2m_base)
     nestedp2m_unlock(d);
 }
 
+struct p2m_domain *np2m_get_by_base_locked(struct vcpu *v, uint64_t np2m_base)
+{
+    struct domain *d = v->domain;
+    struct p2m_domain *np2m;
+    unsigned int i;
+
+    np2m_base &= ~(0xfffull);
+
+    nestedp2m_lock(d);
+    for ( i = 0; i < MAX_NESTEDP2M; i++ )
+    {
+        np2m = d->arch.nested_p2m[i];
+        p2m_lock(np2m);
+        if ( np2m->np2m_base == np2m_base )
+            break;
+        p2m_unlock(np2m);
+        np2m = NULL;
+    }
+    nestedp2m_unlock(d);
+
+    return np2m;
+}
+
 static void assign_np2m(struct vcpu *v, struct p2m_domain *p2m)
 {
     struct nestedvcpu *nv = &vcpu_nestedhvm(v);
