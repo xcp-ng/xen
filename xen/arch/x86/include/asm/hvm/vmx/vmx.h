@@ -319,6 +319,7 @@ extern uint8_t posted_intr_vector;
 
 #define INVEPT_SINGLE_CONTEXT   1
 #define INVEPT_ALL_CONTEXT      2
+#define INVEPT_PVEPT_CONTEXT    0x88d8
 
 #define cpu_has_vmx_vpid_invvpid_individual_addr                    \
     (vmx_ept_vpid_cap & VMX_VPID_INVVPID_INDIVIDUAL_ADDR)
