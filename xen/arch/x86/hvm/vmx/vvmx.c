@@ -28,6 +28,8 @@
 #include <asm/hvm/vmx/vvmx.h>
 #include <asm/hvm/nestedhvm.h>
 
+#include "../../mm/mm-locks.h"
+
 static DEFINE_PER_CPU(u64 *, vvmcs_buf);
 
 static void nvmx_purge_vvmcs(struct vcpu *v);
@@ -2023,19 +2025,117 @@ static int nvmx_handle_vmwrite(struct cpu_user_regs *regs)
     return X86EMUL_OKAY;
 }
 
+struct pv_invept_desc
+{
+    u64 eptp;
+    union {
+        u64 L2_gpa; /* Metadata in the low 12 bits. */
+        struct {
+            unsigned int lvl:3, valid:1, inv:1;
+        };
+    };
+    u64 L21e;
+};
+
+int pv_invept(struct vcpu *v, const struct pv_invept_desc *desc)
+{
+    struct domain *d = v->domain;
+    struct p2m_domain *L1p2m;
+    struct npfec npfec = {};
+
+    paddr_t L2_gpa = desc->L2_gpa & PAGE_MASK;
+
+    paddr_t L0_gpa;
+    p2m_type_t L10_p2mt;
+    p2m_access_t L10_p2ma = p2m_access_rwx;
+    unsigned int L10_order;
+
+    paddr_t nL1_gpa = desc->L21e & PAGE_MASK;
+    uint8_t nL21_p2ma = desc->L21e & 7;
+    unsigned int nL21_order = desc->lvl * 9;
+
+    p2m_access_t L20_p2ma;
+    unsigned int L20_order;
+
+    int rv;
+
+    if ( !desc->valid )
+        return -EINVAL;
+
+    /* If this is a non-leaf update - drop it */
+    if ( nL21_order && !(desc->L21e & 0x80) )
+        return 0;
+
+    /*
+     * If present is zero, set the nL1_gpa to something that'll always resolve
+     */
+    if ( !nL21_p2ma )
+        nL1_gpa = 0;
+
+    /* check leaf vs non-leaf */
+    /* We assume that all required L1 --> L0 mappings are present */
+    rv = nestedhap_walk_L0_p2m(p2m_get_hostp2m(d), nL1_gpa,
+                               &L0_gpa, &L10_p2mt, &L10_p2ma, &L10_order,
+                               npfec);
+
+    if ( rv != NESTEDHVM_PAGEFAULT_DONE )
+    {
+        gdprintk(XENLOG_ERR, "%s(%pv, { %p, %p, %p })\n",
+                 __func__, v, _p(desc->eptp), _p(desc->L2_gpa), _p(desc->L21e));
+        gdprintk(XENLOG_ERR, "L0walk(%p) => %d - %p/%u/%#x/%#x\n",
+                 _p(nL1_gpa), rv, _p(L0_gpa), L10_order, L10_p2ma, L10_p2mt);
+
+        return -EFAULT;
+    }
+
+    L20_order = min(nL21_order, L10_order);
+    L20_p2ma = nL21_p2ma & L10_p2ma;
+
+    L1p2m = np2m_get_by_base_locked(v, desc->eptp);
+    if ( !L1p2m )
+        return -EFAULT;
+
+    if ( desc->inv )
+    {
+        nestedhap_fix_p2m(v, L1p2m, L2_gpa, L0_gpa, L20_order,
+                          L10_p2mt, L20_p2ma & ~p2m_access_w);
+
+        ept_sync_domain(L1p2m);
+    }
+
+    nestedhap_fix_p2m(v, L1p2m, L2_gpa, L0_gpa, L20_order, L10_p2mt, L20_p2ma);
+    p2m_unlock(L1p2m);
+
+    return 0;
+}
+
 static int nvmx_handle_invept(struct cpu_user_regs *regs)
 {
     struct vmx_inst_decoded decode;
-    unsigned long eptp;
+    pagefault_info_t pfinfo;
     int ret;
 
-    if ( (ret = decode_vmx_inst(regs, &decode, &eptp)) != X86EMUL_OKAY )
+    if ( (ret = decode_vmx_inst(regs, &decode, NULL)) != X86EMUL_OKAY )
         return ret;
+
+    if ( decode.type != VMX_INST_MEMREG_TYPE_MEMORY )
+    {
+        hvm_inject_hw_exception(X86_EXC_UD, 0);
+        return X86EMUL_EXCEPTION;
+    }
 
     switch ( reg_read(regs, decode.reg2) )
     {
     case INVEPT_SINGLE_CONTEXT:
     {
+        unsigned long eptp;
+
+        /* TODO - reject SINGLE_CONTEXT if not configured. */
+
+        ret = hvm_copy_from_guest_linear(&eptp, decode.mem, 8, 0, &pfinfo);
+        if ( ret != HVMTRANS_okay )
+            return X86EMUL_EXCEPTION;
+
         np2m_flush_base(current, eptp);
         break;
     }
@@ -2043,6 +2143,20 @@ static int nvmx_handle_invept(struct cpu_user_regs *regs)
         p2m_flush_nestedp2m(current->domain);
         __invept(INVEPT_ALL_CONTEXT, 0);
         break;
+    case INVEPT_PVEPT_CONTEXT:
+    {
+        struct pv_invept_desc desc;
+
+        ret = hvm_copy_from_guest_linear(&desc, decode.mem, 24, 0, &pfinfo);
+        if ( ret != HVMTRANS_okay )
+            return X86EMUL_EXCEPTION;
+
+        /* top 12 bits are ignored */
+        desc.L21e &= (1UL << 52) - 1;
+
+        pv_invept(current, &desc);
+        break;
+    }
     default:
         vmfail(regs, VMX_INSN_INVEPT_INVVPID_INVALID_OP);
         return X86EMUL_OKAY;
