@@ -81,7 +81,7 @@ nestedp2m_write_p2m_entry_post(struct p2m_domain *p2m, unsigned int oflags)
 /********************************************/
 /*          NESTED VIRT FUNCTIONS           */
 /********************************************/
-static void
+void
 nestedhap_fix_p2m(struct vcpu *v, struct p2m_domain *p2m, 
                   paddr_t L2_gpa, paddr_t L0_gpa,
                   unsigned int page_order, p2m_type_t p2mt, p2m_access_t p2ma)
@@ -117,7 +117,7 @@ nestedhap_fix_p2m(struct vcpu *v, struct p2m_domain *p2m,
  * walk is successful, the translated value is returned in L0_gpa. The return 
  * value tells the upper level what to do.
  */
-static int nestedhap_walk_L0_p2m(
+int nestedhap_walk_L0_p2m(
     struct p2m_domain *p2m, paddr_t L1_gpa, paddr_t *L0_gpa, p2m_type_t *p2mt,
     p2m_access_t *p2ma, unsigned int *page_order, struct npfec npfec)
 {
