@@ -458,6 +458,9 @@ struct acpi_config {
     int dsdt_15cpu_len;
 };
 
+extern unsigned char dsdt_anycpu_qemu_xen[], dsdt_anycpu[], dsdt_15cpu[];
+extern int dsdt_anycpu_qemu_xen_len, dsdt_anycpu_len, dsdt_15cpu_len;
+
 void acpi_build_tables(struct acpi_config *config, unsigned int physical);
 
 #endif /* _ACPI_2_0_H_ */
