@@ -517,6 +517,23 @@ void acpi_build_tables(struct acpi_config *config, unsigned int physical)
     unsigned long        secondary_tables[ACPI_MAX_SECONDARY_TABLES];
     int                  nr_secondaries, i;
 
+    /* If the device model is specified switch to the corresponding tables */
+    const char *s = xenstore_read("platform/device-model", "");
+    if ( !strncmp(s, "qemu_xen_traditional", 21) )
+    {
+        config->dsdt_anycpu = dsdt_anycpu;
+        config->dsdt_anycpu_len = dsdt_anycpu_len;
+        config->dsdt_15cpu = dsdt_15cpu;
+        config->dsdt_15cpu_len = dsdt_15cpu_len;
+    }
+    else if ( !strncmp(s, "qemu_xen", 9) )
+    {
+        config->dsdt_anycpu = dsdt_anycpu_qemu_xen;
+        config->dsdt_anycpu_len = dsdt_anycpu_qemu_xen_len;
+        config->dsdt_15cpu = NULL;
+        config->dsdt_15cpu_len = 0;
+    }
+
     /* Allocate and initialise the acpi info area. */
     mem_hole_populate_ram(ACPI_INFO_PHYSICAL_ADDRESS >> PAGE_SHIFT, 1);
     acpi_info = (struct acpi_info *)ACPI_INFO_PHYSICAL_ADDRESS;
