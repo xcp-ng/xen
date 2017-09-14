@@ -66,6 +66,7 @@ stubdom/libxencall-*
 stubdom/libxenevtchn-*
 stubdom/libxenforeignmemory-*
 stubdom/libxengnttab-*
+stubdom/libxentoolcore-*
 stubdom/libxentoollog-*
 stubdom/lwip-*
 stubdom/lwip/
@@ -90,6 +91,7 @@ tools/config.cache
 config/Tools.mk
 config/Stubdom.mk
 config/Docs.mk
+tools/libs/toolcore/headers.chk
 tools/libs/toollog/headers.chk
 tools/libs/evtchn/headers.chk
 tools/libs/gnttab/headers.chk
@@ -312,6 +314,7 @@ tools/include/xen-foreign/arm64.h
 .git
 tools/misc/xen-hptool
 tools/misc/xen-mfndump
+tools/libs/toolcore/include/_*.h
 tools/libxc/_*.[ch]
 tools/libxl/_*.[ch]
 tools/libxl/testidl
