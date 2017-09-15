@@ -2,11 +2,13 @@
 #define XENGNTTAB_PRIVATE_H
 
 #include <xentoollog.h>
+#include <xentoolcore_internal.h>
 #include <xengnttab.h>
 
 struct xengntdev_handle {
     xentoollog_logger *logger, *logger_tofree;
     int fd;
+    Xentoolcore__Active_Handle tc_ah;
 };
 
 int osdep_gnttab_open(xengnttab_handle *xgt);
