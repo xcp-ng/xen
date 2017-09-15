@@ -331,6 +331,17 @@ struct xen_dm_op_inject_msi {
     uint64_aligned_t addr;
 };
 
+/*
+ * XEN_DMOP_remote_shutdown : Declare a shutdown for another domain
+ *                            Identical to SCHEDOP_remote_shutdown
+ */
+#define XEN_DMOP_remote_shutdown 16
+
+struct xen_dm_op_remote_shutdown {
+    uint32_t reason;       /* SHUTDOWN_* => enum sched_shutdown_reason */
+                           /* (Other reason values are not blocked) */
+};
+
 struct xen_dm_op {
     uint32_t op;
     uint32_t pad;
@@ -349,6 +360,7 @@ struct xen_dm_op {
         struct xen_dm_op_set_mem_type set_mem_type;
         struct xen_dm_op_inject_event inject_event;
         struct xen_dm_op_inject_msi inject_msi;
+        struct xen_dm_op_remote_shutdown remote_shutdown;
     } u;
 };
 
