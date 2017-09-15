@@ -109,6 +109,7 @@ LDLIBS_libxengntshr = $(XEN_LIBXENGNTTAB)/libxengnttab$(libextension)
 SHLIB_libxengntshr  = -Wl,-rpath-link=$(XEN_LIBXENGNTTAB)
 
 CFLAGS_libxencall = -I$(XEN_LIBXENCALL)/include $(CFLAGS_xeninclude)
+SHDEPS_libxencall = $(SHLIB_libxentoolcore)
 LDLIBS_libxencall = $(XEN_LIBXENCALL)/libxencall$(libextension)
 SHLIB_libxencall  = -Wl,-rpath-link=$(XEN_LIBXENCALL)
 
