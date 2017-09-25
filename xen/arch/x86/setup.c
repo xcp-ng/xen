@@ -1535,6 +1535,8 @@ void __init noreturn __start_xen(unsigned long mbi_p)
     if ( !tboot_protect_mem_regions() )
         panic("Could not protect TXT memory regions");
 
+    init_guest_msr_policy();
+
     if ( opt_dom0pvh )
         domcr_flags |= DOMCRF_pvh | DOMCRF_hap;
 

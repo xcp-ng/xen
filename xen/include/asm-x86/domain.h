@@ -399,6 +399,8 @@ struct arch_domain
 
     cpuid_input_t *cpuids;
 
+    struct msr_domain_policy *msr;
+
     struct PITState vpit;
 
     /* TSC management (emulation, pv, scaling, stats) */
