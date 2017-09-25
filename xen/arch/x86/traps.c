@@ -1242,6 +1242,7 @@ static int emulate_forced_invalid_op(struct cpu_user_regs *regs)
 {
     char sig[5], instr[2];
     unsigned long eip, rc;
+    const struct msr_vcpu_policy *vp = current->arch.msr;
 
     eip = regs->eip;
 
@@ -1265,7 +1266,8 @@ static int emulate_forced_invalid_op(struct cpu_user_regs *regs)
         return 0;
 
     /* If cpuid faulting is enabled and CPL>0 inject a #GP in place of #UD. */
-    if ( current->arch.cpuid_faulting && !guest_kernel_mode(current, regs) )
+    if ( vp->misc_features_enables.cpuid_faulting &&
+         !guest_kernel_mode(current, regs) )
     {
         regs->eip = eip;
         do_guest_trap(TRAP_gp_fault, regs, 1);
@@ -2915,7 +2917,7 @@ static int emulate_privileged_op(struct cpu_user_regs *regs)
             if ( (msr_content & MSR_MISC_FEATURES_CPUID_FAULTING) &&
                  !this_cpu(cpuid_faulting_enabled) )
                 goto fail;
-            current->arch.cpuid_faulting =
+            current->arch.msr->misc_features_enables.cpuid_faulting =
                 !!(msr_content & MSR_MISC_FEATURES_CPUID_FAULTING);
             break;
 
@@ -3106,7 +3108,7 @@ static int emulate_privileged_op(struct cpu_user_regs *regs)
                  rdmsr_safe(MSR_INTEL_MISC_FEATURES_ENABLES, val) )
                 goto fail;
             regs->eax = regs->edx = 0;
-            if ( current->arch.cpuid_faulting )
+            if ( current->arch.msr->misc_features_enables.cpuid_faulting )
                 regs->eax |= MSR_MISC_FEATURES_CPUID_FAULTING;
             break;
 
@@ -3169,7 +3171,8 @@ static int emulate_privileged_op(struct cpu_user_regs *regs)
 
     case 0xa2: /* CPUID */
         /* If cpuid faulting is enabled and CPL>0 leave the #GP untouched. */
-        if ( v->arch.cpuid_faulting && !guest_kernel_mode(v, regs) )
+        if ( v->arch.msr->misc_features_enables.cpuid_faulting &&
+             !guest_kernel_mode(v, regs) )
             goto fail;
 
         pv_cpuid(regs);
