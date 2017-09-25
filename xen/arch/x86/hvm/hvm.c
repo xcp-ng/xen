@@ -3719,11 +3719,20 @@ int hvm_msr_read_intercept(unsigned int msr, uint64_t *msr_content)
     uint64_t *var_range_base, *fixed_range_base;
     bool_t mtrr;
     unsigned int edx, index;
-    int ret = X86EMUL_OKAY;
+    int ret;
 
     var_range_base = (uint64_t *)v->arch.hvm_vcpu.mtrr.var_ranges;
     fixed_range_base = (uint64_t *)v->arch.hvm_vcpu.mtrr.fixed_ranges;
 
+    if ( (ret = guest_rdmsr(v, msr, msr_content)) != X86EMUL_UNHANDLEABLE )
+    {
+        if ( ret == X86EMUL_EXCEPTION )
+            hvm_inject_hw_exception(TRAP_gp_fault, 0);
+
+        return ret;
+    }
+
+    ret = X86EMUL_OKAY;
     hvm_cpuid(1, NULL, NULL, NULL, &edx);
     mtrr = !!(edx & cpufeat_mask(X86_FEATURE_MTRR));
 
