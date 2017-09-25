@@ -428,6 +428,9 @@ int vcpu_initialise(struct vcpu *v)
             return rc;
 
         vmce_init_vcpu(v);
+
+        if ( (rc = init_vcpu_msr_policy(v)) )
+            goto done;
     }
 
     spin_lock_init(&v->arch.vpmu.vpmu_lock);
@@ -471,6 +474,7 @@ int vcpu_initialise(struct vcpu *v)
     {
         v->arch.schedule_tail = continue_idle_domain;
         v->arch.cr3           = __pa(idle_pg_table);
+        v->arch.msr = ZERO_BLOCK_PTR; /* Catch stray misuses */
     }
 
     v->arch.pv_vcpu.ctrlreg[4] = real_cr4_to_pv_guest_cr4(mmu_cr4_features);
@@ -493,6 +497,9 @@ int vcpu_initialise(struct vcpu *v)
 
         if ( is_pv_domain(d) )
             xfree(v->arch.pv_vcpu.trap_ctxt);
+
+        xfree(v->arch.msr);
+        v->arch.msr = NULL;
     }
     else if ( !is_idle_domain(v->domain) )
         cpuid_policy_updated(v);
@@ -504,6 +511,9 @@ void vcpu_destroy(struct vcpu *v)
 {
     xfree(v->arch.vm_event);
     v->arch.vm_event = NULL;
+
+    xfree(v->arch.msr);
+    v->arch.msr = NULL;
 
     if ( is_pv_32bit_vcpu(v) )
     {
