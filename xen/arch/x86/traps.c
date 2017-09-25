@@ -3022,6 +3022,12 @@ static int emulate_privileged_op(struct cpu_user_regs *regs)
         break;
 
     case 0x32: /* RDMSR */
+        rc = guest_rdmsr(current, regs->_ecx, &val);
+        if ( rc == X86EMUL_OKAY )
+            goto rdmsr_writeback;
+        else if ( rc != X86EMUL_UNHANDLEABLE )
+            goto fail;
+
         vpmu_msr = 0;
         switch ( regs->_ecx )
         {
@@ -3107,23 +3113,6 @@ static int emulate_privileged_op(struct cpu_user_regs *regs)
                 goto fail;
             regs->eax = v->arch.spec_ctrl;
             regs->edx = 0;
-            break;
-
-        case MSR_INTEL_PLATFORM_INFO:
-            if ( !boot_cpu_has(X86_FEATURE_MSR_PLATFORM_INFO) )
-                goto fail;
-            regs->eax = regs->edx = 0;
-            if ( this_cpu(cpuid_faulting_enabled) )
-                regs->eax = MSR_PLATFORM_INFO_CPUID_FAULTING;
-            break;
-
-        case MSR_INTEL_MISC_FEATURES_ENABLES:
-            if ( boot_cpu_data.x86_vendor != X86_VENDOR_INTEL ||
-                 rdmsr_safe(MSR_INTEL_MISC_FEATURES_ENABLES, val) )
-                goto fail;
-            regs->eax = regs->edx = 0;
-            if ( current->arch.msr->misc_features_enables.cpuid_faulting )
-                regs->eax |= MSR_MISC_FEATURES_CPUID_FAULTING;
             break;
 
         case MSR_ARCH_CAPABILITIES:
