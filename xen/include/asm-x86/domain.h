@@ -621,6 +621,8 @@ struct arch_vcpu
 
     struct arch_vm_event *vm_event;
 
+    struct msr_vcpu_policy *msr;
+
     struct {
         uint8_t next_interrupt_enabled : 1;
     } monitor;
