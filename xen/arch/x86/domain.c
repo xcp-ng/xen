@@ -552,6 +552,7 @@ int arch_domain_create(struct domain *d, unsigned int domcr_flags,
     if ( is_idle_domain(d) )
     {
         d->arch.emulation_flags = 0;
+        d->arch.msr = ZERO_BLOCK_PTR; /* Catch stray misuses. */
     }
     else
     {
@@ -633,6 +634,9 @@ int arch_domain_create(struct domain *d, unsigned int domcr_flags,
         d->arch.x86        = boot_cpu_data.x86;
         d->arch.x86_model  = boot_cpu_data.x86_model;
 
+        if ( (rc = init_domain_msr_policy(d)) )
+            goto fail;
+
         d->arch.ioport_caps = 
             rangeset_new(d, "I/O Ports", RANGESETF_prettyprint_hex);
         rc = -ENOMEM;
@@ -692,6 +696,7 @@ int arch_domain_create(struct domain *d, unsigned int domcr_flags,
     cleanup_domain_irq_mapping(d);
     free_xenheap_page(d->shared_info);
     xfree(d->arch.cpuids);
+    xfree(d->arch.msr);
     if ( paging_initialised )
         paging_final_teardown(d);
     free_perdomain_mappings(d);
@@ -710,6 +715,7 @@ void arch_domain_destroy(struct domain *d)
 
     xfree(d->arch.e820);
     xfree(d->arch.cpuids);
+    xfree(d->arch.msr);
 
     free_domain_pirqs(d);
     if ( !is_idle_domain(d) )
