@@ -3093,7 +3093,6 @@ static int vmx_msr_write_intercept(unsigned int msr, uint64_t msr_content)
             goto gp_fault;
         break;
     case IA32_FEATURE_CONTROL_MSR:
-    case MSR_INTEL_PLATFORM_INFO:
     case MSR_IA32_VMX_BASIC ... MSR_IA32_VMX_VMFUNC:
         /* None of these MSRs are writeable. */
         goto gp_fault;
@@ -3107,23 +3106,6 @@ static int vmx_msr_write_intercept(unsigned int msr, uint64_t msr_content)
          if ( vpmu_do_wrmsr(msr, msr_content, 0) )
             goto gp_fault;
         break;
-
-    case MSR_INTEL_MISC_FEATURES_ENABLES:
-    {
-        struct msr_vcpu_policy *vp = v->arch.msr;
-        bool old_cpuid_faulting = vp->misc_features_enables.cpuid_faulting;
-
-        if ( msr_content & ~MSR_MISC_FEATURES_CPUID_FAULTING )
-            goto gp_fault;
-
-        vp->misc_features_enables.cpuid_faulting =
-            msr_content & MSR_MISC_FEATURES_CPUID_FAULTING;
-
-        if ( cpu_has_cpuid_faulting &&
-             (old_cpuid_faulting ^ vp->misc_features_enables.cpuid_faulting) )
-            ctxt_switch_levelling(v);
-        break;
-    }
 
     default:
         if ( passive_domain_do_wrmsr(msr, msr_content) )

@@ -3877,7 +3877,7 @@ int hvm_msr_write_intercept(unsigned int msr, uint64_t msr_content,
     struct vcpu *v = current;
     bool_t mtrr;
     unsigned int edx, ebx, index;
-    int ret = X86EMUL_OKAY;
+    int ret;
 
     HVMTRACE_3D(MSR_WRITE, msr,
                (uint32_t)msr_content, (uint32_t)(msr_content >> 32));
@@ -3897,6 +3897,16 @@ int hvm_msr_write_intercept(unsigned int msr, uint64_t msr_content,
         hvm_event_msr(msr, msr_content);
         return X86EMUL_OKAY;
     }
+
+    if ( (ret = guest_wrmsr(v, msr, msr_content)) != X86EMUL_UNHANDLEABLE )
+    {
+        if ( ret == X86EMUL_EXCEPTION )
+            hvm_inject_hw_exception(TRAP_gp_fault, 0);
+
+        return ret;
+    }
+
+    ret = X86EMUL_OKAY;
 
     switch ( msr )
     {
