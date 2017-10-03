@@ -2234,6 +2234,7 @@ void context_switch(struct vcpu *prev, struct vcpu *next)
     {
         _update_runstate_area(prev);
         vpmu_switch_from(prev);
+        np2m_schedule(NP2M_SCHEDLE_OUT);
     }
 
     if ( is_hvm_domain(prevd) && !list_empty(&prev->arch.hvm_vcpu.tm_list) )
@@ -2310,6 +2311,7 @@ void context_switch(struct vcpu *prev, struct vcpu *next)
 
         /* Must be done with interrupts enabled */
         vpmu_switch_to(next);
+        np2m_schedule(NP2M_SCHEDLE_IN);
     }
 
     /* Ensure that the vcpu has an up-to-date time base. */
