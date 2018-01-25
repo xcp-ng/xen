@@ -509,6 +509,9 @@ int xenmem_add_to_physmap_one(struct domain *d, unsigned int space,
                               union xen_add_to_physmap_batch_extra extra,
                               unsigned long idx, xen_pfn_t gpfn);
 
+int xenmem_add_to_physmap(struct domain *d, struct xen_add_to_physmap *xatp,
+                          unsigned int start);
+
 /* Returns 0 on success, or negative on error. */
 int __must_check guest_remove_page(struct domain *d, unsigned long gmfn);
 
