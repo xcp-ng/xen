@@ -636,12 +636,6 @@ DEFINE_XEN_GUEST_HANDLE(xen_domctl_ioport_mapping_t);
 #define XEN_DOMCTL_MEM_CACHEATTR_WB  6
 #define XEN_DOMCTL_MEM_CACHEATTR_UCM 7
 #define XEN_DOMCTL_DELETE_MEM_CACHEATTR (~(uint32_t)0)
-struct xen_domctl_pin_mem_cacheattr {
-    uint64_aligned_t start, end;
-    uint32_t type; /* XEN_DOMCTL_MEM_CACHEATTR_* */
-};
-typedef struct xen_domctl_pin_mem_cacheattr xen_domctl_pin_mem_cacheattr_t;
-DEFINE_XEN_GUEST_HANDLE(xen_domctl_pin_mem_cacheattr_t);
 
 
 /* XEN_DOMCTL_set_ext_vcpucontext */
@@ -1176,7 +1170,7 @@ struct xen_domctl {
 #define XEN_DOMCTL_bind_pt_irq                   38
 #define XEN_DOMCTL_memory_mapping                39
 #define XEN_DOMCTL_ioport_mapping                40
-#define XEN_DOMCTL_pin_mem_cacheattr             41
+/* #define XEN_DOMCTL_pin_mem_cacheattr          41 Removed - use dmop */
 #define XEN_DOMCTL_set_ext_vcpucontext           42
 #define XEN_DOMCTL_get_ext_vcpucontext           43
 #define XEN_DOMCTL_set_opt_feature               44 /* Obsolete IA64 only */
@@ -1251,7 +1245,6 @@ struct xen_domctl {
         struct xen_domctl_bind_pt_irq       bind_pt_irq;
         struct xen_domctl_memory_mapping    memory_mapping;
         struct xen_domctl_ioport_mapping    ioport_mapping;
-        struct xen_domctl_pin_mem_cacheattr pin_mem_cacheattr;
         struct xen_domctl_ext_vcpucontext   ext_vcpucontext;
         struct xen_domctl_set_target        set_target;
         struct xen_domctl_subscribe         subscribe;
