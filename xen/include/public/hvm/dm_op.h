@@ -342,6 +342,24 @@ struct xen_dm_op_remote_shutdown {
                            /* (Other reason values are not blocked) */
 };
 
+/*
+ * XEN_DMOP_relocate_memory : Relocate GFNs for the specified guest.
+ *                            Identical to XENMEM_add_to_physmap with
+ *                            space == XENMAPSPACE_gmfn_range.
+ */
+#define XEN_DMOP_relocate_memory 17
+
+struct xen_dm_op_relocate_memory {
+    /* All fields are IN/OUT, with their OUT state undefined. */
+    /* Number of GFNs to process. */
+    uint32_t size;
+    uint32_t pad;
+    /* Starting GFN to relocate. */
+    uint64_aligned_t src_gfn;
+    /* Starting GFN where GFNs should be relocated. */
+    uint64_aligned_t dst_gfn;
+};
+
 struct xen_dm_op {
     uint32_t op;
     uint32_t pad;
@@ -361,6 +379,7 @@ struct xen_dm_op {
         struct xen_dm_op_inject_event inject_event;
         struct xen_dm_op_inject_msi inject_msi;
         struct xen_dm_op_remote_shutdown remote_shutdown;
+        struct xen_dm_op_relocate_memory relocate_memory;
     } u;
 };
 
