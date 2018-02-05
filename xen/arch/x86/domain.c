@@ -336,6 +336,22 @@ static inline int may_switch_mode(struct domain *d)
     return (!is_hvm_domain(d) && (d->tot_pages == 0));
 }
 
+static void set_domain_xpti(struct domain *d)
+{
+    if ( !is_pv_domain(d) )
+        return;
+
+    if ( d->arch.is_32bit_pv )
+    {
+        d->arch.pv_domain.xpti = false;
+        return;
+    }
+
+    /* XPTI is only for 64-bit PV domains */
+    d->arch.pv_domain.xpti = opt_xpti & (is_hardware_domain(d)
+                                         ? OPT_XPTI_DOM0 : OPT_XPTI_DOMU);
+}
+
 int switch_native(struct domain *d)
 {
     struct vcpu *v;
@@ -358,6 +374,8 @@ int switch_native(struct domain *d)
     }
 
     d->arch.x87_fip_width = cpu_has_fpu_sel ? 0 : 8;
+
+    set_domain_xpti(d);
 
     return 0;
 }
@@ -394,6 +412,8 @@ int switch_compat(struct domain *d)
     domain_set_alloc_bitsize(d);
 
     d->arch.x87_fip_width = 4;
+
+    set_domain_xpti(d);
 
     return 0;
 
@@ -700,6 +720,8 @@ int arch_domain_create(struct domain *d, unsigned int domcr_flags,
      * save/restore the 64-bit FIP/FDP and ignore the selectors.
      */
     d->arch.x87_fip_width = cpu_has_fpu_sel ? 0 : 8;
+
+    set_domain_xpti(d);
 
     return 0;
 

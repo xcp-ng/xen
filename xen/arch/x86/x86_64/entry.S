@@ -42,6 +42,10 @@ restore_all_guest:
         /* Stash guest SPEC_CTRL value while we can read struct vcpu. */
         mov   VCPU_arch_spec_ctrl(%rbx), %r15d
 
+        mov VCPU_domain(%rbx), %rax
+        cmpb $0, DOMAIN_arch_pv_xpti(%rax)
+        je .Lrag_keep_cr3
+
         /* Copy guest mappings and switch to per-CPU root page table. */
         mov   VCPU_cr3(%rbx), %r9
         GET_STACK_END(dx)

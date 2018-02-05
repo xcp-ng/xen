@@ -4015,7 +4015,7 @@ long do_mmu_update(
                      * to the page lock we hold, its pinned status, and uses on
                      * this (v)CPU.
                      */
-                    if ( !rc && !cpu_has_no_xpti &&
+                    if ( !rc && pg_owner->arch.pv_domain.xpti &&
                          ((page->u.inuse.type_info & PGT_count_mask) >
                           (1 + !!(page->u.inuse.type_info & PGT_pinned) +
                            (pagetable_get_pfn(curr->arch.guest_table) == mfn) +

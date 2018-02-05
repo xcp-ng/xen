@@ -173,6 +173,7 @@ void __dummy__(void)
     BLANK();
 
     OFFSET(DOMAIN_is_32bit_pv, struct domain, arch.is_32bit_pv);
+    OFFSET(DOMAIN_arch_pv_xpti, struct domain, arch.pv_domain.xpti);
     BLANK();
 
     OFFSET(VMCB_rax, struct vmcb_struct, rax);
