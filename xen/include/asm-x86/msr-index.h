@@ -43,6 +43,8 @@
 #define MSR_PRED_CMD			0x00000049
 #define PRED_CMD_IBPB			(_AC(1, ULL) << 0)
 
+#define MSR_SGX_PUBKEY_HASH(x)		(0x0000008c + (x)) /* 0 ... 3 */
+
 #define MSR_ARCH_CAPABILITIES		0x0000010a
 #define ARCH_CAPABILITIES_RDCL_NO	(_AC(1, ULL) << 0)
 #define ARCH_CAPABILITIES_IBRS_ALL	(_AC(1, ULL) << 1)
@@ -80,6 +82,18 @@
 #define MSR_IA32_PERF_CAPABILITIES	0x00000345
 /* Lower 6 bits define the format of the address in the LBR stack */
 #define MSR_IA32_PERF_CAP_LBR_FORMAT	0x3f
+
+#define MSR_SGX_SVN_STATUS		0x00000500
+
+#define MSR_DEBUG_INTERFACE		0x00000c80
+
+#define MSR_L3_QOS_CFG			0x00000c81
+#define MSR_L2_QOS_CFG			0x00000c82
+#define MSR_QM_EVTSEL			0x00000c8d
+#define MSR_QM_CTR			0x00000c8e
+#define MSR_PQR_ASSOC			0x00000c8f
+#define MSR_CAT_MASK_START		0x00000c90
+#define MSR_CAT_MASK_LAST		0x00000d8f
 
 #define MSR_IA32_BNDCFGS		0x00000d90
 #define IA32_BNDCFGS_ENABLE		0x00000001
