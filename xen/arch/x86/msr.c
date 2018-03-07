@@ -238,6 +238,18 @@ int guest_rdmsr(struct vcpu *v, uint32_t msr, uint64_t *val)
                                    ARRAY_SIZE(msrs->dr_mask))];
         break;
 
+        /* Specific blacklisted MSRs while the legacy handlers still exist. */
+    case MSR_SGX_PUBKEY_HASH(0) ... MSR_SGX_PUBKEY_HASH(3):
+    case MSR_SGX_SVN_STATUS:
+    case MSR_DEBUG_INTERFACE:
+    case MSR_L3_QOS_CFG:
+    case MSR_L2_QOS_CFG:
+    case MSR_QM_EVTSEL:
+    case MSR_QM_CTR:
+    case MSR_PQR_ASSOC:
+    case MSR_CAT_MASK_START ... MSR_CAT_MASK_LAST:
+        goto gp_fault;
+
         /*
          * TODO: Implement when we have better topology representation.
     case MSR_INTEL_CORE_THREAD_COUNT:
@@ -435,6 +447,18 @@ int guest_wrmsr(struct vcpu *v, uint32_t msr, uint64_t val)
         if ( v == curr && (curr->arch.dr7 & DR7_ACTIVE_MASK) )
             wrmsrl(msr, val);
         break;
+
+        /* Specific blacklisted MSRs while the legacy handlers still exist. */
+    case MSR_SGX_PUBKEY_HASH(0) ... MSR_SGX_PUBKEY_HASH(3):
+    case MSR_SGX_SVN_STATUS:
+    case MSR_DEBUG_INTERFACE:
+    case MSR_L3_QOS_CFG:
+    case MSR_L2_QOS_CFG:
+    case MSR_QM_EVTSEL:
+    case MSR_QM_CTR:
+    case MSR_PQR_ASSOC:
+    case MSR_CAT_MASK_START ... MSR_CAT_MASK_LAST:
+        goto gp_fault;
 
     default:
         return X86EMUL_UNHANDLEABLE;
