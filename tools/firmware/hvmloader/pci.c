@@ -402,6 +402,30 @@ void pci_setup(void)
     io_resource.base = 0xc000;
     io_resource.max = 0x10000;
 
+    /*
+     * During the transition period between qemu-trad and QEMU some migrated
+     * from qemu-trad VMs might have an unexpected MMIO hole size (e.g. due to
+     * vGPU BAR increase) and therefore fail to boot with QEMU. We don't want
+     * to change qemu-trad behavior and restrict memory relocation. So, to help
+     * us avoid the above scenario we save the final MMIO hole size here
+     * to a persistent location where it will be picked up later on migration
+     * by the toolstack and passed to QEMU.
+     *
+     * This code can be safely removed later when qemu-trad is finally removed
+     * from the product.
+     */
+    if ( allow_memory_relocate )
+    {
+        char str[16];
+
+        if ( snprintf(str, sizeof(str), "%lu",
+             (unsigned long)((1ull << 32) - pci_mem_start)) < 1 )
+            BUG();
+
+        if ( xenstore_write("vm-data/mmio-hole-size", str) != 0 )
+            printf("WARNING: failed to save final MMIO hole size!\n");
+    }
+
     /* Assign iomem and ioport resources in descending order of size. */
     for ( i = 0; i < nr_bars; i++ )
     {
