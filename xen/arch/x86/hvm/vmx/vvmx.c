@@ -1073,8 +1073,8 @@ static void load_shadow_guest_state(struct vcpu *v)
 
     nvcpu->guest_cr[0] = get_vvmcs(v, CR0_READ_SHADOW);
     nvcpu->guest_cr[4] = get_vvmcs(v, CR4_READ_SHADOW);
-    hvm_set_cr0(get_vvmcs(v, GUEST_CR0), 1);
     hvm_set_cr4(get_vvmcs(v, GUEST_CR4), 1);
+    hvm_set_cr0(get_vvmcs(v, GUEST_CR0), 1);
     hvm_set_cr3(get_vvmcs(v, GUEST_CR3), 1);
 
     control = get_vvmcs(v, VM_ENTRY_CONTROLS);
@@ -1263,8 +1263,8 @@ static void load_vvmcs_host_state(struct vcpu *v)
         __vmwrite(vmcs_h2g_field[i].guest_field, r);
     }
 
-    hvm_set_cr0(get_vvmcs(v, HOST_CR0), 1);
     hvm_set_cr4(get_vvmcs(v, HOST_CR4), 1);
+    hvm_set_cr0(get_vvmcs(v, HOST_CR0), 1);
     hvm_set_cr3(get_vvmcs(v, HOST_CR3), 1);
 
     control = get_vvmcs(v, VM_EXIT_CONTROLS);
