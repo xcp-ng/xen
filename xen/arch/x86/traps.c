@@ -2942,6 +2942,17 @@ static int emulate_privileged_op(struct cpu_user_regs *regs)
             wrmsrl(MSR_PRED_CMD, PRED_CMD_IBPB);
             break;
 
+        case MSR_FLUSH_CMD:
+            _domain_cpuid(currd, 7, 0, &dummy, &dummy, &dummy, &edx);
+            if ( !(edx & cpufeat_mask(X86_FEATURE_L1D_FLUSH)) )
+                goto fail; /* MSR available? */
+
+            if ( msr_content & ~FLUSH_CMD_L1D )
+                goto fail; /* Rsvd bit set? */
+
+            wrmsrl(MSR_FLUSH_CMD, msr_content);
+            break;
+
         case MSR_P6_PERFCTR(0)...MSR_P6_PERFCTR(7):
         case MSR_P6_EVNTSEL(0)...MSR_P6_EVNTSEL(3):
         case MSR_CORE_PERF_FIXED_CTR0...MSR_CORE_PERF_FIXED_CTR2:
@@ -3079,6 +3090,7 @@ static int emulate_privileged_op(struct cpu_user_regs *regs)
             break;
 
         case MSR_PRED_CMD:
+        case MSR_FLUSH_CMD:
             /* Write-only */
             goto fail;
 
