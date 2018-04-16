@@ -64,6 +64,9 @@ DECLARE_PER_CPU(struct cpuidmasks, cpuidmasks);
 /* Default masking MSR values, calculated at boot. */
 extern struct cpuidmasks cpuidmask_defaults;
 
+/* Check that all previously present features are still available. */
+bool_t recheck_cpu_features(unsigned int cpu);
+
 #endif /* __ASSEMBLY__ */
 #endif /* !__X86_CPUID_H__ */
 

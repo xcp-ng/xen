@@ -240,6 +240,28 @@ void __init calculate_featuresets(void)
     calculate_hvm_featureset();
 }
 
+bool_t recheck_cpu_features(unsigned int cpu)
+{
+    bool_t okay = 1;
+    struct cpuinfo_x86 c;
+    const struct cpuinfo_x86 *bsp = &boot_cpu_data;
+    unsigned int i;
+
+    identify_cpu(&c);
+
+    for ( i = 0; i < NCAPINTS; ++i )
+    {
+        if ( !(~c.x86_capability[i] & bsp->x86_capability[i]) )
+            continue;
+
+        printk(XENLOG_ERR "CPU%u: cap[%2u] is %08x (expected %08x)\n",
+               cpu, i, c.x86_capability[i], bsp->x86_capability[i]);
+        okay = 0;
+    }
+
+    return okay;
+}
+
 const uint32_t * __init lookup_deep_deps(uint32_t feature)
 {
     static const struct {

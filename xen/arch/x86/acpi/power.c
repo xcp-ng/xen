@@ -218,6 +218,9 @@ static int enter_state(u32 state)
 
     microcode_resume_cpu(0);
 
+    if ( !recheck_cpu_features(0) )
+        panic("Missing previously available feature(s).");
+
     /* Re-enabled default NMI/#MC use of MSR_SPEC_CTRL. */
     ci->bti_ist_info = default_bti_ist_info;
     spec_ctrl_exit_idle(ci);
