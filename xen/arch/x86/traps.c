@@ -2939,12 +2939,10 @@ static int emulate_privileged_op(struct cpu_user_regs *regs)
                  !(ebx & cpufeat_mask(X86_FEATURE_IBPB)) )
                 goto fail; /* MSR available? */
 
-            /*
-             * The only defined behaviour is when writing PRED_CMD_IBPB.  In
-             * practice, real hardware accepts any value without faulting.
-             */
-            if ( eax & PRED_CMD_IBPB )
-                wrmsrl(MSR_PRED_CMD, PRED_CMD_IBPB);
+            if ( eax & ~PRED_CMD_IBPB )
+                goto fail; /* Rsvd bit set? */
+
+            wrmsrl(MSR_PRED_CMD, PRED_CMD_IBPB);
             break;
 
         case MSR_P6_PERFCTR(0)...MSR_P6_PERFCTR(7):
