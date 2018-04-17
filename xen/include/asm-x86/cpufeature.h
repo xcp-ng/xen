@@ -30,7 +30,8 @@
 #define X86_FEATURE_IND_THUNK_LFENCE	((FSCAPINTS+0)*32+ 11) /* Use IND_THUNK_LFENCE */
 #define X86_FEATURE_IND_THUNK_JMP	((FSCAPINTS+0)*32+ 12) /* Use IND_THUNK_JMP */
 #define X86_FEATURE_XEN_IBPB		((FSCAPINTS+0)*32+ 13) /* IBRSB || IBPB */
-#define X86_FEATURE_SC_MSR		((FSCAPINTS+0)*32+ 14) /* MSR_SPEC_CTRL used by Xen */
+#define X86_FEATURE_SC_MSR_PV		((FSCAPINTS+0)*32+ 14) /* MSR_SPEC_CTRL used by Xen for PV */
+#define X86_FEATURE_SC_MSR_HVM		((FSCAPINTS+0)*32+ 15) /* MSR_SPEC_CTRL used by Xen for HVM */
 #define X86_FEATURE_SC_RSB_PV		((FSCAPINTS+0)*32+ 16) /* RSB overwrite needed for PV */
 #define X86_FEATURE_SC_RSB_HVM		((FSCAPINTS+0)*32+ 17) /* RSB overwrite needed for HVM */
 #define X86_FEATURE_NO_XPTI		((FSCAPINTS+0)*32+ 18) /* XPTI mitigation not in use */
