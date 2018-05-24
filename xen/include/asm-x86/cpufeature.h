@@ -37,6 +37,7 @@
 #define X86_FEATURE_NO_XPTI		((FSCAPINTS+0)*32+ 18) /* XPTI mitigation not in use */
 #define X86_FEATURE_SC_MSR_IDLE		((FSCAPINTS+0)*32 +19) /* (SC_MSR_PV || SC_MSR_HVM) && default_xen_spec_ctrl */
 #define X86_FEATURE_MFENCE_RDTSC	((FSCAPINTS+0)*32+ 20) /* MFENCE synchronizes RDTSC */
+#define X86_FEATURE_XEN_LBR		((FSCAPINTS+0)*32+ 21) /* Xen uses MSR_DEBUGCTL.LBR */
 
 #define cpufeat_word(idx)	((idx) / 32)
 #define cpufeat_bit(idx)	((idx) % 32)
@@ -105,6 +106,7 @@
 #define cpu_has_pdcm		boot_cpu_has(X86_FEATURE_PDCM)
 #define cpu_has_lfence_dispatch boot_cpu_has(X86_FEATURE_LFENCE_DISPATCH)
 #define cpu_has_no_xpti         boot_cpu_has(X86_FEATURE_NO_XPTI)
+#define cpu_has_xen_lbr         boot_cpu_has(X86_FEATURE_XEN_LBR)
 
 enum _cache_type {
     CACHE_TYPE_NULL = 0,
