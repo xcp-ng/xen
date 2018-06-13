@@ -124,8 +124,12 @@ static const char *str_7c0[32] =
     [ 2] = "REZ",      [ 3] = "pku",
     [ 4] = "ospke",
 
-    [5 ... 13] = "REZ",
+    [ 5] = "REZ",
 
+    [ 6] = "avx512_vbmi2",     [ 7] = "REZ",
+    [ 8] = "REZ",              [ 9] = "REZ",
+    [10] = "REZ",              [11] = "avx512_vnni",
+    [12] = "avx512_bitalg",    [13] = "REZ",
     [14] = "avx512_vpopcntdq",
 
     [15 ... 31] = "REZ",
