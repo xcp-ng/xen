@@ -259,7 +259,8 @@ def crunch_numbers(state):
         # top of AVX512F
         AVX512F: [AVX512DQ, AVX512IFMA, AVX512PF, AVX512ER, AVX512CD,
                   AVX512BW, AVX512VL, AVX512VBMI, AVX512_4VNNIW,
-                  AVX512_4FMAPS, AVX512_VPOPCNTDQ],
+                  AVX512_4FMAPS, AVX512_VPOPCNTDQ, AVX512_VBMI2,
+                  AVX512_VNNI, AVX512_BITALG],
 
         # The features:
         #   * Single Thread Indirect Branch Predictors

@@ -120,6 +120,9 @@ static const char *str_7c0[32] =
     [ 2] = "umip",     [ 3] = "pku",
     [ 4] = "ospke",
 
+    [ 6] = "avx512_vbmi2",
+    [11] = "avx512_vnni",
+    [12] = "avx512_bitalg",
     [14] = "avx512_vpopcntdq",
 
     [22] = "rdpid",
