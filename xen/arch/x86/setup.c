@@ -94,6 +94,8 @@ unsigned long __initdata highmem_start;
 size_param("highmem-start", highmem_start);
 #endif
 
+extern bool __initdata opt_avx512;
+
 cpumask_t __read_mostly cpu_present_map;
 
 unsigned long __read_mostly xen_phys_start;
@@ -1577,6 +1579,9 @@ void __init noreturn __start_xen(unsigned long mbi_p)
 
     if ( opt_invpcid && cpu_has_invpcid )
         use_invpcid = true;
+
+    if ( !opt_avx512 )
+        setup_clear_cpu_cap(X86_FEATURE_AVX512F);
 
     init_speculation_mitigations();
 
