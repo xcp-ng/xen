@@ -27,7 +27,7 @@ $(FLASK_H_FILES): $(FLASK_H_DEPEND)
 $(AV_H_FILES): $(AV_H_DEPEND)
 	$(CONFIG_SHELL) policy/mkaccess_vector.sh $(AWK) $(AV_H_DEPEND)
 
-obj-$(CONFIG_XSM_POLICY) += policy.o
+obj-$(CONFIG_XSM_FLASK_POLICY) += policy.o
 
 POLICY_SRC := $(XEN_ROOT)/tools/flask/policy/xenpolicy-$(XEN_FULLVERSION)
 
