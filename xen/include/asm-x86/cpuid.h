@@ -13,6 +13,8 @@
 
 #include <public/sysctl.h>
 
+extern bool opt_avx512;
+
 extern const uint32_t known_features[FSCAPINTS];
 extern const uint32_t special_features[FSCAPINTS];
 
