@@ -17,6 +17,8 @@ uint32_t __read_mostly raw_featureset[FSCAPINTS];
 uint32_t __read_mostly pv_featureset[FSCAPINTS];
 uint32_t __read_mostly hvm_featureset[FSCAPINTS];
 
+bool __initdata opt_avx512 = false;
+
 static int __init parse_xen_cpuid(const char *s)
 {
     const char *ss;
@@ -52,6 +54,8 @@ static int __init parse_xen_cpuid(const char *s)
             if ( !val )
                 setup_clear_cpu_cap(X86_FEATURE_SSBD);
         }
+        else if ( (val = parse_boolean("avx512", s, ss)) >= 0 )
+            opt_avx512 = val;
         else
             rc = -EINVAL;
 
