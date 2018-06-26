@@ -18,6 +18,8 @@ static const uint32_t hvm_shadow_featuremask[] = INIT_HVM_SHADOW_FEATURES;
 static const uint32_t hvm_hap_featuremask[] = INIT_HVM_HAP_FEATURES;
 static const uint32_t deep_features[] = INIT_DEEP_FEATURES;
 
+bool __initdata opt_avx512 = false;
+
 static int __init parse_xen_cpuid(const char *s)
 {
     const char *ss;
@@ -53,6 +55,8 @@ static int __init parse_xen_cpuid(const char *s)
             if ( !val )
                 setup_clear_cpu_cap(X86_FEATURE_SSBD);
         }
+        else if ( (val = parse_boolean("avx512", s, ss)) >= 0 )
+            opt_avx512 = val;
         else
             rc = -EINVAL;
 
