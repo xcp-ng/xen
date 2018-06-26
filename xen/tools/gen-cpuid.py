@@ -302,6 +302,9 @@ def crunch_numbers(state):
     pseduo_names = (
         # Data Operand Invariant Timing Mode.  Lives in MSR_ARCH_CAPS
         "doitm",
+
+        # AVX512
+        "avx512",
     )
 
     for n in pseduo_names:
