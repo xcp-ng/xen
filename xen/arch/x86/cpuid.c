@@ -19,6 +19,8 @@ static const uint32_t hvm_shadow_featuremask[] = INIT_HVM_SHADOW_FEATURES;
 static const uint32_t hvm_hap_featuremask[] = INIT_HVM_HAP_FEATURES;
 static const uint32_t deep_features[] = INIT_DEEP_FEATURES;
 
+bool __initdata opt_avx512 = false;
+
 static int __init parse_xen_cpuid(const char *s)
 {
     const char *ss;
@@ -35,6 +37,12 @@ static int __init parse_xen_cpuid(const char *s)
         ss = strchr(s, ',');
         if ( !ss )
             ss = strchr(s, '\0');
+
+        if ( (val = parse_boolean("avx512", s, ss)) >= 0 )
+        {
+            opt_avx512 = val;
+            goto next;
+        }
 
         /* Skip the 'no-' prefix for name comparisons. */
         feat = s;
@@ -80,6 +88,7 @@ static int __init parse_xen_cpuid(const char *s)
         if ( mid )
             rc = -EINVAL;
 
+    next:
         s = ss + 1;
     } while ( *ss );
 

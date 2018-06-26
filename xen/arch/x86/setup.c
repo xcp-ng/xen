@@ -1625,6 +1625,9 @@ void __init noreturn __start_xen(unsigned long mbi_p)
     if ( opt_invpcid && cpu_has_invpcid )
         use_invpcid = true;
 
+    if ( !opt_avx512 )
+        setup_clear_cpu_cap(X86_FEATURE_AVX512F);
+
     init_speculation_mitigations();
 
     init_idle_domain();
