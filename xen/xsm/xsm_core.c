@@ -31,6 +31,32 @@
 
 struct xsm_operations *xsm_ops;
 
+enum xsm_bootparam {
+    XSM_BOOTPARAM_DUMMY,
+    XSM_BOOTPARAM_FLASK,
+};
+
+static enum xsm_bootparam __initdata xsm_bootparam = XSM_BOOTPARAM_DUMMY;
+
+static int __init parse_xsm_param(const char *s)
+{
+    int rc = 0;
+
+    if ( !strcmp(s, "default") )
+        xsm_bootparam = XSM_BOOTPARAM_DUMMY;
+#ifdef CONFIG_XSM_FLASK
+    else if ( !strcmp(s, "flask") )
+        xsm_bootparam = XSM_BOOTPARAM_FLASK;
+#endif
+    else {
+        printk("XSM: can't parse boot parameter xsm=%s\n", s);
+        rc = -EINVAL;
+    }
+
+    return rc;
+}
+custom_param("xsm", parse_xsm_param);
+
 static inline int verify(struct xsm_operations *ops)
 {
     /* verify the security_operations structure exists */
@@ -57,7 +83,20 @@ static int __init xsm_core_init(const void *policy_buffer, size_t policy_size)
     }
 
     xsm_ops = &dummy_xsm_ops;
-    flask_init(policy_buffer, policy_size);
+
+    switch ( xsm_bootparam )
+    {
+    case XSM_BOOTPARAM_DUMMY:
+        break;
+
+    case XSM_BOOTPARAM_FLASK:
+        flask_init(policy_buffer, policy_size);
+        break;
+
+    default:
+        printk("XSM: Invalid value for xsm= boot parameter\n");
+        break;
+    }
 
     return 0;
 }
