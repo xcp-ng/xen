@@ -143,6 +143,18 @@ config XSM_FLASK_POLICY
 
 	  If unsure, say Y.
 
+config XSM_SILO
+	def_bool y
+	prompt "SILO support"
+	depends on XSM
+	---help---
+	  Enables SILO as the access control mechanism used by the XSM framework.
+	  This is not the default module, add boot parameter xsm=silo to choose
+	  it. This will deny any unmediated communication channels (grant tables
+	  and event channels) between unprivileged VMs.
+
+	  If unsure, say Y.
+
 config LATE_HWDOM
 	bool "Dedicated hardware domain"
 	default n
