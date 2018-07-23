@@ -121,6 +121,9 @@ struct shadow_domain {
 
     /* Has this domain ever used HVMOP_pagetable_dying? */
     bool_t pagetable_dying_op;
+
+    /* PV L1 Terminal Fault mitigation. */
+    struct tasklet pv_l1tf_tasklet;
 #endif
 };
 
@@ -259,6 +262,8 @@ struct pv_domain
 
     /* XPTI active? */
     bool xpti;
+    /* Mitigate L1TF with shadow/crashing? */
+    bool_t check_l1tf;
 
     /* map_domain_page() mapping cache. */
     struct mapcache_domain mapcache;
