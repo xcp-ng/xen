@@ -1173,6 +1173,7 @@ efi_start(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
 
 static bool_t __initdata efi_rs_enable = 1;
 static bool_t __initdata efi_map_uc = 1;
+#include <asm/spec_ctrl.h>
 
 static void __init parse_efi_param(char *s)
 {
@@ -1276,6 +1277,16 @@ void __init efi_init_memory(void)
                            " type=%u attr=%016" PRIx64 "\n",
                desc->PhysicalStart, desc->PhysicalStart + len - 1,
                desc->Type, desc->Attribute);
+
+        if ( (desc->Attribute & (EFI_MEMORY_WB | EFI_MEMORY_WT)) ||
+             (efi_bs_revision >= EFI_REVISION(2, 5) &&
+              (desc->Attribute & EFI_MEMORY_WP)) )
+        {
+            /* Supplement the heuristics in l1tf_calculations(). */
+            l1tf_safe_maddr =
+                max(l1tf_safe_maddr,
+                    ROUNDUP(desc->PhysicalStart + len, PAGE_SIZE));
+        }
 
         if ( !efi_rs_enable ||
              (!(desc->Attribute & EFI_MEMORY_RUNTIME) &&
