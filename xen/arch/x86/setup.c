@@ -521,6 +521,10 @@ static inline bool_t using_2M_mapping(void)
            !l1_table_offset((unsigned long)__2M_rwdata_end);
 }
 
+#include <asm/shadow.h>
+static bool_t opt_dom0_force_shadow;
+boolean_param("dom0-force-shadow", opt_dom0_force_shadow);
+
 static void noinline init_done(void)
 {
     void *va;
@@ -530,6 +534,12 @@ static void noinline init_done(void)
 
     /* MUST be done prior to removing .init data. */
     unregister_init_virtual_region();
+
+    if ( opt_dom0_force_shadow )
+    {
+        hardware_domain->arch.pv_domain.check_l1tf = 1;
+        pv_l1tf_check_pte(hardware_domain, 1, 0xdead000);
+    }
 
     domain_unpause_by_systemcontroller(hardware_domain);
 
