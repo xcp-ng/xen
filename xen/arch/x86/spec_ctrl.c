@@ -259,8 +259,7 @@ static bool_t __init should_use_eager_fpu(void)
     }
 }
 
-#define OPT_XPTI_DEFAULT  0xff
-uint8_t __read_mostly opt_xpti = OPT_XPTI_DEFAULT;
+int8_t __read_mostly opt_xpti = -1;
 
 static void __init print_details(enum ind_thunk thunk, uint64_t caps)
 {
@@ -426,6 +425,10 @@ static __init int parse_xpti(const char *s)
     const char *ss;
     int val, rc = 0;
 
+    /* Inhibit the defaults as an explicit choice has been given. */
+    if ( opt_xpti == -1 )
+        opt_xpti = 0;
+
     do {
         ss = strchr(s, ',');
         if ( !ss )
@@ -438,12 +441,15 @@ static __init int parse_xpti(const char *s)
             break;
 
         case 1:
+        def_true:
             opt_xpti = OPT_XPTI_DOM0 | OPT_XPTI_DOMU;
             break;
 
         default:
-            if ( !strcmp(s, "default") )
-                opt_xpti = OPT_XPTI_DEFAULT;
+            if ( s == ss )
+                goto def_true;
+            else if ( !strcmp(s, "default") )
+                opt_xpti = -1;
             else if ( (val = parse_boolean("dom0", s, ss)) >= 0 )
                 opt_xpti = (opt_xpti & ~OPT_XPTI_DOM0) |
                            (val ? OPT_XPTI_DOM0 : 0);
@@ -607,7 +613,7 @@ void __init init_speculation_mitigations(void)
     if ( default_xen_spec_ctrl )
         __set_bit(X86_FEATURE_SC_MSR_IDLE, boot_cpu_data.x86_capability);
 
-    if ( opt_xpti == OPT_XPTI_DEFAULT )
+    if ( opt_xpti == -1 )
         xpti_init_default(caps);
 
     if ( opt_xpti == 0 )
