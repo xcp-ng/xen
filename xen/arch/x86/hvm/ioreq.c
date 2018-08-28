@@ -110,7 +110,7 @@ bool hvm_io_pending(struct vcpu *v)
 static void hvm_io_assist(struct hvm_ioreq_vcpu *sv, uint64_t data)
 {
     struct vcpu *v = sv->vcpu;
-    struct hvm_vcpu_io *vio = &v->arch.hvm_vcpu.hvm_io;
+    struct hvm_vcpu_io *vio = &v->arch.hvm.hvm_io;
 
     if ( hvm_vcpu_io_need_completion(vio) )
     {
@@ -184,7 +184,7 @@ static bool hvm_wait_for_io(struct hvm_ioreq_vcpu *sv, ioreq_t *p)
 bool handle_hvm_io_completion(struct vcpu *v)
 {
     struct domain *d = v->domain;
-    struct hvm_vcpu_io *vio = &v->arch.hvm_vcpu.hvm_io;
+    struct hvm_vcpu_io *vio = &v->arch.hvm.hvm_io;
     struct hvm_ioreq_server *s;
     enum hvm_io_completion io_completion;
     unsigned int id;

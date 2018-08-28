@@ -278,7 +278,7 @@ void hvm_set_rdtsc_exiting(struct domain *d, bool_t enable)
 void hvm_get_guest_pat(struct vcpu *v, u64 *guest_pat)
 {
     if ( !hvm_funcs.get_guest_pat(v, guest_pat) )
-        *guest_pat = v->arch.hvm_vcpu.pat_cr;
+        *guest_pat = v->arch.hvm.pat_cr;
 }
 
 int hvm_set_guest_pat(struct vcpu *v, u64 guest_pat)
@@ -303,7 +303,7 @@ int hvm_set_guest_pat(struct vcpu *v, u64 guest_pat)
         }
 
     if ( !hvm_funcs.set_guest_pat(v, guest_pat) )
-        v->arch.hvm_vcpu.pat_cr = guest_pat;
+        v->arch.hvm.pat_cr = guest_pat;
 
     return 1;
 }
@@ -415,28 +415,28 @@ static void hvm_set_guest_tsc_fixed(struct vcpu *v, u64 guest_tsc, u64 at_tsc)
     }
 
     delta_tsc = guest_tsc - tsc;
-    v->arch.hvm_vcpu.cache_tsc_offset = delta_tsc;
+    v->arch.hvm.cache_tsc_offset = delta_tsc;
 
-    hvm_funcs.set_tsc_offset(v, v->arch.hvm_vcpu.cache_tsc_offset, at_tsc);
+    hvm_funcs.set_tsc_offset(v, v->arch.hvm.cache_tsc_offset, at_tsc);
 }
 
 #define hvm_set_guest_tsc(v, t) hvm_set_guest_tsc_fixed(v, t, 0)
 
 static void hvm_set_guest_tsc_msr(struct vcpu *v, u64 guest_tsc)
 {
-    uint64_t tsc_offset = v->arch.hvm_vcpu.cache_tsc_offset;
+    uint64_t tsc_offset = v->arch.hvm.cache_tsc_offset;
 
     hvm_set_guest_tsc(v, guest_tsc);
-    v->arch.hvm_vcpu.msr_tsc_adjust += v->arch.hvm_vcpu.cache_tsc_offset
+    v->arch.hvm.msr_tsc_adjust += v->arch.hvm.cache_tsc_offset
                           - tsc_offset;
 }
 
 static void hvm_set_guest_tsc_adjust(struct vcpu *v, u64 tsc_adjust)
 {
-    v->arch.hvm_vcpu.cache_tsc_offset += tsc_adjust
-                            - v->arch.hvm_vcpu.msr_tsc_adjust;
-    hvm_funcs.set_tsc_offset(v, v->arch.hvm_vcpu.cache_tsc_offset, 0);
-    v->arch.hvm_vcpu.msr_tsc_adjust = tsc_adjust;
+    v->arch.hvm.cache_tsc_offset += tsc_adjust
+                            - v->arch.hvm.msr_tsc_adjust;
+    hvm_funcs.set_tsc_offset(v, v->arch.hvm.cache_tsc_offset, 0);
+    v->arch.hvm.msr_tsc_adjust = tsc_adjust;
 }
 
 u64 hvm_get_guest_tsc_fixed(struct vcpu *v, uint64_t at_tsc)
@@ -455,7 +455,7 @@ u64 hvm_get_guest_tsc_fixed(struct vcpu *v, uint64_t at_tsc)
             tsc = hvm_scale_tsc(v->domain, tsc);
     }
 
-    return tsc + v->arch.hvm_vcpu.cache_tsc_offset;
+    return tsc + v->arch.hvm.cache_tsc_offset;
 }
 
 void hvm_migrate_timers(struct vcpu *v)
@@ -501,7 +501,7 @@ void hvm_migrate_pirqs(struct vcpu *v)
 
 static bool hvm_get_pending_event(struct vcpu *v, struct x86_event *info)
 {
-    info->cr2 = v->arch.hvm_vcpu.guest_cr[2];
+    info->cr2 = v->arch.hvm.guest_cr[2];
     return hvm_funcs.get_pending_event(v, info);
 }
 
@@ -518,14 +518,14 @@ void hvm_do_resume(struct vcpu *v)
         hvm_vm_event_do_resume(v);
 
     /* Inject pending hw/sw event */
-    if ( v->arch.hvm_vcpu.inject_event.vector >= 0 )
+    if ( v->arch.hvm.inject_event.vector >= 0 )
     {
         smp_rmb();
 
         if ( !hvm_event_pending(v) )
-            hvm_inject_event(&v->arch.hvm_vcpu.inject_event);
+            hvm_inject_event(&v->arch.hvm.inject_event);
 
-        v->arch.hvm_vcpu.inject_event.vector = HVM_EVENT_VECTOR_UNSET;
+        v->arch.hvm.inject_event.vector = HVM_EVENT_VECTOR_UNSET;
     }
 
     if ( unlikely(v->arch.vm_event) && v->arch.monitor.next_interrupt_enabled )
@@ -748,7 +748,7 @@ static int hvm_save_tsc_adjust(struct domain *d, hvm_domain_context_t *h)
 
     for_each_vcpu ( d, v )
     {
-        ctxt.tsc_adjust = v->arch.hvm_vcpu.msr_tsc_adjust;
+        ctxt.tsc_adjust = v->arch.hvm.msr_tsc_adjust;
         err = hvm_save_entry(TSC_ADJUST, v->vcpu_id, h, &ctxt);
         if ( err )
             break;
@@ -773,7 +773,7 @@ static int hvm_load_tsc_adjust(struct domain *d, hvm_domain_context_t *h)
     if ( hvm_load_entry(TSC_ADJUST, h, &ctxt) != 0 )
         return -EINVAL;
 
-    v->arch.hvm_vcpu.msr_tsc_adjust = ctxt.tsc_adjust;
+    v->arch.hvm.msr_tsc_adjust = ctxt.tsc_adjust;
     return 0;
 }
 
@@ -1046,7 +1046,7 @@ static int hvm_load_cpu_ctxt(struct domain *d, hvm_domain_context_t *h)
     if ( hvm_funcs.tsc_scaling.setup )
         hvm_funcs.tsc_scaling.setup(v);
 
-    v->arch.hvm_vcpu.msr_tsc_aux = ctxt.msr_tsc_aux;
+    v->arch.hvm.msr_tsc_aux = ctxt.msr_tsc_aux;
 
     hvm_set_guest_tsc_fixed(v, ctxt.tsc, d->arch.hvm.sync_tsc);
 
@@ -1516,8 +1516,8 @@ int hvm_vcpu_initialise(struct vcpu *v)
 
     hvm_asid_flush_vcpu(v);
 
-    spin_lock_init(&v->arch.hvm_vcpu.tm_lock);
-    INIT_LIST_HEAD(&v->arch.hvm_vcpu.tm_list);
+    spin_lock_init(&v->arch.hvm.tm_lock);
+    INIT_LIST_HEAD(&v->arch.hvm.tm_list);
 
     rc = hvm_vcpu_cacheattr_init(v); /* teardown: vcpu_cacheattr_destroy */
     if ( rc != 0 )
@@ -1532,11 +1532,11 @@ int hvm_vcpu_initialise(struct vcpu *v)
         goto fail3;
 
     softirq_tasklet_init(
-        &v->arch.hvm_vcpu.assert_evtchn_irq_tasklet,
+        &v->arch.hvm.assert_evtchn_irq_tasklet,
         (void(*)(unsigned long))hvm_assert_evtchn_irq,
         (unsigned long)v);
 
-    v->arch.hvm_vcpu.inject_event.vector = HVM_EVENT_VECTOR_UNSET;
+    v->arch.hvm.inject_event.vector = HVM_EVENT_VECTOR_UNSET;
 
     rc = setup_compat_arg_xlat(v); /* teardown: free_compat_arg_xlat() */
     if ( rc != 0 )
@@ -1589,7 +1589,7 @@ void hvm_vcpu_destroy(struct vcpu *v)
 
     free_compat_arg_xlat(v);
 
-    tasklet_kill(&v->arch.hvm_vcpu.assert_evtchn_irq_tasklet);
+    tasklet_kill(&v->arch.hvm.assert_evtchn_irq_tasklet);
     hvm_funcs.vcpu_destroy(v);
 
     vlapic_destroy(v);
@@ -1982,11 +1982,11 @@ int hvm_set_efer(uint64_t value)
     {
         printk(XENLOG_G_WARNING
                "%pv: Invalid EFER update: %#"PRIx64" -> %#"PRIx64" - %s\n",
-               v, v->arch.hvm_vcpu.guest_efer, value, errstr);
+               v, v->arch.hvm.guest_efer, value, errstr);
         return X86EMUL_EXCEPTION;
     }
 
-    if ( ((value ^ v->arch.hvm_vcpu.guest_efer) & EFER_LME) &&
+    if ( ((value ^ v->arch.hvm.guest_efer) & EFER_LME) &&
          hvm_paging_enabled(v) )
     {
         gdprintk(XENLOG_WARNING,
@@ -1994,7 +1994,7 @@ int hvm_set_efer(uint64_t value)
         return X86EMUL_EXCEPTION;
     }
 
-    if ( (value & EFER_LME) && !(v->arch.hvm_vcpu.guest_efer & EFER_LME) )
+    if ( (value & EFER_LME) && !(v->arch.hvm.guest_efer & EFER_LME) )
     {
         struct segment_register cs;
 
@@ -2020,15 +2020,15 @@ int hvm_set_efer(uint64_t value)
 
     if ( nestedhvm_enabled(v->domain) && cpu_has_svm &&
        ((value & EFER_SVME) == 0 ) &&
-       ((value ^ v->arch.hvm_vcpu.guest_efer) & EFER_SVME) )
+       ((value ^ v->arch.hvm.guest_efer) & EFER_SVME) )
     {
         /* Cleared EFER.SVME: Flush all nestedp2m tables */
         p2m_flush_nestedp2m(v->domain);
         nestedhvm_vcpu_reset(v);
     }
 
-    value |= v->arch.hvm_vcpu.guest_efer & EFER_LMA;
-    v->arch.hvm_vcpu.guest_efer = value;
+    value |= v->arch.hvm.guest_efer & EFER_LMA;
+    v->arch.hvm.guest_efer = value;
     hvm_update_guest_efer(v);
 
     return X86EMUL_OKAY;
@@ -2044,7 +2044,7 @@ static bool_t domain_exit_uc_mode(struct vcpu *v)
     {
         if ( (vs == v) || !vs->is_initialised )
             continue;
-        if ( (vs->arch.hvm_vcpu.cache_mode == NO_FILL_CACHE_MODE) ||
+        if ( (vs->arch.hvm.cache_mode == NO_FILL_CACHE_MODE) ||
              mtrr_pat_not_equal(vs, v) )
             return 0;
     }
@@ -2112,7 +2112,7 @@ int hvm_mov_from_cr(unsigned int cr, unsigned int gpr)
     case 2:
     case 3:
     case 4:
-        val = curr->arch.hvm_vcpu.guest_cr[cr];
+        val = curr->arch.hvm.guest_cr[cr];
         break;
     case 8:
         val = (vlapic_get_reg(vcpu_vlapic(curr), APIC_TASKPRI) & 0xf0) >> 4;
@@ -2139,7 +2139,7 @@ void hvm_shadow_handle_cd(struct vcpu *v, unsigned long value)
     {
         /* Entering no fill cache mode. */
         spin_lock(&v->domain->arch.hvm.uc_lock);
-        v->arch.hvm_vcpu.cache_mode = NO_FILL_CACHE_MODE;
+        v->arch.hvm.cache_mode = NO_FILL_CACHE_MODE;
 
         if ( !v->domain->arch.hvm.is_in_uc_mode )
         {
@@ -2154,11 +2154,11 @@ void hvm_shadow_handle_cd(struct vcpu *v, unsigned long value)
         spin_unlock(&v->domain->arch.hvm.uc_lock);
     }
     else if ( !(value & X86_CR0_CD) &&
-              (v->arch.hvm_vcpu.cache_mode == NO_FILL_CACHE_MODE) )
+              (v->arch.hvm.cache_mode == NO_FILL_CACHE_MODE) )
     {
         /* Exit from no fill cache mode. */
         spin_lock(&v->domain->arch.hvm.uc_lock);
-        v->arch.hvm_vcpu.cache_mode = NORMAL_CACHE_MODE;
+        v->arch.hvm.cache_mode = NORMAL_CACHE_MODE;
 
         if ( domain_exit_uc_mode(v) )
             hvm_set_uc_mode(v, 0);
@@ -2169,7 +2169,7 @@ void hvm_shadow_handle_cd(struct vcpu *v, unsigned long value)
 
 static void hvm_update_cr(struct vcpu *v, unsigned int cr, unsigned long value)
 {
-    v->arch.hvm_vcpu.guest_cr[cr] = value;
+    v->arch.hvm.guest_cr[cr] = value;
     nestedhvm_set_cr(v, cr, value);
     hvm_update_guest_cr(v, cr);
 }
@@ -2178,7 +2178,7 @@ int hvm_set_cr0(unsigned long value, bool_t may_defer)
 {
     struct vcpu *v = current;
     struct domain *d = v->domain;
-    unsigned long gfn, old_value = v->arch.hvm_vcpu.guest_cr[0];
+    unsigned long gfn, old_value = v->arch.hvm.guest_cr[0];
     struct page_info *page;
 
     HVM_DBG_LOG(DBG_LEVEL_VMMU, "Update CR0 value = %lx", value);
@@ -2217,28 +2217,28 @@ int hvm_set_cr0(unsigned long value, bool_t may_defer)
 
     if ( (value & X86_CR0_PG) && !(old_value & X86_CR0_PG) )
     {
-        if ( v->arch.hvm_vcpu.guest_efer & EFER_LME )
+        if ( v->arch.hvm.guest_efer & EFER_LME )
         {
-            if ( !(v->arch.hvm_vcpu.guest_cr[4] & X86_CR4_PAE) &&
+            if ( !(v->arch.hvm.guest_cr[4] & X86_CR4_PAE) &&
                  !nestedhvm_vmswitch_in_progress(v) )
             {
                 HVM_DBG_LOG(DBG_LEVEL_1, "Enable paging before PAE enable");
                 return X86EMUL_EXCEPTION;
             }
             HVM_DBG_LOG(DBG_LEVEL_1, "Enabling long mode");
-            v->arch.hvm_vcpu.guest_efer |= EFER_LMA;
+            v->arch.hvm.guest_efer |= EFER_LMA;
             hvm_update_guest_efer(v);
         }
 
         if ( !paging_mode_hap(d) )
         {
             /* The guest CR3 must be pointing to the guest physical. */
-            gfn = v->arch.hvm_vcpu.guest_cr[3]>>PAGE_SHIFT;
+            gfn = v->arch.hvm.guest_cr[3]>>PAGE_SHIFT;
             page = get_page_from_gfn(d, gfn, NULL, P2M_ALLOC);
             if ( !page )
             {
                 gdprintk(XENLOG_ERR, "Invalid CR3 value = %lx\n",
-                         v->arch.hvm_vcpu.guest_cr[3]);
+                         v->arch.hvm.guest_cr[3]);
                 domain_crash(d);
                 return X86EMUL_UNHANDLEABLE;
             }
@@ -2247,7 +2247,7 @@ int hvm_set_cr0(unsigned long value, bool_t may_defer)
             v->arch.guest_table = pagetable_from_page(page);
 
             HVM_DBG_LOG(DBG_LEVEL_VMMU, "Update CR3 value = %lx, mfn = %lx",
-                        v->arch.hvm_vcpu.guest_cr[3], mfn_x(page_to_mfn(page)));
+                        v->arch.hvm.guest_cr[3], mfn_x(page_to_mfn(page)));
         }
     }
     else if ( !(value & X86_CR0_PG) && (old_value & X86_CR0_PG) )
@@ -2262,7 +2262,7 @@ int hvm_set_cr0(unsigned long value, bool_t may_defer)
         /* When CR0.PG is cleared, LMA is cleared immediately. */
         if ( hvm_long_mode_active(v) )
         {
-            v->arch.hvm_vcpu.guest_efer &= ~EFER_LMA;
+            v->arch.hvm.guest_efer &= ~EFER_LMA;
             hvm_update_guest_efer(v);
         }
 
@@ -2296,7 +2296,7 @@ int hvm_set_cr3(unsigned long value, bool_t may_defer)
 {
     struct vcpu *v = current;
     struct page_info *page;
-    unsigned long old = v->arch.hvm_vcpu.guest_cr[3];
+    unsigned long old = v->arch.hvm.guest_cr[3];
     bool noflush = false;
 
     if ( may_defer && unlikely(v->domain->arch.monitor.write_ctrlreg_enabled &
@@ -2321,7 +2321,7 @@ int hvm_set_cr3(unsigned long value, bool_t may_defer)
     }
 
     if ( hvm_paging_enabled(v) && !paging_mode_hap(v->domain) &&
-         (value != v->arch.hvm_vcpu.guest_cr[3]) )
+         (value != v->arch.hvm.guest_cr[3]) )
     {
         /* Shadow-mode CR3 change. Check PDBR and update refcounts. */
         HVM_DBG_LOG(DBG_LEVEL_VMMU, "CR3 value = %lx", value);
@@ -2336,7 +2336,7 @@ int hvm_set_cr3(unsigned long value, bool_t may_defer)
         HVM_DBG_LOG(DBG_LEVEL_VMMU, "Update CR3 value = %lx", value);
     }
 
-    v->arch.hvm_vcpu.guest_cr[3] = value;
+    v->arch.hvm.guest_cr[3] = value;
     paging_update_cr3(v, noflush);
     return X86EMUL_OKAY;
 
@@ -2369,11 +2369,11 @@ int hvm_set_cr4(unsigned long value, bool_t may_defer)
         }
     }
 
-    old_cr = v->arch.hvm_vcpu.guest_cr[4];
+    old_cr = v->arch.hvm.guest_cr[4];
 
     if ( (value & X86_CR4_PCIDE) && !(old_cr & X86_CR4_PCIDE) &&
          (!hvm_long_mode_active(v) ||
-          (v->arch.hvm_vcpu.guest_cr[3] & 0xfff)) )
+          (v->arch.hvm.guest_cr[3] & 0xfff)) )
     {
         HVM_DBG_LOG(DBG_LEVEL_1, "Guest attempts to change CR4.PCIDE from "
                     "0 to 1 while either EFER.LMA=0 or CR3[11:0]!=000H");
@@ -2456,7 +2456,7 @@ bool_t hvm_virtual_to_linear_addr(
      */
     ASSERT(seg < x86_seg_none);
 
-    if ( !(curr->arch.hvm_vcpu.guest_cr[0] & X86_CR0_PE) ||
+    if ( !(curr->arch.hvm.guest_cr[0] & X86_CR0_PE) ||
          (guest_cpu_user_regs()->eflags & X86_EFLAGS_VM) )
     {
         /*
@@ -3065,7 +3065,7 @@ void hvm_task_switch(
     tr.type = 0xb; /* busy 32-bit tss */
     hvm_set_segment_register(v, x86_seg_tr, &tr);
 
-    v->arch.hvm_vcpu.guest_cr[0] |= X86_CR0_TS;
+    v->arch.hvm.guest_cr[0] |= X86_CR0_TS;
     hvm_update_guest_cr(v, 0);
 
     if ( (taskswitch_reason == TSW_iret ||
@@ -3413,8 +3413,8 @@ int hvm_msr_read_intercept(unsigned int msr, uint64_t *msr_content)
     uint64_t *var_range_base, *fixed_range_base;
     int ret;
 
-    var_range_base = (uint64_t *)v->arch.hvm_vcpu.mtrr.var_ranges;
-    fixed_range_base = (uint64_t *)v->arch.hvm_vcpu.mtrr.fixed_ranges;
+    var_range_base = (uint64_t *)v->arch.hvm.mtrr.var_ranges;
+    fixed_range_base = (uint64_t *)v->arch.hvm.mtrr.fixed_ranges;
 
     if ( (ret = guest_rdmsr(v, msr, msr_content)) != X86EMUL_UNHANDLEABLE )
         return ret;
@@ -3426,7 +3426,7 @@ int hvm_msr_read_intercept(unsigned int msr, uint64_t *msr_content)
         unsigned int index;
 
     case MSR_EFER:
-        *msr_content = v->arch.hvm_vcpu.guest_efer;
+        *msr_content = v->arch.hvm.guest_efer;
         break;
 
     case MSR_IA32_TSC:
@@ -3434,7 +3434,7 @@ int hvm_msr_read_intercept(unsigned int msr, uint64_t *msr_content)
         break;
 
     case MSR_IA32_TSC_ADJUST:
-        *msr_content = v->arch.hvm_vcpu.msr_tsc_adjust;
+        *msr_content = v->arch.hvm.msr_tsc_adjust;
         break;
 
     case MSR_TSC_AUX:
@@ -3461,13 +3461,13 @@ int hvm_msr_read_intercept(unsigned int msr, uint64_t *msr_content)
     case MSR_MTRRcap:
         if ( !d->arch.cpuid->basic.mtrr )
             goto gp_fault;
-        *msr_content = v->arch.hvm_vcpu.mtrr.mtrr_cap;
+        *msr_content = v->arch.hvm.mtrr.mtrr_cap;
         break;
     case MSR_MTRRdefType:
         if ( !d->arch.cpuid->basic.mtrr )
             goto gp_fault;
-        *msr_content = v->arch.hvm_vcpu.mtrr.def_type
-                        | (v->arch.hvm_vcpu.mtrr.enabled << 10);
+        *msr_content = v->arch.hvm.mtrr.def_type
+                        | (v->arch.hvm.mtrr.enabled << 10);
         break;
     case MSR_MTRRfix64K_00000:
         if ( !d->arch.cpuid->basic.mtrr )
@@ -3497,7 +3497,7 @@ int hvm_msr_read_intercept(unsigned int msr, uint64_t *msr_content)
     case MSR_IA32_XSS:
         if ( !d->arch.cpuid->xstate.xsaves )
             goto gp_fault;
-        *msr_content = v->arch.hvm_vcpu.msr_xss;
+        *msr_content = v->arch.hvm.msr_xss;
         break;
 
     case MSR_IA32_BNDCFGS:
@@ -3589,7 +3589,7 @@ int hvm_msr_write_intercept(unsigned int msr, uint64_t msr_content,
         break;
 
     case MSR_TSC_AUX:
-        v->arch.hvm_vcpu.msr_tsc_aux = (uint32_t)msr_content;
+        v->arch.hvm.msr_tsc_aux = (uint32_t)msr_content;
         if ( cpu_has_rdtscp
              && (v->domain->arch.tsc_mode != TSC_MODE_PVRDTSCP) )
             wrmsr_tsc_aux(msr_content);
@@ -3620,14 +3620,14 @@ int hvm_msr_write_intercept(unsigned int msr, uint64_t msr_content,
     case MSR_MTRRdefType:
         if ( !d->arch.cpuid->basic.mtrr )
             goto gp_fault;
-        if ( !mtrr_def_type_msr_set(v->domain, &v->arch.hvm_vcpu.mtrr,
+        if ( !mtrr_def_type_msr_set(v->domain, &v->arch.hvm.mtrr,
                                     msr_content) )
            goto gp_fault;
         break;
     case MSR_MTRRfix64K_00000:
         if ( !d->arch.cpuid->basic.mtrr )
             goto gp_fault;
-        if ( !mtrr_fix_range_msr_set(v->domain, &v->arch.hvm_vcpu.mtrr, 0,
+        if ( !mtrr_fix_range_msr_set(v->domain, &v->arch.hvm.mtrr, 0,
                                      msr_content) )
             goto gp_fault;
         break;
@@ -3636,7 +3636,7 @@ int hvm_msr_write_intercept(unsigned int msr, uint64_t msr_content,
         if ( !d->arch.cpuid->basic.mtrr )
             goto gp_fault;
         index = msr - MSR_MTRRfix16K_80000 + 1;
-        if ( !mtrr_fix_range_msr_set(v->domain, &v->arch.hvm_vcpu.mtrr,
+        if ( !mtrr_fix_range_msr_set(v->domain, &v->arch.hvm.mtrr,
                                      index, msr_content) )
             goto gp_fault;
         break;
@@ -3644,14 +3644,14 @@ int hvm_msr_write_intercept(unsigned int msr, uint64_t msr_content,
         if ( !d->arch.cpuid->basic.mtrr )
             goto gp_fault;
         index = msr - MSR_MTRRfix4K_C0000 + 3;
-        if ( !mtrr_fix_range_msr_set(v->domain, &v->arch.hvm_vcpu.mtrr,
+        if ( !mtrr_fix_range_msr_set(v->domain, &v->arch.hvm.mtrr,
                                      index, msr_content) )
             goto gp_fault;
         break;
     case MSR_IA32_MTRR_PHYSBASE(0)...MSR_IA32_MTRR_PHYSMASK(MTRR_VCNT-1):
         if ( !d->arch.cpuid->basic.mtrr )
             goto gp_fault;
-        if ( !mtrr_var_range_msr_set(v->domain, &v->arch.hvm_vcpu.mtrr,
+        if ( !mtrr_var_range_msr_set(v->domain, &v->arch.hvm.mtrr,
                                      msr, msr_content) )
             goto gp_fault;
         break;
@@ -3660,7 +3660,7 @@ int hvm_msr_write_intercept(unsigned int msr, uint64_t msr_content,
         /* No XSS features currently supported for guests. */
         if ( !d->arch.cpuid->xstate.xsaves || msr_content != 0 )
             goto gp_fault;
-        v->arch.hvm_vcpu.msr_xss = msr_content;
+        v->arch.hvm.msr_xss = msr_content;
         break;
 
     case MSR_IA32_BNDCFGS:
@@ -3886,7 +3886,7 @@ void hvm_vcpu_reset_state(struct vcpu *v, uint16_t cs, uint16_t ip)
 
     if ( !paging_mode_hap(d) )
     {
-        if ( v->arch.hvm_vcpu.guest_cr[0] & X86_CR0_PG )
+        if ( v->arch.hvm.guest_cr[0] & X86_CR0_PG )
             put_page(pagetable_get_page(v->arch.guest_table));
         v->arch.guest_table = pagetable_null();
     }
@@ -3905,19 +3905,19 @@ void hvm_vcpu_reset_state(struct vcpu *v, uint16_t cs, uint16_t ip)
     arch_vcpu_regs_init(v);
     v->arch.user_regs.rip = ip;
 
-    v->arch.hvm_vcpu.guest_cr[0] = X86_CR0_ET;
+    v->arch.hvm.guest_cr[0] = X86_CR0_ET;
     hvm_update_guest_cr(v, 0);
 
-    v->arch.hvm_vcpu.guest_cr[2] = 0;
+    v->arch.hvm.guest_cr[2] = 0;
     hvm_update_guest_cr(v, 2);
 
-    v->arch.hvm_vcpu.guest_cr[3] = 0;
+    v->arch.hvm.guest_cr[3] = 0;
     hvm_update_guest_cr(v, 3);
 
-    v->arch.hvm_vcpu.guest_cr[4] = 0;
+    v->arch.hvm.guest_cr[4] = 0;
     hvm_update_guest_cr(v, 4);
 
-    v->arch.hvm_vcpu.guest_efer = 0;
+    v->arch.hvm.guest_efer = 0;
     hvm_update_guest_efer(v);
 
     reg.sel = cs;
@@ -3949,12 +3949,12 @@ void hvm_vcpu_reset_state(struct vcpu *v, uint16_t cs, uint16_t ip)
         hvm_funcs.tsc_scaling.setup(v);
 
     /* Sync AP's TSC with BSP's. */
-    v->arch.hvm_vcpu.cache_tsc_offset =
-        v->domain->vcpu[0]->arch.hvm_vcpu.cache_tsc_offset;
-    hvm_funcs.set_tsc_offset(v, v->arch.hvm_vcpu.cache_tsc_offset,
+    v->arch.hvm.cache_tsc_offset =
+        v->domain->vcpu[0]->arch.hvm.cache_tsc_offset;
+    hvm_funcs.set_tsc_offset(v, v->arch.hvm.cache_tsc_offset,
                              d->arch.hvm.sync_tsc);
 
-    v->arch.hvm_vcpu.msr_tsc_adjust = 0;
+    v->arch.hvm.msr_tsc_adjust = 0;
 
     paging_update_paging_modes(v);
 
@@ -4076,7 +4076,7 @@ static int hvmop_set_evtchn_upcall_vector(
 
     printk(XENLOG_G_INFO "%pv: upcall vector %02x\n", v, op.vector);
 
-    v->arch.hvm_vcpu.evtchn_upcall_vector = op.vector;
+    v->arch.hvm.evtchn_upcall_vector = op.vector;
     hvm_assert_evtchn_irq(v);
     return 0;
 }
@@ -4962,7 +4962,7 @@ int hvm_debug_op(struct vcpu *v, int32_t op)
                 break;
             rc = 0;
             vcpu_pause(v);
-            v->arch.hvm_vcpu.single_step =
+            v->arch.hvm.single_step =
                 (op == XEN_DOMCTL_DEBUG_OP_SINGLE_STEP_ON);
             vcpu_unpause(v); /* guest will latch new state */
             break;
@@ -4981,7 +4981,7 @@ void hvm_toggle_singlestep(struct vcpu *v)
     if ( !hvm_is_singlestep_supported() )
         return;
 
-    v->arch.hvm_vcpu.single_step = !v->arch.hvm_vcpu.single_step;
+    v->arch.hvm.single_step = !v->arch.hvm.single_step;
 }
 
 void hvm_domain_soft_reset(struct domain *d)
