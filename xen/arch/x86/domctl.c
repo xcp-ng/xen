@@ -771,7 +771,7 @@ long arch_do_domctl(
         if ( ret )
             break;
 
-        hvm_domain = &d->arch.hvm_domain;
+        hvm_domain = &d->arch.hvm;
         if ( add )
         {
             printk(XENLOG_G_INFO

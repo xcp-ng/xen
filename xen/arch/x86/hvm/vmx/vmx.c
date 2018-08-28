@@ -319,7 +319,7 @@ void vmx_pi_hooks_assign(struct domain *d)
     if ( !iommu_intpost || !is_hvm_domain(d) )
         return;
 
-    ASSERT(!d->arch.hvm_domain.pi_ops.vcpu_block);
+    ASSERT(!d->arch.hvm.pi_ops.vcpu_block);
 
     /*
      * We carefully handle the timing here:
@@ -330,8 +330,8 @@ void vmx_pi_hooks_assign(struct domain *d)
      * This can make sure the PI (especially the NDST feild) is
      * in proper state when we call vmx_vcpu_block().
      */
-    d->arch.hvm_domain.pi_ops.switch_from = vmx_pi_switch_from;
-    d->arch.hvm_domain.pi_ops.switch_to = vmx_pi_switch_to;
+    d->arch.hvm.pi_ops.switch_from = vmx_pi_switch_from;
+    d->arch.hvm.pi_ops.switch_to = vmx_pi_switch_to;
 
     for_each_vcpu ( d, v )
     {
@@ -346,8 +346,8 @@ void vmx_pi_hooks_assign(struct domain *d)
                 x2apic_enabled ? dest : MASK_INSR(dest, PI_xAPIC_NDST_MASK));
     }
 
-    d->arch.hvm_domain.pi_ops.vcpu_block = vmx_vcpu_block;
-    d->arch.hvm_domain.pi_ops.do_resume = vmx_pi_do_resume;
+    d->arch.hvm.pi_ops.vcpu_block = vmx_vcpu_block;
+    d->arch.hvm.pi_ops.do_resume = vmx_pi_do_resume;
 }
 
 /* This function is called when pcidevs_lock is held */
@@ -358,7 +358,7 @@ void vmx_pi_hooks_deassign(struct domain *d)
     if ( !iommu_intpost || !is_hvm_domain(d) )
         return;
 
-    ASSERT(d->arch.hvm_domain.pi_ops.vcpu_block);
+    ASSERT(d->arch.hvm.pi_ops.vcpu_block);
 
     /*
      * Pausing the domain can make sure the vCPUs are not
@@ -370,7 +370,7 @@ void vmx_pi_hooks_deassign(struct domain *d)
     domain_pause(d);
 
     /*
-     * Note that we don't set 'd->arch.hvm_domain.pi_ops.switch_to' to NULL
+     * Note that we don't set 'd->arch.hvm.pi_ops.switch_to' to NULL
      * here. If we deassign the hooks while the vCPU is runnable in the
      * runqueue with 'SN' set, all the future notification event will be
      * suppressed since vmx_deliver_posted_intr() also use 'SN' bit
@@ -383,9 +383,9 @@ void vmx_pi_hooks_deassign(struct domain *d)
      * system, leave it here until we find a clean solution to deassign the
      * 'switch_to' hook function.
      */
-    d->arch.hvm_domain.pi_ops.vcpu_block = NULL;
-    d->arch.hvm_domain.pi_ops.switch_from = NULL;
-    d->arch.hvm_domain.pi_ops.do_resume = NULL;
+    d->arch.hvm.pi_ops.vcpu_block = NULL;
+    d->arch.hvm.pi_ops.switch_from = NULL;
+    d->arch.hvm.pi_ops.do_resume = NULL;
 
     for_each_vcpu ( d, v )
         vmx_pi_unblock_vcpu(v);
@@ -948,8 +948,8 @@ static void vmx_ctxt_switch_from(struct vcpu *v)
     vmx_restore_host_msrs();
     vmx_save_dr(v);
 
-    if ( v->domain->arch.hvm_domain.pi_ops.switch_from )
-        v->domain->arch.hvm_domain.pi_ops.switch_from(v);
+    if ( v->domain->arch.hvm.pi_ops.switch_from )
+        v->domain->arch.hvm.pi_ops.switch_from(v);
 }
 
 static void vmx_ctxt_switch_to(struct vcpu *v)
@@ -957,8 +957,8 @@ static void vmx_ctxt_switch_to(struct vcpu *v)
     vmx_restore_guest_msrs(v);
     vmx_restore_dr(v);
 
-    if ( v->domain->arch.hvm_domain.pi_ops.switch_to )
-        v->domain->arch.hvm_domain.pi_ops.switch_to(v);
+    if ( v->domain->arch.hvm.pi_ops.switch_to )
+        v->domain->arch.hvm.pi_ops.switch_to(v);
 }
 
 
@@ -1118,7 +1118,7 @@ static void vmx_set_segment_register(struct vcpu *v, enum x86_segment seg,
         if ( seg == x86_seg_tr ) 
         {
             const struct domain *d = v->domain;
-            uint64_t val = d->arch.hvm_domain.params[HVM_PARAM_VM86_TSS_SIZED];
+            uint64_t val = d->arch.hvm.params[HVM_PARAM_VM86_TSS_SIZED];
 
             if ( val )
             {
@@ -1129,7 +1129,7 @@ static void vmx_set_segment_register(struct vcpu *v, enum x86_segment seg,
                 if ( val & VM86_TSS_UPDATED )
                 {
                     hvm_prepare_vm86_tss(v, base, limit);
-                    cmpxchg(&d->arch.hvm_domain.params[HVM_PARAM_VM86_TSS_SIZED],
+                    cmpxchg(&d->arch.hvm.params[HVM_PARAM_VM86_TSS_SIZED],
                             val, val & ~VM86_TSS_UPDATED);
                 }
                 v->arch.hvm_vmx.vm86_segment_mask &= ~(1u << seg);
@@ -1641,7 +1641,7 @@ static void vmx_update_guest_cr(struct vcpu *v, unsigned int cr,
         {
             if ( !hvm_paging_enabled(v) && !vmx_unrestricted_guest(v) )
                 v->arch.hvm_vcpu.hw_cr[3] =
-                    v->domain->arch.hvm_domain.params[HVM_PARAM_IDENT_PT];
+                    v->domain->arch.hvm.params[HVM_PARAM_IDENT_PT];
             vmx_load_pdptrs(v);
         }
 
@@ -2966,7 +2966,7 @@ static int vmx_alloc_vlapic_mapping(struct domain *d)
     mfn = page_to_mfn(pg);
     clear_domain_page(mfn);
     share_xen_page_with_guest(pg, d, SHARE_rw);
-    d->arch.hvm_domain.vmx.apic_access_mfn = mfn_x(mfn);
+    d->arch.hvm.vmx.apic_access_mfn = mfn_x(mfn);
     set_mmio_p2m_entry(d, paddr_to_pfn(APIC_DEFAULT_PHYS_BASE), mfn,
                        PAGE_ORDER_4K, p2m_get_hostp2m(d)->default_access);
 
@@ -2975,7 +2975,7 @@ static int vmx_alloc_vlapic_mapping(struct domain *d)
 
 static void vmx_free_vlapic_mapping(struct domain *d)
 {
-    unsigned long mfn = d->arch.hvm_domain.vmx.apic_access_mfn;
+    unsigned long mfn = d->arch.hvm.vmx.apic_access_mfn;
 
     if ( mfn != 0 )
         free_shared_domheap_page(mfn_to_page(_mfn(mfn)));
@@ -2985,13 +2985,13 @@ static void vmx_install_vlapic_mapping(struct vcpu *v)
 {
     paddr_t virt_page_ma, apic_page_ma;
 
-    if ( v->domain->arch.hvm_domain.vmx.apic_access_mfn == 0 )
+    if ( v->domain->arch.hvm.vmx.apic_access_mfn == 0 )
         return;
 
     ASSERT(cpu_has_vmx_virtualize_apic_accesses);
 
     virt_page_ma = page_to_maddr(vcpu_vlapic(v)->regs_page);
-    apic_page_ma = v->domain->arch.hvm_domain.vmx.apic_access_mfn;
+    apic_page_ma = v->domain->arch.hvm.vmx.apic_access_mfn;
     apic_page_ma <<= PAGE_SHIFT;
 
     vmx_vmcs_enter(v);
@@ -4272,8 +4272,8 @@ bool vmx_vmenter_helper(const struct cpu_user_regs *regs)
      if ( nestedhvm_vcpu_in_guestmode(curr) && vcpu_nestedhvm(curr).stale_np2m )
          return false;
 
-    if ( curr->domain->arch.hvm_domain.pi_ops.do_resume )
-        curr->domain->arch.hvm_domain.pi_ops.do_resume(curr);
+    if ( curr->domain->arch.hvm.pi_ops.do_resume )
+        curr->domain->arch.hvm.pi_ops.do_resume(curr);
 
     if ( !cpu_has_vmx_vpid )
         goto out;
