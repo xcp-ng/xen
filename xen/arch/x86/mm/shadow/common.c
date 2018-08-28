@@ -3433,11 +3433,11 @@ void shadow_teardown(struct domain *d, bool *preempted)
      * calls now that we've torn down the bitmap */
     d->arch.paging.mode &= ~PG_log_dirty;
 
-    if (d->arch.hvm_domain.dirty_vram) {
-        xfree(d->arch.hvm_domain.dirty_vram->sl1ma);
-        xfree(d->arch.hvm_domain.dirty_vram->dirty_bitmap);
-        xfree(d->arch.hvm_domain.dirty_vram);
-        d->arch.hvm_domain.dirty_vram = NULL;
+    if (d->arch.hvm.dirty_vram) {
+        xfree(d->arch.hvm.dirty_vram->sl1ma);
+        xfree(d->arch.hvm.dirty_vram->dirty_bitmap);
+        xfree(d->arch.hvm.dirty_vram);
+        d->arch.hvm.dirty_vram = NULL;
     }
 
 out:
@@ -3813,7 +3813,7 @@ int shadow_track_dirty_vram(struct domain *d,
     p2m_lock(p2m_get_hostp2m(d));
     paging_lock(d);
 
-    dirty_vram = d->arch.hvm_domain.dirty_vram;
+    dirty_vram = d->arch.hvm.dirty_vram;
 
     if ( dirty_vram && (!nr ||
              ( begin_pfn != dirty_vram->begin_pfn
@@ -3824,7 +3824,7 @@ int shadow_track_dirty_vram(struct domain *d,
         xfree(dirty_vram->sl1ma);
         xfree(dirty_vram->dirty_bitmap);
         xfree(dirty_vram);
-        dirty_vram = d->arch.hvm_domain.dirty_vram = NULL;
+        dirty_vram = d->arch.hvm.dirty_vram = NULL;
     }
 
     if ( !nr )
@@ -3851,7 +3851,7 @@ int shadow_track_dirty_vram(struct domain *d,
             goto out;
         dirty_vram->begin_pfn = begin_pfn;
         dirty_vram->end_pfn = end_pfn;
-        d->arch.hvm_domain.dirty_vram = dirty_vram;
+        d->arch.hvm.dirty_vram = dirty_vram;
 
         if ( (dirty_vram->sl1ma = xmalloc_array(paddr_t, nr)) == NULL )
             goto out_dirty_vram;
@@ -3970,7 +3970,7 @@ out_sl1ma:
     xfree(dirty_vram->sl1ma);
 out_dirty_vram:
     xfree(dirty_vram);
-    dirty_vram = d->arch.hvm_domain.dirty_vram = NULL;
+    dirty_vram = d->arch.hvm.dirty_vram = NULL;
 
 out:
     paging_unlock(d);

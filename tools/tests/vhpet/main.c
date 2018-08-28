@@ -258,18 +258,18 @@ void create_periodic_time(struct vcpu *v, struct periodic_time *pt,
 
         printf("create_periodic_time: "
                "mc64=%#lx(%'ld) mc_offset=%#lx(%'ld)\n",
-               dom1.arch.hvm_domain.pl_time.vhpet.hpet.mc64,
-               dom1.arch.hvm_domain.pl_time.vhpet.hpet.mc64,
-               dom1.arch.hvm_domain.pl_time.vhpet.mc_offset,
-               dom1.arch.hvm_domain.pl_time.vhpet.mc_offset);
+               dom1.arch.hvm.pl_time.vhpet.hpet.mc64,
+               dom1.arch.hvm.pl_time.vhpet.hpet.mc64,
+               dom1.arch.hvm.pl_time.vhpet.mc_offset,
+               dom1.arch.hvm.pl_time.vhpet.mc_offset);
         for (i = 0; i < 3; i++)
         {
             printf("                 "
                    "[%d] cmp64=%#lx(%'ld) cmp=%#lx(%'ld)\n", i,
-                   dom1.arch.hvm_domain.pl_time.vhpet.hpet.comparator64[i],
-                   dom1.arch.hvm_domain.pl_time.vhpet.hpet.comparator64[i],
-                   dom1.arch.hvm_domain.pl_time.vhpet.hpet.timers[i].cmp,
-                   dom1.arch.hvm_domain.pl_time.vhpet.hpet.timers[i].cmp);
+                   dom1.arch.hvm.pl_time.vhpet.hpet.comparator64[i],
+                   dom1.arch.hvm.pl_time.vhpet.hpet.comparator64[i],
+                   dom1.arch.hvm.pl_time.vhpet.hpet.timers[i].cmp,
+                   dom1.arch.hvm.pl_time.vhpet.hpet.timers[i].cmp);
         }
     }
     if ( period )
@@ -454,11 +454,11 @@ hpet_check_stopped(uint64_t old_delta, int timer)
         print_error("%s(%ld): T%d Error: Set period, cmp %#lx(%'ld) != %#lx(%'ld)\n",
                     __func__, __LINE__, timer, cmp, cmp, cmp3, cmp3);
 
-    if ( dom1.arch.hvm_domain.pl_time.vhpet.hpet.period[timer] != delta )
+    if ( dom1.arch.hvm.pl_time.vhpet.hpet.period[timer] != delta )
         printf("%s(%ld): T%d Warning: Set period %#lx(%'ld) != %#lx(%'ld)\n",
                __func__, __LINE__, timer, delta, delta,
-               dom1.arch.hvm_domain.pl_time.vhpet.hpet.period[timer],
-               dom1.arch.hvm_domain.pl_time.vhpet.hpet.period[timer]);
+               dom1.arch.hvm.pl_time.vhpet.hpet.period[timer],
+               dom1.arch.hvm.pl_time.vhpet.hpet.period[timer]);
 
     hpet_reset_counter(67752, 0);
     cmp = 255252;
@@ -487,11 +487,11 @@ hpet_check_stopped(uint64_t old_delta, int timer)
         print_error("%s(%ld): T%d Error: Set period, cmp %#lx(%'ld) != %#lx(%'ld)\n",
                     __func__, __LINE__, timer, cmp, cmp, cmp3, cmp3);
 
-    if ( dom1.arch.hvm_domain.pl_time.vhpet.hpet.period[timer] != delta )
+    if ( dom1.arch.hvm.pl_time.vhpet.hpet.period[timer] != delta )
         printf("%s(%ld): T%d Warning: Set period %#lx(%'ld) != %#lx(%'ld)\n",
                __func__, __LINE__, timer, delta, delta,
-               dom1.arch.hvm_domain.pl_time.vhpet.hpet.period[timer],
-               dom1.arch.hvm_domain.pl_time.vhpet.hpet.period[timer]);
+               dom1.arch.hvm.pl_time.vhpet.hpet.period[timer],
+               dom1.arch.hvm.pl_time.vhpet.hpet.period[timer]);
 
     hpet_reset_counter(67700, 0);
 
@@ -509,11 +509,11 @@ hpet_check_stopped(uint64_t old_delta, int timer)
         print_error("%s(%ld): T%d Error: Set mc, cmp %#lx(%'ld) != %#lx(%'ld)\n",
                     __func__, __LINE__, timer, cmp, cmp, cmp3, cmp3);
 
-    if ( dom1.arch.hvm_domain.pl_time.vhpet.hpet.period[timer] != delta )
+    if ( dom1.arch.hvm.pl_time.vhpet.hpet.period[timer] != delta )
         printf("%s(%ld): T%d Warning: Set mc, period %#lx(%'ld) != %#lx(%'ld)\n",
                __func__, __LINE__, timer, delta, delta,
-               dom1.arch.hvm_domain.pl_time.vhpet.hpet.period[timer],
-               dom1.arch.hvm_domain.pl_time.vhpet.hpet.period[timer]);
+               dom1.arch.hvm.pl_time.vhpet.hpet.period[timer],
+               dom1.arch.hvm.pl_time.vhpet.hpet.period[timer]);
 
     cmp = 67701;
 
@@ -537,11 +537,11 @@ hpet_check_stopped(uint64_t old_delta, int timer)
         print_error("%s(%ld): T%d Error: Set cmp, cmp %#lx(%'ld) != %#lx(%'ld)\n",
                     __func__, __LINE__, timer, cmp, cmp, cmp3, cmp3);
 
-    if ( dom1.arch.hvm_domain.pl_time.vhpet.hpet.period[timer] != delta )
+    if ( dom1.arch.hvm.pl_time.vhpet.hpet.period[timer] != delta )
         printf("%s(%ld): T%d Warning: Set cmp, period %#lx(%'ld) != %#lx(%'ld)\n",
                __func__, __LINE__, timer, delta, delta,
-               dom1.arch.hvm_domain.pl_time.vhpet.hpet.period[timer],
-               dom1.arch.hvm_domain.pl_time.vhpet.hpet.period[timer]);
+               dom1.arch.hvm.pl_time.vhpet.hpet.period[timer],
+               dom1.arch.hvm.pl_time.vhpet.hpet.period[timer]);
 
     delta = 500;
 
@@ -562,11 +562,11 @@ hpet_check_stopped(uint64_t old_delta, int timer)
         print_error("%s(%ld): T%d Error: Set period, cmp %#lx(%'ld) != %#lx(%'ld)\n",
                     __func__, __LINE__, timer, cmp, cmp, cmp3, cmp3);
 
-    if ( dom1.arch.hvm_domain.pl_time.vhpet.hpet.period[timer] != delta )
+    if ( dom1.arch.hvm.pl_time.vhpet.hpet.period[timer] != delta )
         printf("%s(%ld): T%d Warning: Set period, period %#lx(%'ld) != %#lx(%'ld)\n",
                __func__, __LINE__, timer, delta, delta,
-               dom1.arch.hvm_domain.pl_time.vhpet.hpet.period[timer],
-               dom1.arch.hvm_domain.pl_time.vhpet.hpet.period[timer]);
+               dom1.arch.hvm.pl_time.vhpet.hpet.period[timer],
+               dom1.arch.hvm.pl_time.vhpet.hpet.period[timer]);
 
     hpet_reset_counter(mc_low, mc_high);
     cfg = hpet_readl(HPET_Tn_CFG(timer));
@@ -644,15 +644,15 @@ main(int argc, char **argv)
             print_error("%s(%ld): With clock stopped mc64 changed: %'ld to %'ld\n",
                         __func__, __LINE__, hpet1.mc64, hpet2.mc64);
 
-        dom1.arch.hvm_domain.pl_time.vhpet.hpet.mc64 = START_MC64;
-        dom1.arch.hvm_domain.pl_time.vhpet.mc_offset = START_MC64
+        dom1.arch.hvm.pl_time.vhpet.hpet.mc64 = START_MC64;
+        dom1.arch.hvm.pl_time.vhpet.mc_offset = START_MC64
             - hvm_guest_time - hvm_clock_cost;
         printf("\n"
                "mc64=%#lx(%'ld) mc_offset=%#lx(%'ld)\n",
-               dom1.arch.hvm_domain.pl_time.vhpet.hpet.mc64,
-               dom1.arch.hvm_domain.pl_time.vhpet.hpet.mc64,
-               dom1.arch.hvm_domain.pl_time.vhpet.mc_offset,
-               dom1.arch.hvm_domain.pl_time.vhpet.mc_offset);
+               dom1.arch.hvm.pl_time.vhpet.hpet.mc64,
+               dom1.arch.hvm.pl_time.vhpet.hpet.mc64,
+               dom1.arch.hvm.pl_time.vhpet.mc_offset,
+               dom1.arch.hvm.pl_time.vhpet.mc_offset);
 
         printf("\nhvm_guest_time=%#lx(%'ld)\n",
                hvm_guest_time, hvm_guest_time);
