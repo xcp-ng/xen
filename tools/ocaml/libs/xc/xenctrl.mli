@@ -97,7 +97,7 @@ exception Error of string
 type handle
 external interface_open : unit -> handle = "stub_xc_interface_open"
 external interface_close : handle -> unit = "stub_xc_interface_close"
-val with_intf : (handle -> 'a) -> 'a
+
 val domain_create : handle -> int32 -> domain_create_flag list -> string -> arch_domainconfig -> domid
 val domain_sethandle : handle -> domid -> string -> unit
 external domain_max_vcpus : handle -> domid -> int -> unit

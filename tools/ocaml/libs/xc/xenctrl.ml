@@ -129,12 +129,6 @@ type handle
 external interface_open: unit -> handle = "stub_xc_interface_open"
 external interface_close: handle -> unit = "stub_xc_interface_close"
 
-let with_intf f =
-	let xc = interface_open () in
-	let r = try f xc with exn -> interface_close xc; raise exn in
-	interface_close xc;
-	r
-
 external _domain_create: handle -> int32 -> domain_create_flag list -> int array -> arch_domainconfig -> domid
        = "stub_xc_domain_create"
 
