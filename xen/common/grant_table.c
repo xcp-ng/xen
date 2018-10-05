@@ -379,39 +379,29 @@ static int get_paged_frame(unsigned long gfn, mfn_t *frame,
                            struct page_info **page, bool readonly,
                            struct domain *rd)
 {
-    int rc = GNTST_okay;
     p2m_type_t p2mt;
+    int rc;
 
-    *frame = INVALID_MFN;
-    *page = get_page_from_gfn(rd, gfn, &p2mt,
-                              readonly ? P2M_ALLOC : P2M_UNSHARE);
-    if ( !*page )
+    rc = check_get_page_from_gfn(rd, _gfn(gfn), readonly, &p2mt, page);
+    switch ( rc )
     {
-#ifdef P2M_SHARED_TYPES
-        if ( p2m_is_shared(p2mt) )
-            return GNTST_eagain;
-#endif
-#ifdef P2M_PAGES_TYPES
-        if ( p2m_is_paging(p2mt) )
-        {
-            p2m_mem_paging_populate(rd, gfn);
-            return GNTST_eagain;
-        }
-#endif
-        return GNTST_bad_page;
-    }
+    case 0:
+        break;
 
-    if ( p2m_is_foreign(p2mt) )
-    {
-        put_page(*page);
-        *page = NULL;
+    case -EAGAIN:
+        return GNTST_eagain;
 
+    default:
+        ASSERT_UNREACHABLE();
+        /* Fallthrough */
+
+    case -EINVAL:
         return GNTST_bad_page;
     }
 
     *frame = page_to_mfn(*page);
 
-    return rc;
+    return GNTST_okay;
 }
 
 static inline void
