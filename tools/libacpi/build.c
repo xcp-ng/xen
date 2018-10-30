@@ -56,6 +56,9 @@ struct acpi_info {
     uint64_t pci_hi_min, pci_hi_len; /* 24, 32 - PCI I/O hole boundaries */
 };
 
+/* Number of processor objects in the chosen DSDT. */
+static unsigned int nr_processor_objects;
+
 static void set_checksum(
     void *table, uint32_t checksum_offset, uint32_t length)
 {
@@ -88,7 +91,7 @@ static struct acpi_20_madt *construct_madt(struct acpi_ctxt *ctxt,
     sz  = sizeof(struct acpi_20_madt);
     sz += sizeof(struct acpi_20_madt_intsrcovr) * 16;
     sz += sizeof(struct acpi_20_madt_ioapic);
-    sz += sizeof(struct acpi_20_madt_lapic) * hvminfo->nr_vcpus;
+    sz += sizeof(struct acpi_20_madt_lapic) * nr_processor_objects;
 
     madt = ctxt->mem_ops.alloc(ctxt, sz, 16);
     if (!madt) return NULL;
@@ -147,9 +150,9 @@ static struct acpi_20_madt *construct_madt(struct acpi_ctxt *ctxt,
     else
         lapic = (struct acpi_20_madt_lapic *)(madt + 1);
 
-    info->nr_cpus = hvminfo->nr_vcpus;
+    info->nr_cpus = nr_processor_objects;
     info->madt_lapic0_addr = ctxt->mem_ops.v2p(ctxt, lapic);
-    for ( i = 0; i < hvminfo->nr_vcpus; i++ )
+    for ( i = 0; i < nr_processor_objects; i++ )
     {
         memset(lapic, 0, sizeof(*lapic));
         lapic->type    = ACPI_PROCESSOR_LOCAL_APIC;
@@ -157,7 +160,8 @@ static struct acpi_20_madt *construct_madt(struct acpi_ctxt *ctxt,
         /* Processor ID must match processor-object IDs in the DSDT. */
         lapic->acpi_processor_id = i;
         lapic->apic_id = config->lapic_id(i);
-        lapic->flags = (test_bit(i, hvminfo->vcpu_online)
+        lapic->flags = ((i < hvminfo->nr_vcpus) &&
+                        test_bit(i, hvminfo->vcpu_online)
                         ? ACPI_LOCAL_APIC_ENABLED : 0);
         lapic++;
     }
@@ -551,12 +555,14 @@ int acpi_build_tables(struct acpi_ctxt *ctxt, struct acpi_config *config)
         dsdt = ctxt->mem_ops.alloc(ctxt, config->dsdt_15cpu_len, 16);
         if (!dsdt) goto oom;
         memcpy(dsdt, config->dsdt_15cpu, config->dsdt_15cpu_len);
+        nr_processor_objects = 15;
     }
     else
     {
         dsdt = ctxt->mem_ops.alloc(ctxt, config->dsdt_anycpu_len, 16);
         if (!dsdt) goto oom;
         memcpy(dsdt, config->dsdt_anycpu, config->dsdt_anycpu_len);
+        nr_processor_objects = HVM_MAX_VCPUS;
     }
 
     /*
