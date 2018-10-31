@@ -4,7 +4,7 @@
  * An implementation of some Viridian enlightenments. See Microsoft's
  * Hypervisor Top Level Functional Specification (v5.0a) at:
  *
- * https://github.com/Microsoft/Virtualization-Documentation/raw/master/tlfs/Hypervisor%20Top%20Level%20Functional%20Specification%20v5.0.pdf 
+ * https://github.com/Microsoft/Virtualization-Documentation/raw/master/tlfs/Hypervisor%20Top%20Level%20Functional%20Specification%20v5.0.pdf
  *
  * for more information.
  */
@@ -337,7 +337,7 @@ static void dump_reference_tsc(const struct domain *d)
     const union viridian_reference_tsc *rt;
 
     rt = &d->arch.hvm.viridian.reference_tsc;
-    
+
     printk(XENLOG_G_INFO "d%d: VIRIDIAN REFERENCE_TSC: enabled: %x pfn: %lx\n",
            d->domain_id,
            rt->fields.enabled, (unsigned long)rt->fields.pfn);
@@ -554,13 +554,11 @@ static void update_reference_tsc(struct domain *d, bool_t initialize)
     put_page_and_type(page);
 }
 
-int wrmsr_viridian_regs(uint32_t idx, uint64_t val)
+static int guest_wrmsr_viridian(struct vcpu *v, uint32_t idx, uint64_t val)
 {
-    struct vcpu *v = current;
     struct domain *d = v->domain;
 
-    if ( !is_viridian_domain(d) )
-        return 0;
+    ASSERT(is_viridian_domain(d));
 
     switch ( idx )
     {
@@ -615,7 +613,7 @@ int wrmsr_viridian_regs(uint32_t idx, uint64_t val)
 
     case HV_X64_MSR_REFERENCE_TSC:
         if ( !(viridian_feature_mask(d) & HVMPV_reference_tsc) )
-            return 0;
+            return X86EMUL_EXCEPTION;
 
         perfc_incr(mshv_wrmsr_tsc_msr);
         d->arch.hvm.viridian.reference_tsc.raw = val;
@@ -645,6 +643,10 @@ int wrmsr_viridian_regs(uint32_t idx, uint64_t val)
         if ( !ctl.u.CrashNotify )
             break;
 
+        spin_lock(&d->shutdown_lock);
+        d->shutdown_code = SHUTDOWN_crash;
+        spin_unlock(&d->shutdown_lock);
+
         gprintk(XENLOG_WARNING, "VIRIDIAN CRASH: %lx %lx %lx %lx %lx\n",
                 v->arch.hvm.viridian.crash_param[0],
                 v->arch.hvm.viridian.crash_param[1],
@@ -655,14 +657,26 @@ int wrmsr_viridian_regs(uint32_t idx, uint64_t val)
     }
 
     default:
-        if ( idx >= VIRIDIAN_MSR_MIN && idx <= VIRIDIAN_MSR_MAX )
-            gprintk(XENLOG_WARNING, "write to unimplemented MSR %#x\n",
-                    idx);
-
-        return 0;
+        gdprintk(XENLOG_INFO,
+                 "Write %016"PRIx64" to unimplemented MSR %#x\n", val, idx);
+        return X86EMUL_EXCEPTION;
     }
 
-    return 1;
+    return X86EMUL_OKAY;
+}
+
+int wrmsr_viridian_regs(uint32_t idx, uint64_t val)
+{
+    struct vcpu *v = current;
+    struct domain *d = v->domain;
+
+    if ( !is_viridian_domain(d) )
+        return 0;
+
+    if ( idx < VIRIDIAN_MSR_MIN || idx > VIRIDIAN_MSR_MAX )
+        return 0;
+
+    return (guest_wrmsr_viridian(v, idx, val) == X86EMUL_OKAY) ? 1 : 0;
 }
 
 static int64_t raw_trc_val(struct domain *d)
@@ -698,13 +712,12 @@ void viridian_time_ref_count_thaw(struct domain *d)
         trc->off = (int64_t)trc->val - raw_trc_val(d);
 }
 
-int rdmsr_viridian_regs(uint32_t idx, uint64_t *val)
+static int guest_rdmsr_viridian(const struct vcpu *v, uint32_t idx,
+                                uint64_t *val)
 {
-    struct vcpu *v = current;
     struct domain *d = v->domain;
-    
-    if ( !is_viridian_domain(d) )
-        return 0;
+
+    ASSERT(is_viridian_domain(d));
 
     switch ( idx )
     {
@@ -725,7 +738,7 @@ int rdmsr_viridian_regs(uint32_t idx, uint64_t *val)
 
     case HV_X64_MSR_TSC_FREQUENCY:
         if ( viridian_feature_mask(d) & HVMPV_no_freq )
-            return 0;
+            return X86EMUL_EXCEPTION;
 
         perfc_incr(mshv_rdmsr_tsc_frequency);
         *val = (uint64_t)d->arch.tsc_khz * 1000ull;
@@ -733,7 +746,7 @@ int rdmsr_viridian_regs(uint32_t idx, uint64_t *val)
 
     case HV_X64_MSR_APIC_FREQUENCY:
         if ( viridian_feature_mask(d) & HVMPV_no_freq )
-            return 0;
+            return X86EMUL_EXCEPTION;
 
         perfc_incr(mshv_rdmsr_apic_frequency);
         *val = 1000000000ull / APIC_BUS_CYCLE_NS;
@@ -757,7 +770,7 @@ int rdmsr_viridian_regs(uint32_t idx, uint64_t *val)
 
     case HV_X64_MSR_REFERENCE_TSC:
         if ( !(viridian_feature_mask(d) & HVMPV_reference_tsc) )
-            return 0;
+            return X86EMUL_EXCEPTION;
 
         perfc_incr(mshv_rdmsr_tsc_msr);
         *val = d->arch.hvm.viridian.reference_tsc.raw;
@@ -770,7 +783,7 @@ int rdmsr_viridian_regs(uint32_t idx, uint64_t *val)
         trc = &d->arch.hvm.viridian.time_ref_count;
 
         if ( !(viridian_feature_mask(d) & HVMPV_time_ref_count) )
-            return 0;
+            return X86EMUL_EXCEPTION;
 
         if ( !test_and_set_bit(_TRC_accessed, &trc->flags) )
             printk(XENLOG_G_INFO "d%d: VIRIDIAN MSR_TIME_REF_COUNT: accessed\n",
@@ -804,14 +817,25 @@ int rdmsr_viridian_regs(uint32_t idx, uint64_t *val)
     }
 
     default:
-        if ( idx >= VIRIDIAN_MSR_MIN && idx <= VIRIDIAN_MSR_MAX )
-            gprintk(XENLOG_WARNING, "read from unimplemented MSR %#x\n",
-                    idx);
-
-        return 0;
+        gdprintk(XENLOG_INFO, "Read from unimplemented MSR %#x\n", idx);
+        return X86EMUL_EXCEPTION;
     }
 
-    return 1;
+    return X86EMUL_OKAY;
+}
+
+int rdmsr_viridian_regs(uint32_t idx, uint64_t *val)
+{
+    struct vcpu *v = current;
+    struct domain *d = v->domain;
+
+    if ( !is_viridian_domain(d) )
+        return 0;
+
+    if ( idx < VIRIDIAN_MSR_MIN || idx > VIRIDIAN_MSR_MAX )
+        return 0;
+
+    return (guest_rdmsr_viridian(v, idx, val) == X86EMUL_OKAY) ? 1 : 0;
 }
 
 void viridian_vcpu_deinit(struct vcpu *v)
