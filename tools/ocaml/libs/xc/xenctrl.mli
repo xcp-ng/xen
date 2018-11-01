@@ -98,6 +98,19 @@ type handle
 external interface_open : unit -> handle = "stub_xc_interface_open"
 external interface_close : handle -> unit = "stub_xc_interface_close"
 
+(** [with_intf f] runs [f] with a global handle that is opened on demand
+ * and kept open. Conceptually, a client should use either
+ * interface_open and interface_close or with_intf although mixing both
+ * is possible *)
+val with_intf : (handle -> 'a) -> 'a
+(** [get_handle] returns the global handle used by [with_intf] *)
+val get_handle: unit -> handle option
+(** [close handle] closes the handle maintained by [with_intf]. This
+ * should only be closed before process exit. It must not be called from
+ * a function called directly or indirectly by with_intf as this
+ * would invalidate the handle that with_intf passes to its argument. *)
+val close_handle: unit -> unit
+
 val domain_create : handle -> int32 -> domain_create_flag list -> string -> arch_domainconfig -> domid
 val domain_sethandle : handle -> domid -> string -> unit
 external domain_max_vcpus : handle -> domid -> int -> unit
