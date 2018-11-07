@@ -151,6 +151,9 @@ def format_uint32s(state, featureset, indent):
 
 def crunch_numbers(state):
 
+    # Reserved space
+    state.nr_entries += 4
+
     # Features common between 1d and e1d.
     common_1d = (FPU, VME, DE, PSE, TSC, MSR, PAE, MCE, CX8, APIC,
                  MTRR, PGE, MCA, CMOV, PAT, PSE36, MMX, FXSR)
