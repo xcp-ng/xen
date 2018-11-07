@@ -528,6 +528,9 @@ struct intel_iommu {
     struct ir_ctrl ir_ctrl;
     struct iommu_flush flush;
     struct acpi_drhd_unit *drhd;
+
+    /* Reserved space */
+    uint64_t _rsvd_livepatch[2];
 };
 
 struct iommu {
@@ -545,6 +548,9 @@ struct iommu {
     struct list_head ats_devices;
     unsigned long *domid_bitmap;  /* domain id bitmap */
     u16 *domid_map;               /* domain id mapping array */
+
+    /* Reserved space */
+    uint64_t _rsvd_livepatch[2];
 };
 
 static inline struct qi_ctrl *iommu_qi_ctrl(struct iommu *iommu)

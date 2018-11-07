@@ -80,6 +80,9 @@ struct grant_table {
     const struct domain *domain;
 
     struct grant_table_arch arch;
+
+    /* Reserved space */
+    uint64_t _rsvd_livepatch[2];
 };
 
 #ifndef DEFAULT_MAX_NR_GRANT_FRAMES /* to allow arch to override */

@@ -128,6 +128,8 @@ def crunch_numbers(state):
 
     # Size of bitmaps
     state.nr_entries = nr_entries = (max(state.names.keys()) >> 5) + 1
+    reserved_entries_num = 4
+    state.nr_entries = nr_entries = nr_entries + reserved_entries_num
 
     # Features common between 1d and e1d.
     common_1d = (FPU, VME, DE, PSE, TSC, MSR, PAE, MCE, CX8, APIC,
