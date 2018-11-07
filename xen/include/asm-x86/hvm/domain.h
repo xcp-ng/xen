@@ -46,6 +46,9 @@ struct hvm_ioreq_vcpu {
     struct vcpu      *vcpu;
     evtchn_port_t    ioreq_evtchn;
     bool             pending;
+
+    /* Reserved space */
+    uint64_t _rsvd_livepatch[1];
 };
 
 #define NR_IO_RANGE_TYPES (XEN_DMOP_IO_RANGE_PCI + 1)
@@ -67,6 +70,9 @@ struct hvm_ioreq_server {
     struct rangeset        *range[NR_IO_RANGE_TYPES];
     bool                   enabled;
     uint8_t                bufioreq_handling;
+
+    /* Reserved space */
+    uint64_t _rsvd_livepatch[2];
 };
 
 /*

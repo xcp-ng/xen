@@ -23,6 +23,9 @@ struct msr_policy
             bool cpuid_faulting:1;
         };
     } platform_info;
+
+    /* Reserved space */
+    uint64_t _rsvd_livepatch[2];
 };
 
 #ifdef __XEN__
