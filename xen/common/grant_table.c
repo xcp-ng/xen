@@ -99,6 +99,9 @@ struct grant_table {
 
     /* Domain to which this struct grant_table belongs. */
     struct domain *domain;
+
+    /* Reserved space */
+    uint64_t _rsvd_livepatch[2];
 };
 
 unsigned int __read_mostly opt_max_grant_frames = 64;
