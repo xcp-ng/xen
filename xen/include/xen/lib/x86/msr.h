@@ -45,6 +45,9 @@ struct msr_policy
             bool taa_no:1;
         };
     } arch_caps;
+
+    /* Reserved space */
+    uint64_t _rsvd_livepatch[2];
 };
 
 #ifdef __XEN__
