@@ -353,7 +353,7 @@ int libxl_cpuid_parse_config(libxl_cpuid_policy_list *policy, const char* str)
     const struct cpuid_flags *flag;
     const struct feature_name *feat;
 
-    BUILD_BUG_ON(ARRAY_SIZE(feature_to_policy) != FEATURESET_NR_ENTRIES);
+    BUILD_BUG_ON(ARRAY_SIZE(feature_to_policy) > FEATURESET_NR_ENTRIES);
 
     sep = strchr(str, '=');
     if (sep == NULL) {
