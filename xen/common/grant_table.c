@@ -82,6 +82,9 @@ struct grant_table {
     const struct domain *domain;
 
     struct grant_table_arch arch;
+
+    /* Reserved space */
+    uint64_t _rsvd_livepatch[2];
 };
 
 static int parse_gnttab_limit(const char *param, const char *arg,
