@@ -335,6 +335,9 @@ struct vcpu_msrs
      * values here may be stale in current context.
      */
     uint32_t dr_mask[4];
+
+    /* Reserved space */
+    uint64_t _rsvd_livepatch[2];
 };
 
 void init_guest_msr_policy(void);
