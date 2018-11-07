@@ -105,6 +105,9 @@ struct amd_iommu {
     int enabled;
 
     struct list_head ats_devices;
+
+    /* Reserved space */
+    uint64_t _rsvd_livepatch[2];
 };
 
 struct ivrs_unity_map {
@@ -191,6 +194,9 @@ struct guest_iommu {
 
     /* guest interrupt settings */
     struct guest_iommu_msi  msi;
+
+    /* Reserved space */
+    uint64_t _rsvd_livepatch[2];
 };
 
 extern bool_t iommuv2_enabled;
