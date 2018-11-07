@@ -59,7 +59,7 @@ DECLARE_PER_CPU(struct cpuidmasks, cpuidmasks);
 extern struct cpuidmasks cpuidmask_defaults;
 
 #define CPUID_GUEST_NR_BASIC      (0xdu + 1)
-#define CPUID_GUEST_NR_FEAT       (0u + 1)
+#define CPUID_GUEST_NR_FEAT       (0u + 2)
 #define CPUID_GUEST_NR_CACHE      (5u + 1)
 #define CPUID_GUEST_NR_TOPO       (1u + 1)
 #define CPUID_GUEST_NR_XSTATE     (62u + 1)
@@ -238,6 +238,8 @@ struct cpuid_policy
 static inline void cpuid_policy_to_featureset(
     const struct cpuid_policy *p, uint32_t fs[FSCAPINTS])
 {
+    unsigned int i;
+
     fs[FEATURESET_1d]  = p->basic._1d;
     fs[FEATURESET_1c]  = p->basic._1c;
     fs[FEATURESET_e1d] = p->extd.e1d;
@@ -248,6 +250,10 @@ static inline void cpuid_policy_to_featureset(
     fs[FEATURESET_e7d] = p->extd.e7d;
     fs[FEATURESET_e8b] = p->extd.e8b;
     fs[FEATURESET_7d0] = p->feat._7d0;
+
+    /* Zero reserved featureset words */
+    for ( i = FEATURESET_7d0 + 1; i < FSCAPINTS; i++ )
+        fs[i] = 0;
 }
 
 /* Fill in a CPUID policy from a featureset bitmap. */
