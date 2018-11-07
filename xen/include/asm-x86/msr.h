@@ -273,6 +273,9 @@ struct msr_domain_policy
         bool available; /* This MSR is non-architectural */
         bool cpuid_faulting;
     } plaform_info;
+
+    /* Reserved space */
+    uint64_t _rsvd_livepatch[2];
 };
 
 /* RAW msr domain policy: contains the actual values from H/W MSRs */
@@ -301,6 +304,9 @@ struct msr_vcpu_policy
         bool available; /* This MSR is non-architectural */
         bool cpuid_faulting;
     } misc_features_enables;
+
+    /* Reserved space */
+    uint64_t _rsvd_livepatch[2];
 };
 
 void init_guest_msr_policy(void);
