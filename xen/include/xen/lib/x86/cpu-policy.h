@@ -87,7 +87,7 @@ const char *x86_cpuid_vendor_to_str(unsigned int vendor);
 
 #define CPUID_GUEST_NR_BASIC      (0xdu + 1)
 #define CPUID_GUEST_NR_CACHE      (5u + 1)
-#define CPUID_GUEST_NR_FEAT       (2u + 1)
+#define CPUID_GUEST_NR_FEAT       (3u + 1)
 #define CPUID_GUEST_NR_TOPO       (1u + 1)
 #define CPUID_GUEST_NR_XSTATE     (62u + 1)
 #define CPUID_GUEST_NR_EXTD_INTEL (0x8u + 1)
@@ -371,6 +371,9 @@ struct cpu_policy
 
     /* Value calculated from raw data above. */
     uint8_t x86_vendor;
+
+    /* Reserved space */
+    uint64_t _rsvd_livepatch[2];
 };
 
 struct cpu_policy_errors
