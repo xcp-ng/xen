@@ -63,6 +63,8 @@ const char *x86_cpuid_vendor_to_str(unsigned int vendor)
 void x86_cpu_policy_to_featureset(
     const struct cpu_policy *p, uint32_t fs[FEATURESET_NR_ENTRIES])
 {
+    unsigned int i;
+
     fs[FEATURESET_1d]        = p->basic._1d;
     fs[FEATURESET_1c]        = p->basic._1c;
     fs[FEATURESET_e1d]       = p->extd.e1d;
@@ -81,6 +83,10 @@ void x86_cpu_policy_to_featureset(
     fs[FEATURESET_7d1]       = p->feat._7d1;
     fs[FEATURESET_m10Al]     = p->arch_caps.lo;
     fs[FEATURESET_m10Ah]     = p->arch_caps.hi;
+
+    /* Zero reserved featureset words */
+    for ( i = FEATURESET_m10Ah + 1; i < FEATURESET_NR_ENTRIES; i++ )
+        fs[i] = 0;
 }
 
 void x86_cpu_featureset_to_policy(
