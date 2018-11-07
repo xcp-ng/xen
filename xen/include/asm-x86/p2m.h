@@ -362,6 +362,9 @@ struct p2m_domain {
          unsigned int flags;
          unsigned long entry_count;
      } ioreq;
+
+    /* Reserved space */
+    uint64_t _rsvd_livepatch[2];
 };
 
 /* get host p2m table */
