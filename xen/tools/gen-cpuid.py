@@ -127,6 +127,8 @@ def parse_definitions(state):
         raise Fail("Feature %s (%d*32+%d) exceeds FEATURESET_NR_ENTRIES (%d)"
                    % (max_name, max_val >> 5, max_val & 31, state.nr_entries))
 
+    state.nr_entries += 4 # reserved_entries_num
+
 def featureset_to_uint32s(fs, nr):
     """ Represent a featureset as a list of C-compatible uint32_t's """
 
