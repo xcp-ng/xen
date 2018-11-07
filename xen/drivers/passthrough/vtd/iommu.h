@@ -510,6 +510,9 @@ struct vtd_iommu {
     unsigned long *domid_bitmap;  /* domain id bitmap */
     domid_t *domid_map;           /* domain id mapping array */
     uint32_t version;
+
+    /* Reserved space */
+    uint64_t _rsvd_livepatch[2];
 };
 
 #define INTEL_IOMMU_DEBUG(fmt, args...) \
