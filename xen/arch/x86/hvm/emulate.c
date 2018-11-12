@@ -1241,8 +1241,33 @@ static int hvmemul_rmw(
 
     if ( mapping )
     {
-        rc = x86_emul_rmw(mapping, bytes, eflags, state, ctxt);
-        hvmemul_unmap_linear_addr(mapping, addr, bytes, hvmemul_ctxt);
+        paddr_t gpa;
+        p2m_type_t p2mt;
+
+        rc = hvmemul_linear_to_phys(addr, &gpa, bytes, &reps, pfec, hvmemul_ctxt);
+        if ( rc != X86EMUL_OKAY )
+            goto out;
+
+        (void) get_gfn_query_unlocked(current->domain, gpa >> PAGE_SHIFT, &p2mt);
+        if ( p2mt == p2m_ioreq_server )
+        {
+            unsigned long data = 0;
+
+            if ( bytes > sizeof(data) )
+               rc = X86EMUL_UNHANDLEABLE;
+            if ( rc == X86EMUL_OKAY )
+            {
+                memcpy(&data, mapping, bytes);
+                rc = x86_emul_rmw(&data, bytes, eflags, state, ctxt);
+            }
+            if ( rc == X86EMUL_OKAY )
+            {
+                latch_linear_to_phys(vio, addr, gpa, true);
+                rc = hvmemul_linear_mmio_write(addr, bytes, &data, pfec,
+                                               hvmemul_ctxt, true);
+            }
+        } else
+            rc = x86_emul_rmw(mapping, bytes, eflags, state, ctxt);
     }
     else
     {
@@ -1260,6 +1285,10 @@ static int hvmemul_rmw(
             rc = hvmemul_linear_mmio_write(addr, bytes, &data, pfec,
                                            hvmemul_ctxt, known_gpfn);
     }
+
+ out:
+    if ( mapping )
+        hvmemul_unmap_linear_addr(mapping, addr, bytes, hvmemul_ctxt);
 
     return rc;
 }
