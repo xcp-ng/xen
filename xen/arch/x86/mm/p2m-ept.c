@@ -881,29 +881,9 @@ out:
         if ( iommu_hap_pt_share )
             rc = iommu_pte_flush(d, gfn, &ept_entry->epte, order, vtd_pte_present);
         else
-        {
-            if ( iommu_flags )
-                for ( i = 0; i < (1 << order); i++ )
-                {
-                    rc = iommu_map_page(d, gfn + i, mfn_x(mfn) + i, iommu_flags);
-                    if ( unlikely(rc) )
-                    {
-                        while ( i-- )
-                            /* If statement to satisfy __must_check. */
-                            if ( iommu_unmap_page(p2m->domain, gfn + i) )
-                                continue;
-
-                        break;
-                    }
-                }
-            else
-                for ( i = 0; i < (1 << order); i++ )
-                {
-                    ret = iommu_unmap_page(d, gfn + i);
-                    if ( !rc )
-                        rc = ret;
-                }
-        }
+            rc = iommu_flags ?
+                iommu_map(d, gfn, mfn_x(mfn), order, iommu_flags) :
+                iommu_unmap(d, gfn + i, order);
     }
 
     unmap_domain_page(table);

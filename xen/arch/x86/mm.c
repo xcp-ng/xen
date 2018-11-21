@@ -2390,7 +2390,7 @@ static int cleanup_page_mappings(struct page_info *page)
 
         if ( d && is_pv_domain(d) && unlikely(need_iommu(d)) )
         {
-            int rc2 = iommu_unmap_page(d, mfn);
+            int rc2 = iommu_unmap(d, mfn, PAGE_ORDER_4K);
 
             if ( !rc )
                 rc = rc2;
@@ -2869,11 +2869,12 @@ static int _get_page_type(struct page_info *page, unsigned long type,
             gfn_t gfn = _gfn(mfn_to_gmfn(d, mfn_x(page_to_mfn(page))));
 
             if ( (x & PGT_type_mask) == PGT_writable_page )
-                iommu_ret = iommu_unmap_page(d, gfn_x(gfn));
+                iommu_ret = iommu_unmap(d, gfn_x(gfn), PAGE_ORDER_4K);
             else if ( type == PGT_writable_page )
-                iommu_ret = iommu_map_page(d, gfn_x(gfn),
-                                           mfn_x(page_to_mfn(page)),
-                                           IOMMUF_readable|IOMMUF_writable);
+                iommu_ret = iommu_map(d, gfn_x(gfn),
+                                      mfn_x(page_to_mfn(page)),
+                                      PAGE_ORDER_4K,
+                                      IOMMUF_readable | IOMMUF_writable);
 
             if ( unlikely(iommu_ret) )
             {
