@@ -1030,6 +1030,10 @@ static int write_msr(unsigned int reg, uint64_t val,
             return X86EMUL_OKAY;
         break;
 
+    case MSR_AMD64_LS_CFG:
+        /* Silently discard the write to avoid gdprintk() spam from below */
+        break;
+
     case MSR_P6_PERFCTR(0) ... MSR_P6_PERFCTR(7):
     case MSR_P6_EVNTSEL(0) ... MSR_P6_EVNTSEL(3):
     case MSR_CORE_PERF_FIXED_CTR0 ... MSR_CORE_PERF_FIXED_CTR2:
