@@ -255,48 +255,75 @@ void iommu_domain_destroy(struct domain *d)
     arch_iommu_domain_destroy(d);
 }
 
-int iommu_map_page(struct domain *d, unsigned long gfn, unsigned long mfn,
-                   unsigned int flags)
+int iommu_map(struct domain *d, unsigned long gfn, unsigned long mfn,
+              unsigned int page_order, unsigned int flags)
 {
     const struct domain_iommu *hd = dom_iommu(d);
-    int rc;
+    unsigned long i;
+    int rc = 0;
 
     if ( !iommu_enabled || !hd->platform_ops )
         return 0;
 
-    rc = hd->platform_ops->map_page(d, gfn, mfn, flags);
-    if ( unlikely(rc) )
+    ASSERT(IS_ALIGNED(gfn, (1ul << page_order)));
+    ASSERT(IS_ALIGNED(mfn, (1ul << page_order)));
+
+    for ( i = 0; i < (1ul << page_order); i++ )
     {
+        rc = hd->platform_ops->map_page(d, gfn + i, mfn + i, flags);
+        if ( likely(!rc) )
+            continue;
+
         if ( !d->is_shutting_down && printk_ratelimit() )
             printk(XENLOG_ERR
                    "d%d: IOMMU mapping gfn %#lx to mfn %#lx failed: %d\n",
-                   d->domain_id, gfn, mfn, rc);
+                   d->domain_id, gfn + i, mfn + i, rc);
+
+        while ( i-- )
+            /* if statement to satisfy __must_check */
+            if ( hd->platform_ops->unmap_page(d, gfn + i) )
+                continue;
 
         if ( !is_hardware_domain(d) )
             domain_crash(d);
+
+        break;
     }
 
     return rc;
 }
 
-int iommu_unmap_page(struct domain *d, unsigned long gfn)
+int iommu_unmap(struct domain *d, unsigned long gfn, unsigned int page_order)
 {
     const struct domain_iommu *hd = dom_iommu(d);
-    int rc;
+    unsigned long i;
+    int rc = 0;
 
     if ( !iommu_enabled || !hd->platform_ops )
         return 0;
 
-    rc = hd->platform_ops->unmap_page(d, gfn);
-    if ( unlikely(rc) )
+    ASSERT(IS_ALIGNED(gfn, (1ul << page_order)));
+
+    for ( i = 0; i < (1ul << page_order); i++ )
     {
+        int err = hd->platform_ops->unmap_page(d, gfn + i);
+
+        if ( likely(!err) )
+            continue;
+
         if ( !d->is_shutting_down && printk_ratelimit() )
             printk(XENLOG_ERR
                    "d%d: IOMMU unmapping gfn %#lx failed: %d\n",
-                   d->domain_id, gfn, rc);
+                   d->domain_id, gfn + i, rc);
+
+        if ( !rc )
+            rc = err;
 
         if ( !is_hardware_domain(d) )
+        {
             domain_crash(d);
+            break;
+        }
     }
 
     return rc;

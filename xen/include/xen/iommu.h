@@ -60,9 +60,11 @@ void iommu_teardown(struct domain *d);
 #define IOMMUF_readable  (1u<<_IOMMUF_readable)
 #define _IOMMUF_writable 1
 #define IOMMUF_writable  (1u<<_IOMMUF_writable)
-int __must_check iommu_map_page(struct domain *d, unsigned long gfn,
-                                unsigned long mfn, unsigned int flags);
-int __must_check iommu_unmap_page(struct domain *d, unsigned long gfn);
+int __must_check iommu_map(struct domain *d, unsigned long gfn,
+                           unsigned long mfn, unsigned int page_order,
+                           unsigned int flags);
+int __must_check iommu_unmap(struct domain *d, unsigned long gfn,
+                             unsigned int page_order);
 
 enum iommu_feature
 {
@@ -209,3 +211,12 @@ extern struct spinlock iommu_pt_cleanup_lock;
 extern struct page_list_head iommu_pt_cleanup_list;
 
 #endif /* _IOMMU_H_ */
+
+/*
+ * Local variables:
+ * mode: C
+ * c-file-style: "BSD"
+ * c-basic-offset: 4
+ * indent-tabs-mode: nil
+ * End:
+ */
