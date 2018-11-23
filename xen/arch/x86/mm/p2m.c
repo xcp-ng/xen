@@ -49,6 +49,28 @@ boolean_param("hap_2mb", opt_hap_2mb);
 
 DEFINE_PERCPU_RWLOCK_GLOBAL(p2m_percpu_rwlock);
 
+static int p2m_init_logdirty(struct p2m_domain *p2m)
+{
+    if ( p2m->logdirty_ranges )
+        return 0;
+
+    p2m->logdirty_ranges = rangeset_new(p2m->domain, "log-dirty",
+                                        RANGESETF_prettyprint_hex);
+    if ( !p2m->logdirty_ranges )
+        return -ENOMEM;
+
+    return 0;
+}
+
+static void p2m_free_logdirty(struct p2m_domain *p2m)
+{
+    if ( !p2m->logdirty_ranges )
+        return;
+
+    rangeset_destroy(p2m->logdirty_ranges);
+    p2m->logdirty_ranges = NULL;
+}
+
 /* Init the datastructures for later use by the p2m code */
 static int p2m_initialise(struct domain *d, struct p2m_domain *p2m)
 {
@@ -105,6 +127,7 @@ free_p2m:
 
 static void p2m_free_one(struct p2m_domain *p2m)
 {
+    p2m_free_logdirty(p2m);
     if ( hap_enabled(p2m->domain) && cpu_has_vmx )
         ept_p2m_uninit(p2m);
     free_cpumask_var(p2m->dirty_cpumask);
@@ -114,19 +137,19 @@ static void p2m_free_one(struct p2m_domain *p2m)
 static int p2m_init_hostp2m(struct domain *d)
 {
     struct p2m_domain *p2m = p2m_init_one(d);
+    int rc;
 
-    if ( p2m )
-    {
-        p2m->logdirty_ranges = rangeset_new(d, "log-dirty",
-                                            RANGESETF_prettyprint_hex);
-        if ( p2m->logdirty_ranges )
-        {
-            d->arch.p2m = p2m;
-            return 0;
-        }
+    if ( !p2m )
+        return -ENOMEM;
+
+    rc = p2m_init_logdirty(p2m);
+
+    if ( !rc )
+        d->arch.p2m = p2m;
+    else
         p2m_free_one(p2m);
-    }
-    return -ENOMEM;
+
+    return rc;
 }
 
 static void p2m_teardown_hostp2m(struct domain *d)
@@ -136,7 +159,6 @@ static void p2m_teardown_hostp2m(struct domain *d)
 
     if ( p2m )
     {
-        rangeset_destroy(p2m->logdirty_ranges);
         p2m_free_one(p2m);
         d->arch.p2m = NULL;
     }
