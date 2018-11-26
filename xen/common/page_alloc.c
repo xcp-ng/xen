@@ -1268,6 +1268,13 @@ bool scrub_free_pages(void)
     nodeid_t node;
     unsigned int cnt = 0;
 
+    /*
+     * Don't start scrubbing until all secondary CPUs have booted and
+     * updated their microcode.
+     */
+    if ( system_state < SYS_STATE_smp_booted )
+        return false;
+
     node = node_to_scrub(true);
     if ( node == NUMA_NO_NODE )
         return false;
