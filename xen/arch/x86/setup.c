@@ -2103,6 +2103,10 @@ void asmlinkage __init noreturn __start_xen(void)
         }
     }
 
+    system_state = SYS_STATE_smp_booted;
+    /* Wake up secondary CPUs to start idle memory scrubbing */
+    smp_send_event_check_mask(&cpu_online_map);
+
     printk("Brought up %ld CPUs\n", (long)num_online_cpus());
     if ( num_parked )
         printk(XENLOG_INFO "Parked %u CPUs\n", num_parked);
