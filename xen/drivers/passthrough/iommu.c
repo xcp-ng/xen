@@ -352,8 +352,12 @@ int iommu_iotlb_flush(struct domain *d, unsigned long gfn,
     const struct domain_iommu *hd = dom_iommu(d);
     int rc;
 
-    if ( !iommu_enabled || !hd->platform_ops || !hd->platform_ops->iotlb_flush )
+    if ( !iommu_enabled || !hd->platform_ops ||
+         !hd->platform_ops->iotlb_flush || !page_count )
         return 0;
+
+    if ( gfn == gfn_x(INVALID_GFN) )
+        return -EINVAL;
 
     rc = hd->platform_ops->iotlb_flush(d, gfn, page_count);
     if ( unlikely(rc) )
