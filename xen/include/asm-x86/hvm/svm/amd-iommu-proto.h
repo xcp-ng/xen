@@ -60,6 +60,10 @@ int __must_check amd_iommu_alloc_root(struct domain_iommu *hd);
 int amd_iommu_reserve_domain_unity_map(struct domain *domain,
                                        u64 phys_addr, unsigned long size,
                                        int iw, int ir);
+int __must_check amd_iommu_flush_iotlb_pages(struct domain *d,
+                                             unsigned long gfn,
+                                             unsigned int page_count);
+int __must_check amd_iommu_flush_iotlb_all(struct domain *d);
 
 /* Share p2m table with iommu */
 void amd_iommu_share_p2m(struct domain *d);

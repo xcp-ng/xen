@@ -631,6 +631,55 @@ int amd_iommu_unmap_page(struct domain *d, unsigned long gfn)
     return 0;
 }
 
+static unsigned long flush_count(unsigned long gfn, unsigned int page_count,
+                                 unsigned int order)
+{
+    unsigned long start = gfn >> order;
+    unsigned long end = ((gfn + page_count - 1) >> order) + 1;
+
+    ASSERT(end > start);
+    return end - start;
+}
+
+int amd_iommu_flush_iotlb_pages(struct domain *d, unsigned long gfn,
+                                unsigned int page_count)
+{
+    ASSERT(page_count && gfn != gfn_x(INVALID_GFN));
+
+    /* If the range wraps then just flush everything */
+    if ( gfn + page_count < gfn )
+    {
+        amd_iommu_flush_all_pages(d);
+        return 0;
+    }
+
+    /*
+     * Flushes are expensive so find the minimal single flush that will
+     * cover the page range.
+     *
+     * NOTE: It is unnecessary to round down the DFN value to align with
+     *       the flush order here. This is done by the internals of the
+     *       flush code.
+     */
+    if ( page_count == 1 ) /* order 0 flush count */
+        amd_iommu_flush_pages(d, gfn, 0);
+    else if ( flush_count(gfn, page_count, 9) == 1 )
+        amd_iommu_flush_pages(d, gfn, 9);
+    else if ( flush_count(gfn, page_count, 18) == 1 )
+        amd_iommu_flush_pages(d, gfn, 18);
+    else
+        amd_iommu_flush_all_pages(d);
+
+    return 0;
+}
+
+int amd_iommu_flush_iotlb_all(struct domain *d)
+{
+    amd_iommu_flush_all_pages(d);
+
+    return 0;
+}
+
 int amd_iommu_reserve_domain_unity_map(struct domain *domain,
                                        u64 phys_addr,
                                        unsigned long size, int iw, int ir)
