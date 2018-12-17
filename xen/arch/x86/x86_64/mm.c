@@ -1429,14 +1429,14 @@ int memory_add(unsigned long spfn, unsigned long epfn, unsigned int pxm)
     if ( iommu_enabled && !iommu_passthrough && !need_iommu(hardware_domain) )
     {
         for ( i = spfn; i < epfn; i++ )
-            if ( iommu_map(hardware_domain, i, i, PAGE_ORDER_4K,
-                           IOMMUF_readable | IOMMUF_writable) )
+            if ( iommu_legacy_map(hardware_domain, i, i, PAGE_ORDER_4K,
+                                  IOMMUF_readable | IOMMUF_writable) )
                 break;
         if ( i != epfn )
         {
             while (i-- > old_max)
                 /* If statement to satisfy __must_check. */
-                if ( iommu_unmap(hardware_domain, i, PAGE_ORDER_4K) )
+                if ( iommu_legacy_unmap(hardware_domain, i, PAGE_ORDER_4K) )
                     continue;
 
             goto destroy_m2p;

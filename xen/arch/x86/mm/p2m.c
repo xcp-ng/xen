@@ -1316,8 +1316,8 @@ int set_identity_p2m_entry(struct domain *d, unsigned long gfn_l,
     {
         if ( !need_iommu(d) )
             return 0;
-        return iommu_map(d, gfn_l, gfn_l, PAGE_ORDER_4K,
-                         IOMMUF_readable | IOMMUF_writable);
+        return iommu_legacy_map(d, gfn_l, gfn_l, PAGE_ORDER_4K,
+                                IOMMUF_readable | IOMMUF_writable);
     }
 
     gfn_lock(p2m, gfn, 0);
@@ -1407,7 +1407,7 @@ int clear_identity_p2m_entry(struct domain *d, unsigned long gfn_l)
     {
         if ( !need_iommu(d) )
             return 0;
-        return iommu_unmap(d, gfn_l, PAGE_ORDER_4K);
+        return iommu_legacy_unmap(d, gfn_l, PAGE_ORDER_4K);
     }
 
     gfn_lock(p2m, gfn, 0);
