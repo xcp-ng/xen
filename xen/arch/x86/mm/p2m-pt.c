@@ -698,9 +698,9 @@ p2m_pt_set_entry(struct p2m_domain *p2m, gfn_t gfn_, mfn_t mfn,
         }
         else
             rc = iommu_pte_flags ?
-                iommu_map(p2m->domain, gfn, mfn_x(mfn), page_order,
-                          iommu_pte_flags) :
-                iommu_unmap(p2m->domain, gfn, page_order);
+                iommu_legacy_map(p2m->domain, gfn, mfn_x(mfn), page_order,
+                                 iommu_pte_flags) :
+                iommu_legacy_unmap(p2m->domain, gfn, page_order);
     }
 
     /*

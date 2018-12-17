@@ -255,8 +255,8 @@ void iommu_domain_destroy(struct domain *d)
     arch_iommu_domain_destroy(d);
 }
 
-int iommu_map(struct domain *d, unsigned long gfn, unsigned long mfn,
-              unsigned int page_order, unsigned int flags)
+int iommu_legacy_map(struct domain *d, unsigned long gfn, unsigned long mfn,
+                     unsigned int page_order, unsigned int flags)
 {
     const struct domain_iommu *hd = dom_iommu(d);
     unsigned long i;
@@ -293,7 +293,8 @@ int iommu_map(struct domain *d, unsigned long gfn, unsigned long mfn,
     return rc;
 }
 
-int iommu_unmap(struct domain *d, unsigned long gfn, unsigned int page_order)
+int iommu_legacy_unmap(struct domain *d, unsigned long gfn,
+                       unsigned int page_order)
 {
     const struct domain_iommu *hd = dom_iommu(d);
     unsigned long i;

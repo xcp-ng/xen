@@ -140,8 +140,8 @@ void __hwdom_init vtd_set_hwdom_mapping(struct domain *d)
         if ( xen_in_range(pfn) )
             continue;
 
-        rc = iommu_map(d, pfn, pfn, PAGE_SHIFT - PAGE_SHIFT_4K,
-                       IOMMUF_readable | IOMMUF_writable);
+        rc = iommu_legacy_map(d, pfn, pfn, PAGE_SHIFT - PAGE_SHIFT_4K,
+                              IOMMUF_readable | IOMMUF_writable);
         if ( rc )
            printk(XENLOG_WARNING VTDPREFIX " d%d: IOMMU mapping failed: %d\n",
                   d->domain_id, rc);
