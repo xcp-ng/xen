@@ -119,6 +119,7 @@ void __hwdom_init vtd_set_hwdom_mapping(struct domain *d)
     for ( i = 0; i < top; i++ )
     {
         int rc = 0;
+        unsigned int flush_flags = 0;
 
         /*
          * Set up 1:1 mapping for dom0. Default to use only conventional RAM
@@ -140,8 +141,8 @@ void __hwdom_init vtd_set_hwdom_mapping(struct domain *d)
         if ( xen_in_range(pfn) )
             continue;
 
-        rc = iommu_legacy_map(d, pfn, pfn, PAGE_SHIFT - PAGE_SHIFT_4K,
-                              IOMMUF_readable | IOMMUF_writable);
+        rc = iommu_map(d, pfn, pfn, PAGE_SHIFT - PAGE_SHIFT_4K,
+                       IOMMUF_readable | IOMMUF_writable, &flush_flags);
         if ( rc )
            printk(XENLOG_WARNING VTDPREFIX " d%d: IOMMU mapping failed: %d\n",
                   d->domain_id, rc);
@@ -149,5 +150,9 @@ void __hwdom_init vtd_set_hwdom_mapping(struct domain *d)
         if (!(i & (0xfffff >> (PAGE_SHIFT - PAGE_SHIFT_4K))))
             process_pending_softirqs();
     }
+
+    while ( iommu_iotlb_flush_all(
+                d, IOMMU_FLUSHF_added | IOMMU_FLUSHF_modified) )
+        break;
 }
 

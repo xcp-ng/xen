@@ -951,7 +951,17 @@ static int __p2m_set_entry(struct p2m_domain *p2m,
 
     if ( need_iommu(p2m->domain) &&
          (lpae_valid(orig_pte) || lpae_valid(*entry)) )
-        rc = iommu_iotlb_flush(p2m->domain, gfn_x(sgfn), 1UL << page_order);
+    {
+        unsigned int flush_flags = 0;
+
+        if ( lpae_is_valid(orig_pte) )
+            flush_flags |= IOMMU_FLUSHF_modified;
+        if ( lpae_is_valid(*entry) )
+            flush_flags |= IOMMU_FLUSHF_added;
+
+        rc = iommu_iotlb_flush(p2m->domain, gfn_x(sgfn), 1UL << page_order,
+                               flush_flags);
+    }
     else
         rc = 0;
 

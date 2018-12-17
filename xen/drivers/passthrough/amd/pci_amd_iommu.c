@@ -264,6 +264,7 @@ static void __hwdom_init amd_iommu_hwdom_init(struct domain *d)
         for ( i = 0; i < max_pdx; i++ )
         {
             unsigned long pfn = pdx_to_pfn(i);
+            unsigned int flush_flags = 0;
 
             /*
              * XXX Should we really map all non-RAM (above 4G)? Minimally
@@ -272,7 +273,9 @@ static void __hwdom_init amd_iommu_hwdom_init(struct domain *d)
             if ( mfn_valid(_mfn(pfn)) )
             {
                 int ret = amd_iommu_map_page(d, pfn, pfn,
-                                             IOMMUF_readable|IOMMUF_writable);
+                                             IOMMUF_readable |
+                                             IOMMUF_writable,
+                                             &flush_flags);
 
                 if ( !rc )
                     rc = ret;
@@ -286,6 +289,10 @@ static void __hwdom_init amd_iommu_hwdom_init(struct domain *d)
             AMD_IOMMU_DEBUG("d%d: IOMMU mapping failed: %d\n",
                             d->domain_id, rc);
     }
+
+    while ( iommu_iotlb_flush_all(
+                d, IOMMU_FLUSHF_added | IOMMU_FLUSHF_modified) )
+        break;
 
     for_each_amd_iommu ( iommu )
         if ( iomem_deny_access(d, PFN_DOWN(iommu->mmio_base_phys),

@@ -53,8 +53,10 @@ int amd_iommu_update_ivrs_mapping_acpi(void);
 
 /* mapping functions */
 int __must_check amd_iommu_map_page(struct domain *d, unsigned long gfn,
-                                    unsigned long mfn, unsigned int flags);
-int __must_check amd_iommu_unmap_page(struct domain *d, unsigned long gfn);
+                                    unsigned long mfn, unsigned int flags,
+                                    unsigned int *flush_flags);
+int __must_check amd_iommu_unmap_page(struct domain *d, unsigned long gfn,
+                                      unsigned int *flush_flags);
 u64 amd_iommu_get_next_table_from_pte(u32 *entry);
 int __must_check amd_iommu_alloc_root(struct domain_iommu *hd);
 int amd_iommu_reserve_domain_unity_map(struct domain *domain,
@@ -62,7 +64,8 @@ int amd_iommu_reserve_domain_unity_map(struct domain *domain,
                                        int iw, int ir);
 int __must_check amd_iommu_flush_iotlb_pages(struct domain *d,
                                              unsigned long gfn,
-                                             unsigned int page_count);
+                                             unsigned int page_count,
+                                             unsigned int flush_flags);
 int __must_check amd_iommu_flush_iotlb_all(struct domain *d);
 
 /* Share p2m table with iommu */

@@ -47,7 +47,6 @@ int arch_iommu_populate_page_table(struct domain *d)
 
     d->need_iommu = -1;
 
-    this_cpu(iommu_dont_flush_iotlb) = 1;
     spin_lock(&d->page_alloc_lock);
 
     if ( unlikely(d->is_dying) )
@@ -60,6 +59,7 @@ int arch_iommu_populate_page_table(struct domain *d)
         {
             unsigned long mfn = mfn_x(page_to_mfn(page));
             unsigned long gfn = mfn_to_gmfn(d, mfn);
+            unsigned int flush_flags;
 
             if ( gfn != gfn_x(INVALID_GFN) )
             {
@@ -67,7 +67,8 @@ int arch_iommu_populate_page_table(struct domain *d)
                 BUG_ON(SHARED_M2P(gfn));
                 rc = hd->platform_ops->map_page(d, gfn, mfn,
                                                 IOMMUF_readable |
-                                                IOMMUF_writable);
+                                                IOMMUF_writable,
+                                                &flush_flags);
 
                 /*
                  * We may be working behind the back of a running guest, which
@@ -83,7 +84,7 @@ int arch_iommu_populate_page_table(struct domain *d)
                      ((page->u.inuse.type_info & PGT_type_mask) !=
                       PGT_writable_page) )
                 {
-                    rc = hd->platform_ops->unmap_page(d, gfn);
+                    rc = hd->platform_ops->unmap_page(d, gfn, &flush_flags);
                     /* If the type changed yet again, simply force a retry. */
                     if ( !rc && ((page->u.inuse.type_info & PGT_type_mask) ==
                                  PGT_writable_page) )
@@ -122,10 +123,14 @@ int arch_iommu_populate_page_table(struct domain *d)
     }
 
     spin_unlock(&d->page_alloc_lock);
-    this_cpu(iommu_dont_flush_iotlb) = 0;
 
     if ( !rc )
-        rc = iommu_iotlb_flush_all(d);
+        /*
+         * flush_flags are not tracked across hypercall pre-emption so
+         * assume a full flush is necessary.
+         */
+        rc = iommu_iotlb_flush_all(
+            d, IOMMU_FLUSHF_added | IOMMU_FLUSHF_modified);
 
     if ( rc && rc != -ERESTART )
         iommu_teardown(d);
