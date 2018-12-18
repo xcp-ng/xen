@@ -661,12 +661,18 @@ int hvm_domain_initialise(struct domain *d)
     if ( hvm_tsc_scaling_supported )
         d->arch.hvm.tsc_scaling_ratio = hvm_default_tsc_scaling_ratio;
 
+    rc = viridian_domain_init(d);
+    if ( rc )
+        goto fail2;
+
     rc = hvm_funcs.domain_initialise(d);
     if ( rc != 0 )
-        goto fail2;
+        goto fail3;
 
     return 0;
 
+ fail3:
+    viridian_domain_deinit(d);
  fail2:
     rtc_deinit(d);
     stdvga_deinit(d);
@@ -1550,6 +1556,10 @@ int hvm_vcpu_initialise(struct vcpu *v)
     if ( rc != 0 )
         goto fail6;
 
+    rc = viridian_vcpu_init(v);
+    if ( rc )
+        goto fail7;
+
     if ( v->vcpu_id == 0 )
     {
         /* NB. All these really belong in hvm_domain_initialise(). */
@@ -1562,6 +1572,8 @@ int hvm_vcpu_initialise(struct vcpu *v)
 
     return 0;
 
+ fail7:
+    hvm_all_ioreq_servers_remove_vcpu(d, v);
  fail6:
     nestedhvm_vcpu_destroy(v);
  fail5:
