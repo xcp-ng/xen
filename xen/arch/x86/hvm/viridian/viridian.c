@@ -180,6 +180,8 @@ void cpuid_viridian_leaves(const struct vcpu *v, uint32_t leaf,
             mask.AccessPartitionReferenceCounter = 1;
         if ( viridian_feature_mask(d) & HVMPV_reference_tsc )
             mask.AccessPartitionReferenceTsc = 1;
+        if ( viridian_feature_mask(d) & HVMPV_synic )
+            mask.AccessSynicRegs = 1;
 
         u.mask = mask;
 
@@ -309,8 +311,16 @@ static int guest_wrmsr_viridian(struct vcpu *v, uint32_t idx, uint64_t val)
     case HV_X64_MSR_ICR:
     case HV_X64_MSR_TPR:
     case HV_X64_MSR_VP_ASSIST_PAGE:
+    case HV_X64_MSR_SCONTROL:
+    case HV_X64_MSR_SVERSION:
+    case HV_X64_MSR_SIEFP:
+    case HV_X64_MSR_SIMP:
+    case HV_X64_MSR_EOM:
+    case HV_X64_MSR_SINT0 ... HV_X64_MSR_SINT15:
         return viridian_synic_wrmsr(v, idx, val);
 
+    case HV_X64_MSR_TSC_FREQUENCY:
+    case HV_X64_MSR_APIC_FREQUENCY:
     case HV_X64_MSR_REFERENCE_TSC:
         return viridian_time_wrmsr(v, idx, val);
 
@@ -396,6 +406,12 @@ static int guest_rdmsr_viridian(const struct vcpu *v, uint32_t idx,
     case HV_X64_MSR_ICR:
     case HV_X64_MSR_TPR:
     case HV_X64_MSR_VP_ASSIST_PAGE:
+    case HV_X64_MSR_SCONTROL:
+    case HV_X64_MSR_SVERSION:
+    case HV_X64_MSR_SIEFP:
+    case HV_X64_MSR_SIMP:
+    case HV_X64_MSR_EOM:
+    case HV_X64_MSR_SINT0 ... HV_X64_MSR_SINT15:
         return viridian_synic_rdmsr(v, idx, val);
 
     case HV_X64_MSR_TSC_FREQUENCY:

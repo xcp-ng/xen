@@ -461,10 +461,14 @@ void vlapic_EOI_set(struct vlapic *vlapic)
 
 void vlapic_handle_EOI(struct vlapic *vlapic, u8 vector)
 {
+    struct vcpu *v = vlapic_vcpu(vlapic);
     struct domain *d = vlapic_domain(vlapic);
 
     if ( vlapic_test_vector(vector, &vlapic->regs->data[APIC_TMR]) )
         vioapic_update_EOI(d, vector);
+
+    if ( has_viridian_synic(v->domain) )
+        viridian_synic_ack_sint(v, vector);
 
     hvm_dpci_msi_eoi(d, vector);
 }
@@ -1245,6 +1249,13 @@ int vlapic_has_pending_irq(struct vcpu *v)
     if ( !vlapic_enabled(vlapic) )
         return -1;
 
+    /*
+     * Poll the viridian message queues before checking the IRR since
+     * a sythetic interrupt may be asserted during the poll.
+     */
+    if ( has_viridian_synic(v->domain) )
+        viridian_synic_poll_messages(v);
+
     irr = vlapic_find_highest_irr(vlapic);
     if ( irr == -1 )
         return -1;
@@ -1307,7 +1318,10 @@ int vlapic_ack_pending_irq(struct vcpu *v, int vector, bool_t force_ack)
     }
 
  done:
-    vlapic_set_vector(vector, &vlapic->regs->data[APIC_ISR]);
+    if ( !has_viridian_synic(v->domain) ||
+         !viridian_synic_is_auto_eoi_sint(v, vector) )
+        vlapic_set_vector(vector, &vlapic->regs->data[APIC_ISR]);
+
     vlapic_clear_irr(vector, vlapic);
     return 1;
 }
