@@ -143,6 +143,25 @@ int viridian_synic_rdmsr(const struct vcpu *v, uint32_t idx, uint64_t *val)
     return X86EMUL_OKAY;
 }
 
+int viridian_synic_vcpu_init(struct vcpu *v)
+{
+    return 0;
+}
+
+int viridian_synic_domain_init(struct domain *d)
+{
+    return 0;
+}
+
+void viridian_synic_vcpu_deinit(struct vcpu *v)
+{
+    viridian_unmap_guest_page(&v->arch.hvm.viridian->vp_assist);
+}
+
+void viridian_synic_domain_deinit(struct domain *d)
+{
+}
+
 void viridian_synic_save_vcpu_ctxt(const struct vcpu *v,
                                    struct hvm_viridian_vcpu_context *ctxt)
 {
