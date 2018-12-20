@@ -78,6 +78,8 @@ void viridian_apic_assist_clear(struct vcpu *v)
 
 int viridian_synic_wrmsr(struct vcpu *v, uint32_t idx, uint64_t val)
 {
+    struct domain *d = v->domain;
+
     switch ( idx )
     {
     case HV_X64_MSR_EOI:
@@ -100,7 +102,7 @@ int viridian_synic_wrmsr(struct vcpu *v, uint32_t idx, uint64_t val)
         viridian_dump_guest_page(v, "VP_ASSIST",
                                  &v->arch.hvm.viridian->vp_assist);
         if ( v->arch.hvm.viridian->vp_assist.msr.fields.enabled )
-            viridian_map_guest_page(v, &v->arch.hvm.viridian->vp_assist);
+            viridian_map_guest_page(d, &v->arch.hvm.viridian->vp_assist);
         break;
 
     default:
@@ -172,9 +174,11 @@ void viridian_synic_save_vcpu_ctxt(const struct vcpu *v,
 void viridian_synic_load_vcpu_ctxt(
     struct vcpu *v, const struct hvm_viridian_vcpu_context *ctxt)
 {
+    struct domain *d = v->domain;
+
     v->arch.hvm.viridian->vp_assist.msr.raw = ctxt->vp_assist_msr;
     if ( v->arch.hvm.viridian->vp_assist.msr.fields.enabled )
-        viridian_map_guest_page(v, &v->arch.hvm.viridian->vp_assist);
+        viridian_map_guest_page(d, &v->arch.hvm.viridian->vp_assist);
 
     v->arch.hvm.viridian->apic_assist_pending = ctxt->apic_assist_pending;
 }
