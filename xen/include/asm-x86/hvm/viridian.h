@@ -40,6 +40,33 @@ union viridian_sint_msr
     } fields;
 };
 
+union viridian_stimer_config_msr
+{
+    uint64_t raw;
+    struct
+    {
+        uint64_t enabled:1;
+        uint64_t periodic:1;
+        uint64_t lazy:1;
+        uint64_t auto_enable:1;
+        uint64_t vector:8;
+        uint64_t direct_mode:1;
+        uint64_t reserved_zero1:3;
+        uint64_t sintx:4;
+        uint64_t reserved_zero2:44;
+    } fields;
+};
+
+struct viridian_stimer {
+    struct vcpu *v;
+    struct timer timer;
+    union viridian_stimer_config_msr config;
+    uint64_t count;
+    int64_t expiration;
+    s_time_t timeout;
+    bool started;
+};
+
 struct viridian_vcpu
 {
     struct viridian_page vp_assist;
@@ -50,6 +77,9 @@ struct viridian_vcpu
     union viridian_sint_msr sint[16];
     uint8_t vector_to_sintx[256];
     unsigned long msg_pending;
+    struct viridian_stimer stimer[4];
+    unsigned long stimer_enabled;
+    unsigned long stimer_pending;
     uint64_t crash_param[5];
 };
 

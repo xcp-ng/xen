@@ -329,7 +329,53 @@ void viridian_synic_domain_deinit(struct domain *d)
 
 void viridian_synic_poll_messages(struct vcpu *v)
 {
-    /* There are currently no message sources */
+    viridian_time_poll_timers(v);
+}
+
+bool viridian_synic_deliver_timer_msg(struct vcpu *v, unsigned int sintx,
+                                      unsigned int index,
+                                      int64_t expiration, int64_t delivery)
+{
+    const union viridian_sint_msr *vs = &v->arch.hvm.viridian->sint[sintx];
+    HV_MESSAGE *msg = v->arch.hvm.viridian->simp.ptr;
+    struct {
+        uint32_t TimerIndex;
+        uint32_t Reserved;
+        uint64_t ExpirationTime;
+        uint64_t DeliveryTime;
+    } payload = {
+        .TimerIndex = index,
+        .ExpirationTime = expiration,
+        .DeliveryTime = delivery,
+    };
+
+    if ( test_bit(sintx, &v->arch.hvm.viridian->msg_pending) )
+        return false;
+
+    BUILD_BUG_ON(sizeof(*msg) != HV_MESSAGE_SIZE);
+    msg += sintx;
+
+    /*
+     * To avoid using an atomic test-and-set this function must be called
+     * in context of the vcpu receiving the message.
+     */
+    ASSERT(v == current);
+    if ( msg->Header.MessageType != HvMessageTypeNone )
+    {
+        msg->Header.MessageFlags.MessagePending = 1;
+        set_bit(sintx, &v->arch.hvm.viridian->msg_pending);
+        return false;
+    }
+
+    msg->Header.MessageType = HvMessageTimerExpired;
+    msg->Header.MessageFlags.MessagePending = 0;
+    msg->Header.PayloadSize = sizeof(payload);
+    memcpy(msg->Payload, &payload, sizeof(payload));
+
+    if ( !vs->fields.mask )
+        vlapic_set_irq(vcpu_vlapic(v), vs->fields.vector, 0);
+
+    return true;
 }
 
 bool viridian_synic_is_auto_eoi_sint(struct vcpu *v, uint8_t vector)
