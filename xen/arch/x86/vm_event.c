@@ -122,6 +122,11 @@ void vm_event_monitor_next_interrupt(struct vcpu *v)
     v->arch.monitor.next_interrupt_enabled = true;
 }
 
+void vm_event_sync_event(struct vcpu *v, bool value)
+{
+    v->arch.vm_event->sync_event = value;
+}
+
 void vm_event_fill_regs(vm_event_request_t *req)
 {
     const struct cpu_user_regs *regs = guest_cpu_user_regs();
