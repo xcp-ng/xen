@@ -2537,8 +2537,11 @@ int p2m_destroy_altp2m_by_id(struct domain *d, unsigned int idx)
     if ( !idx || idx >= MAX_ALTP2M )
         return rc;
 
-    domain_pause_except_self(d);
+    rc = domain_pause_except_self(d);
+    if ( rc )
+        return rc;
 
+    rc = -EBUSY;
     altp2m_list_lock(d);
 
     if ( d->arch.altp2m_eptp[idx] != mfn_x(INVALID_MFN) )
@@ -2568,8 +2571,11 @@ int p2m_switch_domain_altp2m_by_id(struct domain *d, unsigned int idx)
     if ( idx >= MAX_ALTP2M )
         return rc;
 
-    domain_pause_except_self(d);
+    rc = domain_pause_except_self(d);
+    if ( rc )
+        return rc;
 
+    rc = -EINVAL;
     altp2m_list_lock(d);
 
     if ( d->arch.altp2m_eptp[idx] != mfn_x(INVALID_MFN) )
