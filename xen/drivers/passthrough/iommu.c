@@ -60,6 +60,7 @@ bool_t __read_mostly iommu_passthrough;
 bool_t __read_mostly iommu_snoop = 1;
 bool_t __read_mostly iommu_qinval = 1;
 bool_t __read_mostly iommu_intremap = 1;
+bool_t __read_mostly iommu_crash_disable;
 
 /*
  * In the current implementation of VT-d posted interrupts, in some extreme
@@ -126,6 +127,10 @@ static int __init parse_iommu_param(const char *s)
             iommu_dom0_strict = val;
         else if ( !cmdline_strcmp(s, "sharept") )
             iommu_hap_pt_share = val;
+#ifdef CONFIG_KEXEC
+        else if ( !cmdline_strcmp(s, "crash-disable") )
+            iommu_crash_disable = val;
+#endif
         else
             rc = -EINVAL;
 
@@ -532,6 +537,9 @@ void iommu_share_p2m_table(struct domain* d)
 
 void iommu_crash_shutdown(void)
 {
+    if ( !iommu_crash_disable )
+        return;
+
     if ( iommu_enabled )
         iommu_get_ops()->crash_shutdown();
     iommu_enabled = iommu_intremap = iommu_intpost = 0;
