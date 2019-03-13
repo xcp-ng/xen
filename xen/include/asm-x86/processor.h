@@ -582,7 +582,8 @@ int guest_rdmsr_xen(const struct vcpu *v, uint32_t idx, uint64_t *val);
 int guest_wrmsr_xen(struct vcpu *v, uint32_t idx, uint64_t val);
 
 void microcode_set_module(unsigned int);
-int microcode_update(XEN_GUEST_HANDLE_PARAM(const_void), unsigned long len);
+int microcode_update(XEN_GUEST_HANDLE_PARAM(const_void), unsigned long len,
+                     uint32_t strategy);
 int early_microcode_update_cpu(void);
 int early_microcode_init(void);
 int microcode_update_one(bool start_update);
