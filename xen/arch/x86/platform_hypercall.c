@@ -283,7 +283,8 @@ ret_t do_platform_op(XEN_GUEST_HANDLE_PARAM(xen_platform_op_t) u_xenpf_op)
 
         ret = microcode_update(
                 guest_handle_to_param(data, const_void),
-                op->u.microcode.length);
+                op->u.microcode.length,
+                op->u.microcode.strategy);
     }
     break;
 
