@@ -36,6 +36,8 @@
 #include <xen/earlycpio.h>
 #include <xen/watchdog.h>
 
+#include <public/platform.h>
+
 #include <asm/apic.h>
 #include <asm/delay.h>
 #include <asm/msr.h>
@@ -62,6 +64,10 @@ static module_t __initdata ucode_mod;
 static signed int __initdata ucode_mod_idx;
 static bool_t __initdata ucode_mod_forced;
 static unsigned int nr_cores;
+
+static uint32_t application_strategy;
+/* The next CPU to perform a ucode update */
+static atomic_t next_cpu;
 
 /*
  * These states help to coordinate CPUs during loading an update.
@@ -361,6 +367,22 @@ static int microcode_update_cpu(const struct microcode_patch *patch)
     return err;
 }
 
+static void sequential_set_next_cpu(void)
+{
+    unsigned int cpu;
+
+    /* Was this the last cpu? */
+    if ( (atomic_read(&cpu_out) + 1) == nr_cores )
+        return;
+
+    /* Select the next primary thread */
+    do {
+        cpu = atomic_read(&next_cpu);
+        atomic_set(&next_cpu, cpumask_next(cpu, &cpu_online_map));
+        cpu = atomic_read(&next_cpu);
+    } while ( cpu != cpumask_first(per_cpu(cpu_sibling_mask, cpu)) );
+}
+
 static bool wait_for_state(typeof(loading_state) state)
 {
     typeof(loading_state) cur_state;
@@ -389,16 +411,31 @@ static int secondary_nmi_work(void)
 
 static int primary_thread_work(const struct microcode_patch *patch)
 {
+    unsigned int cpu = smp_processor_id(), done;
     int ret;
 
-    cpumask_set_cpu(smp_processor_id(), &cpu_callin_map);
+    cpumask_set_cpu(cpu, &cpu_callin_map);
 
     if ( !wait_for_state(LOADING_ENTER) )
         return -EBUSY;
 
+    while ( application_strategy == XENPF_microcode_sequential &&
+            cpu != atomic_read(&next_cpu) )
+    {
+        done = atomic_read(&cpu_out);
+        if ( wait_for_condition(wait_cpu_callout, (done + 1),
+                                MICROCODE_UPDATE_TIMEOUT_US) )
+            panic("Timeout during sequential microcode update (finished %d/%d)",
+                  done, nr_cores);
+    }
+
     ret = microcode_ops->apply_microcode(patch);
     if ( !ret )
         atomic_inc(&cpu_updated);
+
+    if ( application_strategy == XENPF_microcode_sequential )
+        sequential_set_next_cpu();
+
     atomic_inc(&cpu_out);
 
     return ret;
@@ -511,6 +548,10 @@ static int control_thread_fn(const struct microcode_patch *patch)
     ret = microcode_ops->apply_microcode(patch);
     if ( !ret )
         atomic_inc(&cpu_updated);
+
+    if ( application_strategy == XENPF_microcode_sequential )
+        sequential_set_next_cpu();
+
     atomic_inc(&cpu_out);
 
     if ( ret == -EIO )
@@ -585,6 +626,7 @@ static int do_microcode_update(void *patch)
 }
 
 struct ucode_buf {
+    uint32_t strategy;
     unsigned int len;
     char buffer[];
 };
@@ -595,6 +637,7 @@ static long microcode_update_helper(void *data)
     struct ucode_buf *buffer = data;
     unsigned int cpu, updated;
     struct microcode_patch *patch;
+    uint32_t strategy = buffer->strategy;
 
     /* cpu_online_map must not change during update */
     if ( !get_cpu_maps() )
@@ -673,8 +716,13 @@ static long microcode_update_helper(void *data)
         if ( cpu == cpumask_first(per_cpu(cpu_sibling_mask, cpu)) )
             nr_cores++;
 
-    printk(XENLOG_INFO "%u cores are to update their microcode\n", nr_cores);
+    printk(XENLOG_INFO "%u cores are to update their microcode %s\n", nr_cores,
+           strategy == XENPF_microcode_parallel ? "in parallel" :
+                                                  "sequentially");
 
+    application_strategy = strategy;
+    if ( strategy == XENPF_microcode_sequential )
+        atomic_set(&next_cpu, cpumask_first(&cpu_online_map));
     /*
      * Late loading dance. Why the heavy-handed stop_machine effort?
      *
@@ -710,7 +758,8 @@ static long microcode_update_helper(void *data)
     return ret;
 }
 
-int microcode_update(XEN_GUEST_HANDLE_PARAM(const_void) buf, unsigned long len)
+int microcode_update(XEN_GUEST_HANDLE_PARAM(const_void) buf, unsigned long len,
+                     uint32_t strategy)
 {
     int ret;
     struct ucode_buf *buffer;
@@ -719,6 +768,10 @@ int microcode_update(XEN_GUEST_HANDLE_PARAM(const_void) buf, unsigned long len)
         return -E2BIG;
 
     if ( microcode_ops == NULL )
+        return -EINVAL;
+
+    if ( strategy != XENPF_microcode_parallel &&
+         strategy != XENPF_microcode_sequential )
         return -EINVAL;
 
     buffer = xmalloc_flex_struct(struct ucode_buf, buffer, len);
@@ -732,6 +785,7 @@ int microcode_update(XEN_GUEST_HANDLE_PARAM(const_void) buf, unsigned long len)
         return -EFAULT;
     }
     buffer->len = len;
+    buffer->strategy = strategy;
 
     return continue_hypercall_on_cpu(smp_processor_id(),
                                      microcode_update_helper, buffer);
