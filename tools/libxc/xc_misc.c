@@ -226,7 +226,8 @@ int xc_physinfo(xc_interface *xch,
     return 0;
 }
 
-int xc_microcode_update(xc_interface *xch, const void *buf, size_t len)
+int xc_microcode_update(xc_interface *xch, const void *buf, size_t len,
+                        uint32_t strategy)
 {
     int ret;
     DECLARE_PLATFORM_OP;
@@ -240,6 +241,7 @@ int xc_microcode_update(xc_interface *xch, const void *buf, size_t len)
 
     platform_op.cmd = XENPF_microcode_update;
     platform_op.u.microcode.length = len;
+    platform_op.u.microcode.strategy = strategy;
     set_xen_guest_handle(platform_op.u.microcode.data, uc);
 
     ret = do_platform_op(xch, &platform_op);

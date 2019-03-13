@@ -68,6 +68,15 @@ void show_curr_cpu(FILE *f)
     xc_interface_close(xch);
 }
 
+static int parse_strategy(const char *arg)
+{
+    if ( !strcmp(arg, "parallel") )
+        return XENPF_microcode_parallel;
+    if ( !strcmp(arg, "sequential") )
+        return XENPF_microcode_sequential;
+    return -1;
+}
+
 int main(int argc, char *argv[])
 {
     int fd, ret;
@@ -75,6 +84,7 @@ int main(int argc, char *argv[])
     size_t len;
     struct stat st;
     xc_interface *xch;
+    int strategy;
 
     if ( argc >= 2 && !strcmp(argv[1], "show-cpu-info") )
     {
@@ -82,11 +92,11 @@ int main(int argc, char *argv[])
         return 0;
     }
 
-    if ( argc < 2 )
+    if ( argc < 3 || (strategy = parse_strategy(argv[2])) < 0 )
     {
         fprintf(stderr,
                 "xen-ucode: Xen microcode updating tool\n"
-                "Usage: %s <microcode blob>\n", argv[0]);
+                "Usage: %s <microcode blob> <parallel|sequential>\n", argv[0]);
         show_curr_cpu(stderr);
         return 0;
     }
@@ -123,7 +133,7 @@ int main(int argc, char *argv[])
         return errno;
     }
 
-    ret = xc_microcode_update(xch, buf, len);
+    ret = xc_microcode_update(xch, buf, len, strategy);
     if ( ret )
         fprintf(stderr, "Failed to update microcode. (err: %s)\n",
                 strerror(errno));
