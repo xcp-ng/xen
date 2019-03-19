@@ -404,6 +404,9 @@ bool hvm_set_guest_bndcfgs(struct vcpu *v, u64 val);
 #define has_viridian_apic_assist(d) \
     (is_viridian_domain(d) && (viridian_feature_mask(d) & HVMPV_apic_assist))
 
+#define has_viridian_synic(d) \
+    (is_viridian_domain(d) && (viridian_feature_mask(d) & HVMPV_synic))
+
 bool hvm_check_cpuid_faulting(struct vcpu *v);
 void hvm_migrate_timers(struct vcpu *v);
 void hvm_do_resume(struct vcpu *v);
