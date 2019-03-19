@@ -125,6 +125,7 @@ void cpuid_viridian_leaves(const struct vcpu *v, uint32_t leaf,
                            uint32_t subleaf, struct cpuid_leaf *res)
 {
     const struct domain *d = v->domain;
+    const struct viridian_domain *vd = d->arch.hvm.viridian;
 
     ASSERT(is_viridian_domain(d));
     ASSERT(leaf >= 0x40000000 && leaf < 0x40000100);
@@ -149,7 +150,7 @@ void cpuid_viridian_leaves(const struct vcpu *v, uint32_t leaf,
          * Hypervisor information, but only if the guest has set its
          * own version number.
          */
-        if ( d->arch.hvm.viridian->guest_os_id.raw == 0 )
+        if ( vd->guest_os_id.raw == 0 )
             break;
         res->a = viridian_build;
         res->b = ((uint32_t)viridian_major << 16) | viridian_minor;
@@ -194,8 +195,7 @@ void cpuid_viridian_leaves(const struct vcpu *v, uint32_t leaf,
 
     case 4:
         /* Recommended hypercall usage. */
-        if ( (d->arch.hvm.viridian->guest_os_id.raw == 0) ||
-             (d->arch.hvm.viridian->guest_os_id.fields.os < 4) )
+        if ( vd->guest_os_id.raw == 0 || vd->guest_os_id.fields.os < 4 )
             break;
         res->a = CPUID4A_RELAX_TIMER_INT;
         if ( viridian_feature_mask(d) & HVMPV_hcall_remote_tlb_flush )
@@ -284,21 +284,23 @@ static void enable_hypercall_page(struct domain *d)
 
 static int guest_wrmsr_viridian(struct vcpu *v, uint32_t idx, uint64_t val)
 {
+    struct viridian_vcpu *vv = v->arch.hvm.viridian;
     struct domain *d = v->domain;
+    struct viridian_domain *vd = d->arch.hvm.viridian;
 
     ASSERT(is_viridian_domain(d));
 
     switch ( idx )
     {
     case HV_X64_MSR_GUEST_OS_ID:
-        d->arch.hvm.viridian->guest_os_id.raw = val;
+        vd->guest_os_id.raw = val;
         dump_guest_os_id(d);
         break;
 
     case HV_X64_MSR_HYPERCALL:
-        d->arch.hvm.viridian->hypercall_gpa.raw = val;
+        vd->hypercall_gpa.raw = val;
         dump_hypercall(d);
-        if ( d->arch.hvm.viridian->hypercall_gpa.fields.enabled )
+        if ( vd->hypercall_gpa.fields.enabled )
             enable_hypercall_page(d);
         break;
 
@@ -320,10 +322,10 @@ static int guest_wrmsr_viridian(struct vcpu *v, uint32_t idx, uint64_t val)
     case HV_X64_MSR_CRASH_P3:
     case HV_X64_MSR_CRASH_P4:
         BUILD_BUG_ON(HV_X64_MSR_CRASH_P4 - HV_X64_MSR_CRASH_P0 >=
-                     ARRAY_SIZE(v->arch.hvm.viridian->crash_param));
+                     ARRAY_SIZE(vv->crash_param));
 
         idx -= HV_X64_MSR_CRASH_P0;
-        v->arch.hvm.viridian->crash_param[idx] = val;
+        vv->crash_param[idx] = val;
         break;
 
     case HV_X64_MSR_CRASH_CTL:
@@ -340,11 +342,8 @@ static int guest_wrmsr_viridian(struct vcpu *v, uint32_t idx, uint64_t val)
         spin_unlock(&d->shutdown_lock);
 
         gprintk(XENLOG_WARNING, "VIRIDIAN CRASH: %lx %lx %lx %lx %lx\n",
-                v->arch.hvm.viridian->crash_param[0],
-                v->arch.hvm.viridian->crash_param[1],
-                v->arch.hvm.viridian->crash_param[2],
-                v->arch.hvm.viridian->crash_param[3],
-                v->arch.hvm.viridian->crash_param[4]);
+                vv->crash_param[0], vv->crash_param[1], vv->crash_param[2],
+                vv->crash_param[3], vv->crash_param[4]);
         break;
     }
 
@@ -374,18 +373,20 @@ int wrmsr_viridian_regs(uint32_t idx, uint64_t val)
 static int guest_rdmsr_viridian(const struct vcpu *v, uint32_t idx,
                                 uint64_t *val)
 {
-    struct domain *d = v->domain;
+    const struct viridian_vcpu *vv = v->arch.hvm.viridian;
+    const struct domain *d = v->domain;
+    const struct viridian_domain *vd = d->arch.hvm.viridian;
 
     ASSERT(is_viridian_domain(d));
 
     switch ( idx )
     {
     case HV_X64_MSR_GUEST_OS_ID:
-        *val = d->arch.hvm.viridian->guest_os_id.raw;
+        *val = vd->guest_os_id.raw;
         break;
 
     case HV_X64_MSR_HYPERCALL:
-        *val = d->arch.hvm.viridian->hypercall_gpa.raw;
+        *val = vd->hypercall_gpa.raw;
         break;
 
     case HV_X64_MSR_VP_INDEX:
@@ -410,10 +411,10 @@ static int guest_rdmsr_viridian(const struct vcpu *v, uint32_t idx,
     case HV_X64_MSR_CRASH_P3:
     case HV_X64_MSR_CRASH_P4:
         BUILD_BUG_ON(HV_X64_MSR_CRASH_P4 - HV_X64_MSR_CRASH_P0 >=
-                     ARRAY_SIZE(v->arch.hvm.viridian->crash_param));
+                     ARRAY_SIZE(vv->crash_param));
 
         idx -= HV_X64_MSR_CRASH_P0;
-        *val = v->arch.hvm.viridian->crash_param[idx];
+        *val = vv->crash_param[idx];
         break;
 
     case HV_X64_MSR_CRASH_CTL:
@@ -711,9 +712,10 @@ void viridian_unmap_guest_page(struct viridian_page *vp)
 
 static int viridian_save_domain_ctxt(struct domain *d, hvm_domain_context_t *h)
 {
+    const struct viridian_domain *vd = d->arch.hvm.viridian;
     struct hvm_viridian_domain_context ctxt = {
-        .hypercall_gpa = d->arch.hvm.viridian->hypercall_gpa.raw,
-        .guest_os_id = d->arch.hvm.viridian->guest_os_id.raw,
+        .hypercall_gpa = vd->hypercall_gpa.raw,
+        .guest_os_id = vd->guest_os_id.raw,
     };
 
     if ( !is_viridian_domain(d) )
@@ -727,13 +729,14 @@ static int viridian_save_domain_ctxt(struct domain *d, hvm_domain_context_t *h)
 static int viridian_load_domain_ctxt(struct domain *d,
                                      hvm_domain_context_t *h)
 {
+    struct viridian_domain *vd = d->arch.hvm.viridian;
     struct hvm_viridian_domain_context ctxt;
 
     if ( hvm_load_entry_zeroextend(VIRIDIAN_DOMAIN, h, &ctxt) != 0 )
         return -EINVAL;
 
-    d->arch.hvm.viridian->hypercall_gpa.raw = ctxt.hypercall_gpa;
-    d->arch.hvm.viridian->guest_os_id.raw = ctxt.guest_os_id;
+    vd->hypercall_gpa.raw = ctxt.hypercall_gpa;
+    vd->guest_os_id.raw = ctxt.guest_os_id;
 
     viridian_time_load_domain_ctxt(d, &ctxt);
 
