@@ -395,6 +395,9 @@ bool hvm_set_guest_bndcfgs(struct vcpu *v, u64 val);
 #define is_viridian_domain(d) \
     (is_hvm_domain(d) && (viridian_feature_mask(d) & HVMPV_base_freq))
 
+#define is_viridian_vcpu(v) \
+    is_viridian_domain((v)->domain)
+
 #define has_viridian_time_ref_count(d) \
     (is_viridian_domain(d) && (viridian_feature_mask(d) & HVMPV_time_ref_count))
 

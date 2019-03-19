@@ -84,8 +84,8 @@ rdmsr_viridian_regs(
 int
 viridian_hypercall(struct cpu_user_regs *regs);
 
-void viridian_time_ref_count_freeze(struct domain *d);
-void viridian_time_ref_count_thaw(struct domain *d);
+void viridian_time_ref_count_freeze(const struct domain *d);
+void viridian_time_ref_count_thaw(const struct domain *d);
 
 int viridian_vcpu_init(struct vcpu *v);
 int viridian_domain_init(struct domain *d);
@@ -93,9 +93,9 @@ int viridian_domain_init(struct domain *d);
 void viridian_vcpu_deinit(struct vcpu *v);
 void viridian_domain_deinit(struct domain *d);
 
-void viridian_apic_assist_set(struct vcpu *v);
-bool viridian_apic_assist_completed(struct vcpu *v);
-void viridian_apic_assist_clear(struct vcpu *v);
+void viridian_apic_assist_set(const struct vcpu *v);
+bool viridian_apic_assist_completed(const struct vcpu *v);
+void viridian_apic_assist_clear(const struct vcpu *v);
 
 #endif /* __ASM_X86_HVM_VIRIDIAN_H__ */
 
