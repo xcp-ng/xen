@@ -742,6 +742,9 @@ static long microcode_update_helper(void *data)
         spin_lock(&microcode_mutex);
         microcode_update_cache(patch);
         spin_unlock(&microcode_mutex);
+
+        /* Refresh RAW Cpuid policy */
+        cpuid_calculate_raw_policy();
     }
     else
         microcode_free_patch(patch);
