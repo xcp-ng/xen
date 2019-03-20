@@ -757,6 +757,9 @@ int microcode_update(XEN_GUEST_HANDLE_PARAM(const_void) buf, unsigned long len,
         spin_lock(&microcode_mutex);
         microcode_update_cache(patch);
         spin_unlock(&microcode_mutex);
+
+        /* Refresh RAW Cpuid policy */
+        cpuid_calculate_raw_policy();
     }
     else
         microcode_free_patch(patch);
