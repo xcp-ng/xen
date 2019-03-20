@@ -12,6 +12,62 @@
 #include <fcntl.h>
 #include <xenctrl.h>
 
+static const char *intel_id = "GenuineIntel";
+static const char *amd_id   = "AuthenticAMD";
+
+void show_curr_cpu(FILE *f)
+{
+    int ret;
+    xc_interface *xch;
+    struct xen_platform_op op = {0};
+    struct xenpf_pcpu_version *ver = &op.u.pcpu_version;
+    bool intel = false, amd = false;
+
+    xch = xc_interface_open(0, 0, 0);
+    if ( xch == NULL )
+        return;
+
+    op.cmd = XENPF_get_cpu_version;
+    op.interface_version = XENPF_INTERFACE_VERSION;
+    op.u.pcpu_version.xen_cpuid = 0;
+
+    ret = xc_platform_op(xch, &op);
+    if ( ret )
+        return;
+
+    if ( memcmp(ver->vendor_id, intel_id, sizeof(ver->vendor_id)) == 0 )
+        intel = true;
+    else if ( memcmp(ver->vendor_id, amd_id, sizeof(ver->vendor_id)) == 0 )
+        amd = true;
+
+    if ( intel )
+    {
+        fprintf(f,
+                "Current CPU signature is: %02x-%02x-%02x (raw %#x)\n",
+                 ver->family, ver->model, ver->stepping, ver->cpu_signature);
+    }
+    else if ( amd )
+    {
+        fprintf(f,
+                "Current CPU signature is: fam%xh (raw %#x)\n",
+                 ver->family, ver->cpu_signature);
+    }
+
+    if ( intel || amd )
+    {
+        fprintf(f,
+                "Current CPU microcode revision is: %#x\n",
+                ver->ucode_revision);
+    }
+
+    if ( intel )
+        fprintf(f,
+                "Current CPU processor flag is: %#x\n",
+                ver->pf);
+
+    xc_interface_close(xch);
+}
+
 int main(int argc, char *argv[])
 {
     int fd, ret;
@@ -20,11 +76,18 @@ int main(int argc, char *argv[])
     struct stat st;
     xc_interface *xch;
 
+    if ( argc >= 2 && !strcmp(argv[1], "show-cpu-info") )
+    {
+        show_curr_cpu(stdout);
+        return 0;
+    }
+
     if ( argc < 2 )
     {
         fprintf(stderr,
                 "xen-ucode: Xen microcode updating tool\n"
                 "Usage: %s <microcode blob>\n", argv[0]);
+        show_curr_cpu(stderr);
         return 0;
     }
 

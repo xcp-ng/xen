@@ -27,6 +27,7 @@
 #include <public/platform.h>
 #include <acpi/cpufreq/processor_perf.h>
 #include <asm/edd.h>
+#include <asm/microcode.h>
 #include <asm/mtrr.h>
 #include <asm/io_apic.h>
 #include <asm/setup.h>
@@ -589,15 +590,22 @@ ret_t do_platform_op(XEN_GUEST_HANDLE_PARAM(xen_platform_op_t) u_xenpf_op)
             ver->family = 0;
             ver->model = 0;
             ver->stepping = 0;
+            ver->cpu_signature = 0;
+            ver->pf = 0;
+            ver->ucode_revision = 0;
         }
         else
         {
             const struct cpuinfo_x86 *c = &cpu_data[ver->xen_cpuid];
+            const struct cpu_signature *sig = &per_cpu(cpu_sig, ver->xen_cpuid);
 
             memcpy(ver->vendor_id, c->x86_vendor_id, sizeof(ver->vendor_id));
             ver->family = c->x86;
             ver->model = c->x86_model;
             ver->stepping = c->x86_mask;
+            ver->cpu_signature = sig->sig;
+            ver->pf = sig->pf;
+            ver->ucode_revision = sig->rev;
         }
 
         ver->max_present = cpumask_last(&cpu_present_map);

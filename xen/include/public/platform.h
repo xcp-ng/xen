@@ -509,6 +509,9 @@ struct xenpf_pcpu_version {
     uint32_t family;
     uint32_t model;
     uint32_t stepping;
+    uint32_t cpu_signature;
+    uint32_t pf;
+    uint32_t ucode_revision;
 };
 typedef struct xenpf_pcpu_version xenpf_pcpu_version_t;
 DEFINE_XEN_GUEST_HANDLE(xenpf_pcpu_version_t);

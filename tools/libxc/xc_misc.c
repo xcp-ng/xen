@@ -249,6 +249,11 @@ int xc_microcode_update(xc_interface *xch, const void *buf, size_t len)
     return ret;
 }
 
+int xc_platform_op(xc_interface *xch, struct xen_platform_op *op)
+{
+    return do_platform_op(xch, op);
+}
+
 int xc_cputopoinfo(xc_interface *xch, unsigned *max_cpus,
                    xc_cputopo_t *cputopo)
 {
