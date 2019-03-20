@@ -281,7 +281,7 @@ static void recalculate_misc(struct cpuid_policy *p)
     }
 }
 
-static void __init calculate_raw_policy(void)
+void cpuid_calculate_raw_policy(void)
 {
     struct cpuid_policy *p = &raw_cpuid_policy;
 
@@ -439,7 +439,7 @@ static void __init calculate_hvm_max_policy(void)
 
 void __init init_guest_cpuid(void)
 {
-    calculate_raw_policy();
+    cpuid_calculate_raw_policy();
     calculate_host_policy();
     calculate_pv_max_policy();
     calculate_hvm_max_policy();
