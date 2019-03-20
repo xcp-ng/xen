@@ -53,6 +53,8 @@ extern struct cpuid_policy raw_cpuid_policy, host_cpuid_policy,
 
 extern const struct cpu_policy system_policies[];
 
+void cpuid_calculate_raw_policy(void);
+
 /* Check that all previously present features are still available. */
 bool recheck_cpu_features(unsigned int cpu);
 
