@@ -89,6 +89,8 @@ static int collect_cpu_info(struct cpu_signature *csig)
         return -EINVAL;
     }
 
+    csig->sig = cpuid_eax(0x00000001);
+
     rdmsrl(MSR_AMD_PATCHLEVEL, csig->rev);
 
     pr_debug("microcode: CPU%d collect_cpu_info: patch_id=%#x\n",
