@@ -355,7 +355,7 @@ void calculate_raw_cpu_policy(void)
     /* Was already added by probe_cpuid_faulting() */
 }
 
-static void __init calculate_host_policy(void)
+static void calculate_host_policy(void)
 {
     struct cpu_policy *p = &host_cpu_policy;
     unsigned int max_extd_leaf;
@@ -407,7 +407,7 @@ static void __init calculate_host_policy(void)
     p->platform_info.cpuid_faulting = cpu_has_cpuid_faulting;
 }
 
-static void __init guest_common_feature_adjustments(uint32_t *fs)
+static void guest_common_feature_adjustments(uint32_t *fs)
 {
     /* Unconditionally claim to be able to set the hypervisor bit. */
     __set_bit(X86_FEATURE_HYPERVISOR, fs);
@@ -441,7 +441,7 @@ static void __init guest_common_feature_adjustments(uint32_t *fs)
         __clear_bit(X86_FEATURE_RTM, fs);
 }
 
-static void __init calculate_pv_max_policy(void)
+static void calculate_pv_max_policy(void)
 {
     struct cpu_policy *p = &pv_max_cpu_policy;
     uint32_t fs[FSCAPINTS];
@@ -487,7 +487,7 @@ static void __init calculate_pv_max_policy(void)
     p->extd.raw[0xa] = EMPTY_LEAF; /* No SVM for PV guests. */
 }
 
-static void __init calculate_hvm_max_policy(void)
+static void calculate_hvm_max_policy(void)
 {
     struct cpu_policy *p = &hvm_max_cpu_policy;
     uint32_t fs[FSCAPINTS];
@@ -566,7 +566,7 @@ static void __init calculate_hvm_max_policy(void)
     p->platform_info.cpuid_faulting = true;
 }
 
-void __init init_guest_cpu_policies(void)
+void init_guest_cpu_policies(void)
 {
     calculate_raw_cpu_policy();
     calculate_host_policy();
