@@ -134,6 +134,8 @@ static always_inline void spec_ctrl_exit_idle(struct cpu_info *info)
      */
 }
 
+long spec_ctrl_do_update(void *data);
+
 #endif /* __ASSEMBLY__ */
 #endif /* !__X86_SPEC_CTRL_H__ */
 
