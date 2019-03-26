@@ -667,6 +667,7 @@ void xstate_init(struct cpuinfo_x86 *c)
 
     if ( bsp )
     {
+        setup_force_cpu_cap(X86_FEATURE_OSXSAVE);
         xfeature_mask = feature_mask;
         /*
          * xsave_cntxt_size is the max size required by enabled features.
