@@ -137,6 +137,8 @@ static always_inline void spec_ctrl_exit_idle(struct cpu_info *info)
      */
 }
 
+int spec_ctrl_do_op(uint32_t op, uint32_t *status);
+
 #endif /* __ASSEMBLY__ */
 #endif /* !__X86_SPEC_CTRL_H__ */
 
