@@ -626,6 +626,139 @@ void identify_cpu(struct cpuinfo_x86 *c)
 	setup_doitm();
 }
 
+static void fill_featureset(uint32_t fs[FSCAPINTS])
+{
+    unsigned int i, max_leaf, max_extd, tmp;
+
+    BUILD_BUG_ON(FSCAPINTS != 22);
+
+    max_leaf = cpuid_eax(0);
+    if ( max_leaf >= 1 )
+        cpuid(1, &tmp, &tmp, &fs[FEATURESET_1c],  &fs[FEATURESET_1d]);
+
+    if ( max_leaf >= 7 )
+    {
+        unsigned int max_feat;
+
+        cpuid_count(7, 0, &max_feat, &fs[FEATURESET_7b0],
+                    &fs[FEATURESET_7c0], &fs[FEATURESET_7d0]);
+        if ( max_feat >= 1 )
+            cpuid_count(7, 1, &fs[FEATURESET_7a1], &fs[FEATURESET_7b1],
+                        &fs[FEATURESET_7c1], &fs[FEATURESET_7d1]);
+        if ( max_feat >= 2 )
+            cpuid_count(7, 2, &tmp, &tmp, &tmp, &fs[FEATURESET_7d2]);
+    }
+
+    if ( max_leaf >= 0xd )
+        cpuid_count(0xd, 1, &fs[FEATURESET_Da1], &tmp, &tmp, &tmp);
+
+    max_extd = cpuid_eax(0x80000000);
+    if ( (max_extd >> 16) != 0x8000 )
+        max_extd = 0;
+
+    if ( max_extd >= 0x80000001 )
+        cpuid(0x80000001, &tmp, &tmp, &fs[FEATURESET_e1c], &fs[FEATURESET_e1d]);
+    if ( max_extd >= 0x80000007 )
+        cpuid(0x80000007, &tmp, &tmp, &tmp, &fs[FEATURESET_e7d]);
+    if ( max_extd >= 0x80000008 )
+        cpuid(0x80000008, &tmp, &fs[FEATURESET_e8b], &tmp, &tmp);
+    if ( max_extd >= 0x80000021 )
+        cpuid(0x80000021, &fs[FEATURESET_e21a], &tmp, &tmp, &tmp);
+
+    if ( test_bit(X86_FEATURE_ARCH_CAPS, fs) )
+        rdmsr(MSR_ARCH_CAPABILITIES, fs[FEATURESET_m10Al], fs[FEATURESET_m10Ah]);
+
+    for ( i = 0; i < FSCAPINTS; ++i )
+    {
+        fs[i] |= forced_caps[i];
+        fs[i] &= known_features[i] & ~cleared_caps[i];
+    }
+}
+
+static void cf_check update_cpuid(void *data)
+{
+    volatile uint32_t *new_fs = data;
+    uint32_t fs[FSCAPINTS] = {};
+    unsigned int i, cpu = smp_processor_id();
+
+    fill_featureset(fs);
+
+    for ( i = 0; i < ARRAY_SIZE(fs); ++i )
+        /*
+         * The common case is no difference from the initiating CPU.  Only
+         * issue the atomic operation if it looks like we have bits to clear.
+         */
+        if ( new_fs[i] & ~fs[i] )
+            asm volatile ( "lock and %[fs], %[new_fs]"
+                           : [new_fs] "+m" (new_fs[i])
+                           : [fs] "r" (fs[i]) );
+
+    /*
+     * Update cpu_data[], but skip CPU0 for now.  boot_cpu_data needs to wait
+     * until all CPUs have merged.
+     */
+    if ( cpu != 0 )
+        memcpy(cpu_data[cpu].x86_capability, fs, sizeof(fs));
+}
+
+int sysctl_update_spec_ctrl_cpuid(void)
+{
+    uint32_t i, new_fs[FSCAPINTS] = {};
+    bool lost = false, updated = false;
+
+    /* Scan for new features on the current CPU. */
+    fill_featureset(new_fs);
+    for ( i = 0; i < ARRAY_SIZE(new_fs); ++i )
+        if ( new_fs[i] & ~boot_cpu_data.x86_capability[i] )
+            break;
+
+    /* If nothing new, don't bother querying other CPUs. */
+    if ( i == ARRAY_SIZE(new_fs) )
+        return -ENOEXEC;
+
+    /* If new features have appeared, check all CPUs. */
+    smp_call_function(update_cpuid, new_fs, 1);
+
+    /* Merge is complete.  First check for lost features. */
+    for ( i = 0; i < ARRAY_SIZE(new_fs); ++i )
+        if ( ~new_fs[i] & boot_cpu_data.x86_capability[i] )
+        {
+            if ( !lost )
+                printk(XENLOG_ERR "CPUID features lost\n");
+
+            printk(XENLOG_ERR "  featureset word %u, lost %08x\n",
+                   i, ~new_fs[i] & boot_cpu_data.x86_capability[i]);
+            lost = true;
+        }
+
+    if ( lost )
+    {
+        printk(XENLOG_ERR "Skipping data update, but system may be unstable\n");
+        return -EXDEV;
+    }
+
+    /* Update boot_cpu_data, printing new features. */
+    for ( i = 0; i < ARRAY_SIZE(new_fs); ++i )
+        if ( new_fs[i] & ~boot_cpu_data.x86_capability[i] )
+        {
+            if ( !updated )
+                printk(XENLOG_INFO "New CPUID features detected\n");
+
+            printk(XENLOG_INFO "  featureset word %u, new %08x\n",
+                   i, new_fs[i] & ~boot_cpu_data.x86_capability[i]);
+
+            ACCESS_ONCE(boot_cpu_data.x86_capability[i]) = new_fs[i];
+            updated = true;
+        }
+
+    if ( !updated )
+        return -ENOEXEC;
+
+    init_guest_cpu_policies();
+
+    return 0;
+}
+
 /* leaf 0xb SMT level */
 #define SMT_LEVEL       0
 
