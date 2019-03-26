@@ -52,7 +52,7 @@ boolean_param("allow_unsafe", opt_allow_unsafe);
 /* Signal whether the ACPI C1E quirk is required. */
 bool __read_mostly amd_acpi_c1e_quirk;
 bool __ro_after_init amd_legacy_ssbd;
-bool __initdata amd_virt_spec_ctrl;
+bool __ro_after_init amd_virt_spec_ctrl;
 
 static bool __read_mostly fam17_c6_disabled;
 
