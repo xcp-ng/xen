@@ -622,6 +622,8 @@ void set_in_mcu_opt_ctrl(uint32_t mask, uint32_t val);
 
 extern bool opt_doitm;
 
+int sysctl_update_spec_ctrl_cpuid(void);
+
 #endif /* !__ASSEMBLY__ */
 
 #endif /* __ASM_X86_PROCESSOR_H */
