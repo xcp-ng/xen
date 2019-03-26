@@ -1211,6 +1211,11 @@ struct xen_sysctl_dt_overlay {
 };
 #endif
 
+struct xen_sysctl_spec_ctrl {
+#define XENPF_spec_ctrl_update  0 /* Try to use new mitigations */
+    uint32_t op;      /* IN */
+};
+
 struct xen_sysctl {
     uint32_t cmd;
 #define XEN_SYSCTL_readconsole                    1
@@ -1242,6 +1247,7 @@ struct xen_sysctl {
 /* #define XEN_SYSCTL_set_parameter              28 */
 #define XEN_SYSCTL_get_cpu_policy                29
 #define XEN_SYSCTL_dt_overlay                    30
+#define XEN_SYSCTL_spec_ctrl                    188
     uint32_t interface_version; /* XEN_SYSCTL_INTERFACE_VERSION */
     union {
         struct xen_sysctl_readconsole       readconsole;
@@ -1276,6 +1282,7 @@ struct xen_sysctl {
 #if defined(__arm__) || defined(__aarch64__)
         struct xen_sysctl_dt_overlay        dt_overlay;
 #endif
+        struct xen_sysctl_spec_ctrl         spec_ctrl;
         uint8_t                             pad[128];
     } u;
 };
