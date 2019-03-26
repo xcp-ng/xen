@@ -2003,7 +2003,10 @@ void asmlinkage __init noreturn __start_xen(void)
         set_in_cr4(X86_CR4_FSGSBASE);
 
     if ( cpu_has_pku )
+    {
         set_in_cr4(X86_CR4_PKE);
+        setup_force_cpu_cap(X86_FEATURE_OSPKE);
+    }
 
     if ( opt_invpcid && cpu_has_invpcid )
         use_invpcid = true;
