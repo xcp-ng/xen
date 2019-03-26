@@ -32,6 +32,7 @@
 #include <xsm/xsm.h>
 #include <asm/psr.h>
 #include <asm/cpuid.h>
+#include <asm/spec_ctrl.h>
 
 const struct cpu_policy system_policies[] = {
     [ XEN_SYSCTL_cpu_policy_raw ] = {
@@ -449,6 +450,19 @@ long arch_do_sysctl(
                                    u.cpu_policy.nr_msrs)  )
             ret = -EFAULT;
 
+        break;
+    }
+
+    case XEN_SYSCTL_spec_ctrl:
+    {
+        if ( sysctl->u.spec_ctrl.op != XENPF_spec_ctrl_update )
+        {
+            ret = -EINVAL;
+            break;
+        }
+
+        ret = continue_hypercall_on_cpu(smp_processor_id(),
+                                        spec_ctrl_do_update, NULL);
         break;
     }
 
