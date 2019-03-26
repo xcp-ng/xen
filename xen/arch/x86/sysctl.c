@@ -424,6 +424,33 @@ long arch_do_sysctl(
         break;
     }
 
+    case XEN_SYSCTL_spec_ctrl:
+        if ( sysctl->u.spec_ctrl.op != XENPF_spec_ctrl_update )
+        {
+            ret = -EINVAL;
+            break;
+        }
+
+        /*
+         * We're (potentially) updating the default CPUID/MSR settings for all
+         * VM types, and need to not race with with other consumers of the
+         * system policies:
+         *   XEN_DOMCTL_createdomain
+         *   XEN_SYSCTL_get_cpu_featureset
+         *   XEN_SYSCTL_get_cpu_policy
+         *
+         * We already hold the sysctl lock.  Take the domctl lock too.
+         */
+        if ( !domctl_lock_acquire() )
+        {
+            ret = -ERESTART;
+            break;
+        }
+
+        ret = sysctl_update_spec_ctrl_cpuid();
+        domctl_lock_release();
+        break;
+
     default:
         ret = -ENOSYS;
         break;
