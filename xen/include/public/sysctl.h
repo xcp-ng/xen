@@ -1033,6 +1033,18 @@ typedef struct xen_sysctl_cpu_policy xen_sysctl_cpu_policy_t;
 DEFINE_XEN_GUEST_HANDLE(xen_sysctl_cpu_policy_t);
 #endif
 
+struct xen_sysctl_spec_ctrl {
+#define XENPF_spec_ctrl_update  0 /* Try to use new mitigations */
+    uint32_t op;      /* IN */
+#define XENPF_spec_ctrl_success 0 /* New mitigations have been applied.       */
+                                  /* This is returned in case if some H/W     */
+                                  /* feature-bits have disappered! (Note that */
+                                  /* we don't expect this in practice.        */
+#define XENPF_spec_ctrl_noop    1 /* All mitigations are up to date */
+#define XENPF_spec_ctrl_error   2 /* Some error has occured */
+    uint32_t status;  /* OUT */
+};
+
 struct xen_sysctl {
     uint32_t cmd;
 #define XEN_SYSCTL_readconsole                    1
@@ -1063,6 +1075,7 @@ struct xen_sysctl {
 #define XEN_SYSCTL_livepatch_op                  27
 #define XEN_SYSCTL_set_parameter                 28
 #define XEN_SYSCTL_get_cpu_policy                29
+#define XEN_SYSCTL_spec_ctrl                    188
     uint32_t interface_version; /* XEN_SYSCTL_INTERFACE_VERSION */
     union {
         struct xen_sysctl_readconsole       readconsole;
@@ -1094,6 +1107,7 @@ struct xen_sysctl {
 #if defined(__i386__) || defined(__x86_64__)
         struct xen_sysctl_cpu_policy        cpu_policy;
 #endif
+        struct xen_sysctl_spec_ctrl         spec_ctrl;
         uint8_t                             pad[128];
     } u;
 };

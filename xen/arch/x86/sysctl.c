@@ -32,6 +32,7 @@
 #include <xsm/xsm.h>
 #include <asm/psr.h>
 #include <asm/cpuid.h>
+#include <asm/spec_ctrl.h>
 
 const struct cpu_policy system_policies[] = {
     [ XEN_SYSCTL_cpu_policy_raw ] = {
@@ -457,6 +458,16 @@ long arch_do_sysctl(
 
         break;
     }
+
+    case XEN_SYSCTL_spec_ctrl:
+    {
+        ret = spec_ctrl_do_op(sysctl->u.spec_ctrl.op,
+                              &sysctl->u.spec_ctrl.status);
+        if ( ret == 0 )
+            ret = __copy_field_to_guest(u_sysctl, sysctl,
+                                        u.spec_ctrl) ? -EFAULT : 0;
+    }
+    break;
 
     default:
         ret = -ENOSYS;
