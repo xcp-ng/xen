@@ -593,6 +593,8 @@ void tsx_init(void);
 void update_mcu_opt_ctrl(void);
 void set_in_mcu_opt_ctrl(uint32_t mask, uint32_t val);
 
+int sysctl_update_spec_ctrl_cpuid(void);
+
 enum ap_boot_method {
     AP_BOOT_NORMAL,
     AP_BOOT_SKINIT,
