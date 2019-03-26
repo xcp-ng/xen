@@ -303,7 +303,7 @@ void cpuid_calculate_raw_policy(void)
     ASSERT(p->x86_vendor == boot_cpu_data.x86_vendor);
 }
 
-static void __init calculate_host_policy(void)
+static void calculate_host_policy(void)
 {
     struct cpuid_policy *p = &host_cpuid_policy;
 
@@ -338,7 +338,7 @@ static void __init calculate_host_policy(void)
     }
 }
 
-static void __init guest_common_feature_adjustments(uint32_t *fs)
+static void guest_common_feature_adjustments(uint32_t *fs)
 {
     /* Unconditionally claim to be able to set the hypervisor bit. */
     __set_bit(X86_FEATURE_HYPERVISOR, fs);
@@ -370,7 +370,7 @@ static void __init guest_common_feature_adjustments(uint32_t *fs)
         __clear_bit(X86_FEATURE_RTM, fs);
 }
 
-static void __init calculate_pv_max_policy(void)
+static void calculate_pv_max_policy(void)
 {
     struct cpuid_policy *p = &pv_max_cpuid_policy;
     uint32_t pv_featureset[FSCAPINTS];
@@ -398,7 +398,7 @@ static void __init calculate_pv_max_policy(void)
     p->extd.raw[0xa] = EMPTY_LEAF; /* No SVM for PV guests. */
 }
 
-static void __init calculate_hvm_max_policy(void)
+static void calculate_hvm_max_policy(void)
 {
     struct cpuid_policy *p = &hvm_max_cpuid_policy;
     uint32_t hvm_featureset[FSCAPINTS];
@@ -459,7 +459,7 @@ static void __init calculate_hvm_max_policy(void)
     recalculate_xstate(p);
 }
 
-void __init init_guest_cpuid(void)
+void init_guest_cpuid(void)
 {
     cpuid_calculate_raw_policy();
     calculate_host_policy();
