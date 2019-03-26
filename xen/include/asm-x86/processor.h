@@ -620,6 +620,8 @@ void tsx_init(void);
 void update_mcu_opt_ctrl(void);
 void set_in_mcu_opt_ctrl(uint32_t mask, uint32_t val);
 
+int sysctl_update_spec_ctrl_cpuid(void);
+
 #endif /* !__ASSEMBLY__ */
 
 #endif /* __ASM_X86_PROCESSOR_H */
