@@ -1,5 +1,6 @@
 xen-access
 xen-mceinj
 xen-memshare
+xen-spec-ctrl
 xen-ucode
 xen-vmtrace
