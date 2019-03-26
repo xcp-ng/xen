@@ -162,6 +162,11 @@ struct xen_sysctl_perfc_op {
     XEN_GUEST_HANDLE_64(xen_sysctl_perfc_val_t) val;
 };
 
+struct xen_sysctl_spec_ctrl {
+#define XENPF_spec_ctrl_update  0 /* Try to use new mitigations */
+    uint32_t op;      /* IN */
+};
+
 /* XEN_SYSCTL_getdomaininfolist */
 struct xen_sysctl_getdomaininfolist {
     /* IN variables. */
@@ -1263,6 +1268,7 @@ struct xen_sysctl {
 #define XEN_SYSCTL_physinfo                       3
 #define XEN_SYSCTL_sched_id                       4
 #define XEN_SYSCTL_perfc_op                       5
+#define XEN_SYSCTL_spec_ctrl                    188
 #define XEN_SYSCTL_getdomaininfolist              6
 #define XEN_SYSCTL_debug_keys                     7
 #define XEN_SYSCTL_getcpuinfo                     8
@@ -1299,6 +1305,7 @@ struct xen_sysctl {
         struct xen_sysctl_numa_meminfo      numa_meminfo;
         struct xen_sysctl_sched_id          sched_id;
         struct xen_sysctl_perfc_op          perfc_op;
+        struct xen_sysctl_spec_ctrl         spec_ctrl;
         struct xen_sysctl_getdomaininfolist getdomaininfolist;
         struct xen_sysctl_debug_keys        debug_keys;
         struct xen_sysctl_getcpuinfo        getcpuinfo;

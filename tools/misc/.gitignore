@@ -10,6 +10,7 @@ xen-lowmemd
 xen-mceinj
 xen-memshare
 xen-mfndump
+xen-spec-ctrl
 xen-ucode
 xen-vmtrace
 xencov
