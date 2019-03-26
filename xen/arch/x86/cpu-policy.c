@@ -17,26 +17,26 @@
 #include <asm/xstate.h>
 
 struct cpu_policy __read_mostly       raw_cpu_policy;
-struct cpu_policy __ro_after_init    host_cpu_policy;
+struct cpu_policy __read_mostly      host_cpu_policy;
 #ifdef CONFIG_PV
-struct cpu_policy __ro_after_init  pv_max_cpu_policy;
-struct cpu_policy __ro_after_init  pv_def_cpu_policy;
+struct cpu_policy __read_mostly    pv_max_cpu_policy;
+struct cpu_policy __read_mostly    pv_def_cpu_policy;
 #endif
 #ifdef CONFIG_HVM
-struct cpu_policy __ro_after_init hvm_max_cpu_policy;
-struct cpu_policy __ro_after_init hvm_def_cpu_policy;
+struct cpu_policy __read_mostly   hvm_max_cpu_policy;
+struct cpu_policy __read_mostly   hvm_def_cpu_policy;
 #endif
 
 const uint32_t known_features[] = INIT_KNOWN_FEATURES;
 
-static const uint32_t __initconst pv_max_featuremask[] = INIT_PV_MAX_FEATURES;
+static const uint32_t pv_max_featuremask[] = INIT_PV_MAX_FEATURES;
 static const uint32_t hvm_shadow_max_featuremask[] = INIT_HVM_SHADOW_MAX_FEATURES;
-static const uint32_t __initconst hvm_hap_max_featuremask[] =
+static const uint32_t hvm_hap_max_featuremask[] =
     INIT_HVM_HAP_MAX_FEATURES;
-static const uint32_t __initconst pv_def_featuremask[] = INIT_PV_DEF_FEATURES;
-static const uint32_t __initconst hvm_shadow_def_featuremask[] =
+static const uint32_t pv_def_featuremask[] = INIT_PV_DEF_FEATURES;
+static const uint32_t hvm_shadow_def_featuremask[] =
     INIT_HVM_SHADOW_DEF_FEATURES;
-static const uint32_t __initconst hvm_hap_def_featuremask[] =
+static const uint32_t hvm_hap_def_featuremask[] =
     INIT_HVM_HAP_DEF_FEATURES;
 static const uint32_t deep_features[] = INIT_DEEP_FEATURES;
 
@@ -373,7 +373,7 @@ void calculate_raw_cpu_policy(void)
     /* Was already added by probe_cpuid_faulting() */
 }
 
-static void __init calculate_host_policy(void)
+static void calculate_host_policy(void)
 {
     struct cpu_policy *p = &host_cpu_policy;
     unsigned int max_extd_leaf;
@@ -425,7 +425,7 @@ static void __init calculate_host_policy(void)
     p->platform_info.cpuid_faulting = cpu_has_cpuid_faulting;
 }
 
-static void __init guest_common_max_feature_adjustments(uint32_t *fs)
+static void guest_common_max_feature_adjustments(uint32_t *fs)
 {
     if ( boot_cpu_data.x86_vendor == X86_VENDOR_INTEL )
     {
@@ -501,7 +501,7 @@ static void __init guest_common_max_feature_adjustments(uint32_t *fs)
         __set_bit(X86_FEATURE_RTM_ALWAYS_ABORT, fs);
 }
 
-static void __init guest_common_default_feature_adjustments(uint32_t *fs)
+static void guest_common_default_feature_adjustments(uint32_t *fs)
 {
     if ( boot_cpu_data.x86_vendor == X86_VENDOR_INTEL )
     {
@@ -581,7 +581,7 @@ static void __init guest_common_default_feature_adjustments(uint32_t *fs)
     }
 }
 
-static void __init guest_common_feature_adjustments(uint32_t *fs)
+static void guest_common_feature_adjustments(uint32_t *fs)
 {
     /* Unconditionally claim to be able to set the hypervisor bit. */
     __set_bit(X86_FEATURE_HYPERVISOR, fs);
@@ -605,7 +605,7 @@ static void __init guest_common_feature_adjustments(uint32_t *fs)
         __set_bit(X86_FEATURE_IBPB, fs);
 }
 
-static void __init calculate_pv_max_policy(void)
+static void calculate_pv_max_policy(void)
 {
     struct cpu_policy *p = &pv_max_cpu_policy;
     uint32_t fs[FSCAPINTS];
@@ -691,7 +691,7 @@ static void __init calculate_pv_def_policy(void)
     recalculate_xstate(p);
 }
 
-static void __init calculate_hvm_max_policy(void)
+static void calculate_hvm_max_policy(void)
 {
     struct cpu_policy *p = &hvm_max_cpu_policy;
     uint32_t fs[FSCAPINTS];
@@ -843,7 +843,7 @@ static void __init calculate_hvm_def_policy(void)
     recalculate_xstate(p);
 }
 
-void __init init_guest_cpu_policies(void)
+void init_guest_cpu_policies(void)
 {
     calculate_raw_cpu_policy();
     calculate_host_policy();
