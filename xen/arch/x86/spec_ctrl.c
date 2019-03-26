@@ -16,11 +16,16 @@
  *
  * Copyright (c) 2017-2018 Citrix Systems Ltd.
  */
+#include <xen/cpu.h>
 #include <xen/errno.h>
 #include <xen/init.h>
 #include <xen/lib.h>
+#include <xen/stop_machine.h>
 #include <xen/warning.h>
 
+#include <public/platform.h>
+
+#include <asm/delay.h>
 #include <asm/hvm/svm/svm.h>
 #include <asm/microcode.h>
 #include <asm/msr.h>
@@ -1297,6 +1302,174 @@ void __init init_speculation_mitigations(void)
         wrmsrl(MSR_SPEC_CTRL, val);
         info->last_spec_ctrl = val;
     }
+}
+
+#define MICROCODE_CALLIN_TIMEOUT_US 30000
+#define MICROCODE_UPDATE_TIMEOUT_US 1000000
+
+static atomic_t cpu_in, cpu_out;
+static atomic_t next_cpu;
+
+static unsigned int common_caps;
+
+#define XENPF_spec_ctrl_success 0 /* New mitigations have been applied.       */
+                                  /* This is returned in case if some H/W     */
+                                  /* feature-bits have disappered! (Note that */
+                                  /* we don't expect this in practice.        */
+#define XENPF_spec_ctrl_noop    1 /* All mitigations are up to date */
+#define XENPF_spec_ctrl_error   2 /* Some error has occured */
+static uint32_t spec_ctrl_status;
+
+/* Wait for CPUs to rendezvous with a timeout (us) */
+static int wait_for_cpus(atomic_t *cnt, unsigned int expect,
+                         unsigned int timeout)
+{
+    while ( atomic_read(cnt) < expect )
+    {
+        if ( timeout <= 0 )
+        {
+            printk("CPU%d: Timeout when waiting for CPUs calling in\n",
+                   smp_processor_id());
+            return -EBUSY;
+        }
+        udelay(1);
+        timeout--;
+    }
+
+    return 0;
+}
+
+static int update_x86_caps(void)
+{
+    int cpu = smp_processor_id();
+    struct cpuinfo_x86 *c = &cpu_data[cpu];
+    unsigned int edx, tmp;
+
+    if ( c->cpuid_level < 0x00000007 )
+        return -ENOSYS;
+
+    /* Intel-defined CPU features, CPUID level 0x00000007:0.edx, word 9 */
+    cpuid_count(0x00000007, 0, &tmp, &tmp, &tmp, &edx);
+    c->x86_capability[cpufeat_word(X86_FEATURE_AVX512_4VNNIW)] = edx;
+
+    /* Find the new common feature subset */
+    if ( common_caps == 0 )
+        common_caps = edx;
+    else
+        common_caps &= edx;
+
+    return 0;
+}
+
+static int recalc_cpuid_policy(void)
+{
+    unsigned int idx = cpufeat_word(X86_FEATURE_AVX512_4VNNIW);
+
+    if ( boot_cpu_data.x86_capability[idx] == common_caps )
+    {
+        /* No new H/W features have been detected */
+        spec_ctrl_status = XENPF_spec_ctrl_noop;
+        return 0;
+    }
+
+    /* Update the global common feature set */
+    boot_cpu_data.x86_capability[idx] = common_caps;
+
+    /* Recalculate CPUID policies */
+    init_guest_cpuid();
+
+    spec_ctrl_status = XENPF_spec_ctrl_success;
+
+    return 0;
+}
+
+static int do_x86_caps_update(void *unused)
+{
+    int cpu = smp_processor_id();
+    unsigned int cpu_nr = num_online_cpus();
+    unsigned int finished;
+    int ret;
+    static bool error;
+
+    atomic_inc(&cpu_in);
+    ret = wait_for_cpus(&cpu_in, cpu_nr, MICROCODE_CALLIN_TIMEOUT_US);
+    if ( ret )
+        return ret;
+
+    while ( cpu != atomic_read(&next_cpu) )
+    {
+        finished = atomic_read(&cpu_out);
+        if ( wait_for_cpus(&next_cpu, cpu, MICROCODE_UPDATE_TIMEOUT_US) )
+        {
+            if ( atomic_read(&cpu_out) > finished )
+                continue;
+            printk("Timeout during do_x86_caps_update (finished %d/%d)",
+                   finished, cpu_nr);
+            return -EBUSY;
+        }
+    }
+
+    update_x86_caps();
+
+    finished = atomic_read(&cpu_out);
+    if ( finished == cpu_nr - 1 )
+    {
+        /* This is the last CPU. Update CPUID policy */
+        recalc_cpuid_policy();
+    }
+
+    atomic_set(&next_cpu, cpumask_next(cpu, &cpu_online_map));
+
+    atomic_inc(&cpu_out);
+    finished = atomic_read(&cpu_out);
+    while ( !error && finished != cpu_nr )
+    {
+        /*
+         * During each timeout interval, at least a CPU is expected to
+         * finish its update. Otherwise, something goes wrong.
+         */
+        if ( wait_for_cpus(&cpu_out, finished + 1,
+                           MICROCODE_UPDATE_TIMEOUT_US) && !error )
+        {
+            error = true;
+            printk("Timeout when finishing do_x86_caps_update (finished %d/%d)",
+                   finished, cpu_nr);
+            return -EBUSY;
+        }
+
+        finished = atomic_read(&cpu_out);
+    }
+
+    return 0;
+}
+
+long spec_ctrl_do_update(void *data)
+{
+    long ret = 0;
+
+    if ( !get_cpu_maps() )
+        return -EBUSY;
+
+    spec_ctrl_status = XENPF_spec_ctrl_error;
+
+    atomic_set(&cpu_in, 0);
+    atomic_set(&cpu_out, 0);
+    atomic_set(&next_cpu, cpumask_first(&cpu_online_map));
+
+    common_caps = 0;
+
+    ret = stop_machine_run(do_x86_caps_update, NULL, NR_CPUS);
+    if ( !ret )
+    {
+        if ( spec_ctrl_status == XENPF_spec_ctrl_error )
+            ret = -EFAULT;
+        if ( spec_ctrl_status == XENPF_spec_ctrl_noop )
+            ret = -ENOEXEC;
+    }
+
+    put_cpu_maps();
+
+    return ret;
 }
 
 static void __init __maybe_unused build_assertions(void)
