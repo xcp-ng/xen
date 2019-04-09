@@ -425,8 +425,11 @@ static int primary_thread_work(const struct microcode_patch *patch)
         done = atomic_read(&cpu_out);
         if ( wait_for_condition(wait_cpu_callout, (done + 1),
                                 MICROCODE_UPDATE_TIMEOUT_US) )
-            panic("Timeout during sequential microcode update (finished %d/%d)",
-                  done, nr_cores);
+        {
+            printk("Timeout during sequential microcode update (finished %d/%d)",
+                   done, nr_cores);
+            return -EBUSY;
+        }
     }
 
     ret = microcode_ops->apply_microcode(patch);
@@ -578,8 +581,11 @@ static int control_thread_fn(const struct microcode_patch *patch)
          */
         if ( wait_for_condition(wait_cpu_callout, (done + 1),
                                 MICROCODE_UPDATE_TIMEOUT_US) )
-            panic("Timeout when finished updating microcode (finished %u/%u)",
-                  done, nr_cores);
+        {
+            printk("Timeout when finished updating microcode (finished %u/%u)",
+                   done, nr_cores);
+            return -EBUSY;
+        }
 
         /* Print warning message once if long time is spent here */
         if ( tick && rdtsc_ordered() - tick >= cpu_khz * 1000 )
