@@ -67,7 +67,7 @@ const char *xen_banner(void)
 
 const char *xen_deny(void)
 {
-    return "<denied>";
+    return "";
 }
 
 static const char build_info[] =
