@@ -796,14 +796,22 @@ static XSM_INLINE int xsm_xen_version(XSM_DEFAULT_ARG uint32_t op)
     case XENVER_get_features:
         /* These sub-ops ignore the permission checks and return data. */
         return 0;
-    case XENVER_extraversion:
-    case XENVER_compile_info:
-    case XENVER_capabilities:
-    case XENVER_changeset:
+
     case XENVER_pagesize:
     case XENVER_guest_handle:
         /* These MUST always be accessible to any guest by default. */
         return xsm_default_action(XSM_HOOK, current->domain, NULL);
+
+    case XENVER_extraversion:
+    case XENVER_compile_info:
+    case XENVER_capabilities:
+    case XENVER_changeset:
+    case XENVER_commandline:
+        if ( IS_ENABLED(CONFIG_DEBUG) )
+            /* Expose information to guests only in debug builds. */
+            return xsm_default_action(XSM_HOOK, current->domain, NULL);
+
+        /* fallthrough */
     default:
         return xsm_default_action(XSM_PRIV, current->domain, NULL);
     }
