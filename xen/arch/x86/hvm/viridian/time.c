@@ -297,7 +297,7 @@ void viridian_time_poll_timers(struct vcpu *v)
         poll_stimer(v, i);
 }
 
-void viridian_time_vcpu_freeze(struct vcpu *v)
+static void time_vcpu_freeze(struct vcpu *v)
 {
     struct viridian_vcpu *vv = v->arch.hvm.viridian;
     unsigned int i;
@@ -315,7 +315,7 @@ void viridian_time_vcpu_freeze(struct vcpu *v)
     }
 }
 
-void viridian_time_vcpu_thaw(struct vcpu *v)
+static void time_vcpu_thaw(struct vcpu *v)
 {
     struct viridian_vcpu *vv = v->arch.hvm.viridian;
     unsigned int i;
@@ -337,11 +337,11 @@ void viridian_time_domain_freeze(const struct domain *d)
 {
     struct vcpu *v;
 
-    if ( !is_viridian_domain(d) )
+    if ( d->is_dying || !is_viridian_domain(d) )
         return;
 
     for_each_vcpu ( d, v )
-        viridian_time_vcpu_freeze(v);
+        time_vcpu_freeze(v);
 
     time_ref_count_freeze(d);
 }
@@ -350,13 +350,13 @@ void viridian_time_domain_thaw(const struct domain *d)
 {
     struct vcpu *v;
 
-    if ( !is_viridian_domain(d) )
+    if ( d->is_dying || !is_viridian_domain(d) )
         return;
 
     time_ref_count_thaw(d);
 
     for_each_vcpu ( d, v )
-        viridian_time_vcpu_thaw(v);
+        time_vcpu_thaw(v);
 }
 
 int viridian_time_wrmsr(struct vcpu *v, uint32_t idx, uint64_t val)
