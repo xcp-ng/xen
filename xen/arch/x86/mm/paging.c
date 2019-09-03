@@ -205,7 +205,7 @@ static int paging_log_dirty_enable(struct domain *d)
 {
     int ret;
 
-    if ( has_arch_pdevs(d) )
+    if ( iommu_use_hap_pt(d) )
     {
         /*
          * Refuse to turn on global log-dirty mode
