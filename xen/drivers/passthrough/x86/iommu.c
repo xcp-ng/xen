@@ -776,8 +776,7 @@ bool arch_iommu_use_permitted(const struct domain *d)
     return d == dom_io ||
            (likely(!mem_sharing_enabled(d)) &&
             likely(!mem_paging_enabled(d)) &&
-            likely(!p2m_pod_active(d)) &&
-            likely(!p2m_is_global_logdirty(d)));
+            likely(!p2m_pod_active(d)));
 }
 
 static int __init cf_check adjust_irq_affinities(void)
