@@ -10,6 +10,7 @@
 #include <asm/mtrr.h>
 #include <asm/msr.h>
 #include <asm/guest.h>
+#include <asm/setup.h>
 
 /*
  * opt_mem: Limit maximum address of physical RAM.
@@ -318,9 +319,10 @@ static int __init copy_e820_map(struct e820entry * biosmap, unsigned int nr_map)
 
         /*
          * Some BIOSes claim RAM in the 640k - 1M region.
-         * Not right. Fix it up.
+         * Not right. Fix it up, but only when running on bare metal.
          */
-        if (type == E820_RAM) {
+        if ( !early_cpu_has_hypervisor() && type == E820_RAM )
+        {
             if (start < 0x100000ULL && end > 0xA0000ULL) {
                 if (start < 0xA0000ULL)
                     add_memory_region(start, 0xA0000ULL-start, type);

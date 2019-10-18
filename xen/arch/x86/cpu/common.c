@@ -274,6 +274,15 @@ static inline u32 phys_pkg_id(u32 cpuid_apic, int index_msb)
 	return _phys_pkg_id(get_apic_id(), index_msb);
 }
 
+/*
+ * Sometimes it's too early to use cpu_has_hypervisor which is available only
+ * after early_cpu_init().
+ */
+bool __init early_cpu_has_hypervisor(void)
+{
+	return cpuid_ecx(1) & cpufeat_mask(X86_FEATURE_HYPERVISOR);
+}
+
 /* Do minimum CPU detection early.
    Fields really needed: vendor, cpuid_level, family, model, mask, cache alignment.
    The others are not touched to avoid unwanted side effects.

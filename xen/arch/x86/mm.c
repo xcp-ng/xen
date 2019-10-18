@@ -6141,7 +6141,7 @@ const struct platform_bad_page *__init get_platform_badpages(unsigned int *array
     case 0x000806e0: /* erratum KBL??? */
     case 0x000906e0: /* errata KBL??? / KBW114 / CFW103 */
         *array_size = (cpuid_eax(0) >= 7 &&
-                       !(cpuid_ecx(1) & cpufeat_mask(X86_FEATURE_HYPERVISOR)) &&
+                       !early_cpu_has_hypervisor() &&
                        (cpuid_count_ebx(7, 0) & cpufeat_mask(X86_FEATURE_HLE)));
         return &hle_bad_page;
     }

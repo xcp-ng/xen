@@ -16,6 +16,7 @@ extern unsigned long xenheap_initial_phys_start;
 
 void early_cpu_init(void);
 void early_time_init(void);
+bool early_cpu_has_hypervisor(void);
 
 void set_nr_cpu_ids(unsigned int max_cpus);
 

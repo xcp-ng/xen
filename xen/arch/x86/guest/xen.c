@@ -31,6 +31,7 @@
 #include <asm/guest.h>
 #include <asm/msr.h>
 #include <asm/processor.h>
+#include <asm/setup.h>
 
 #include <public/arch-x86/cpuid.h>
 #include <public/hvm/params.h>
@@ -72,8 +73,7 @@ void __init probe_hypervisor(void)
     if ( xen_guest )
         return;
 
-    /* Too early to use cpu_has_hypervisor */
-    if ( !(cpuid_ecx(1) & cpufeat_mask(X86_FEATURE_HYPERVISOR)) )
+    if ( !early_cpu_has_hypervisor() )
         return;
 
     find_xen_leaves();
