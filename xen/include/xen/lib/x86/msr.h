@@ -3,7 +3,7 @@
 #define XEN_LIB_X86_MSR_H
 
 /* Maximum number of MSRs written when serialising msr_policy. */
-#define MSR_MAX_SERIALISED_ENTRIES 1
+#define MSR_MAX_SERIALISED_ENTRIES 2
 
 /* MSR policy object for shared per-domain MSRs */
 struct msr_policy
