@@ -40,6 +40,16 @@ int x86_msr_copy_to_buffer(const struct msr_policy *p,
 
     COPY_MSR(MSR_INTEL_PLATFORM_INFO, p->platform_info.raw);
 
+#ifdef __XEN__
+    /*
+     * When requesting the Host MSR policy, feed back cpu_has_tsx_ctrl in its
+     * architectural position in MSR_ARCH_CAPS, so the toolstack can evaluate
+     * whether a VM migrating in having seen TSX is safe to run.
+     */
+    if ( p == &host_msr_policy && cpu_has_tsx_ctrl == 1 )
+        COPY_MSR(MSR_ARCH_CAPABILITIES, ARCH_CAPS_TSX_CTRL);
+#endif
+
 #undef COPY_MSR
 
     *nr_entries_p = curr_entry;
