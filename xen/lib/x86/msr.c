@@ -39,7 +39,17 @@ int x86_msr_copy_to_buffer(const struct msr_policy *p,
     })
 
     COPY_MSR(MSR_INTEL_PLATFORM_INFO, p->platform_info.raw);
-    COPY_MSR(MSR_ARCH_CAPABILITIES,   p->arch_caps.raw);
+
+#ifdef __XEN__
+    /*
+     * When requesting the Host MSR policy, bodge cpu_has_tsx_force_abort as
+     * TSX_CTRL too for the June 2021 changes.
+     */
+    if ( p == &host_msr_policy && cpu_has_tsx_force_abort )
+        COPY_MSR(MSR_ARCH_CAPABILITIES, ARCH_CAPS_TSX_CTRL | p->arch_caps.raw);
+    else
+#endif
+        COPY_MSR(MSR_ARCH_CAPABILITIES,   p->arch_caps.raw);
 
 #undef COPY_MSR
 
