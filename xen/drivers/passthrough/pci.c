@@ -1730,7 +1730,6 @@ int iommu_do_pci_domctl(
                        seg, bus, PCI_SLOT(devfn), PCI_FUNC(devfn));
                 ret = -EINVAL;
             }
-            break;
         }
         else if ( !ret )
             ret = assign_device(d, seg, bus, devfn, flags);
