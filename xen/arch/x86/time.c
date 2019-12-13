@@ -2212,13 +2212,6 @@ uint64_t pv_soft_rdtsc(const struct vcpu *v, const struct cpu_user_regs *regs)
     s_time_t old, new, now = get_s_time();
     struct domain *d = v->domain;
 
-#if !defined(NDEBUG) || defined(CONFIG_PERF_COUNTERS)
-    if ( guest_kernel_mode(v, regs) )
-        d->arch.vtsc_kerncount++;
-    else
-        d->arch.vtsc_usercount++;
-#endif
-
     do {
         old = d->arch.vtsc_last;
         new = now > d->arch.vtsc_last ? now : old + 1;
@@ -2393,11 +2386,6 @@ static void dump_softtsc(unsigned char key)
             printk(",khz=%"PRIu32, d->arch.tsc_khz);
         if ( d->arch.incarnation )
             printk(",inc=%"PRIu32, d->arch.incarnation);
-#if !defined(NDEBUG) || defined(CONFIG_PERF_COUNTERS)
-        if ( d->arch.vtsc_kerncount | d->arch.vtsc_usercount )
-            printk(",vtsc count: %"PRIu64" kernel,%"PRIu64" user",
-                   d->arch.vtsc_kerncount, d->arch.vtsc_usercount);
-#endif
         printk("\n");
         domcnt++;
     }
