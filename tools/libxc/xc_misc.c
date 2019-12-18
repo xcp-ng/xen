@@ -794,7 +794,8 @@ int xc_livepatch_list(xc_interface *xch, unsigned int max, unsigned int start,
             xc_hypercall_bounce_post(xch, len);
             continue;
         }
-        else if ( rc < 0 ) /* For all other errors we bail out. */
+
+        if ( rc < 0 ) /* For all other errors we bail out. */
             break;
 
         if ( !version )
