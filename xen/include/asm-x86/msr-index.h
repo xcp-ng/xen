@@ -66,6 +66,9 @@
 #define TSX_CTRL_RTM_DISABLE            (_AC(1, ULL) <<  0)
 #define TSX_CTRL_CPUID_CLEAR            (_AC(1, ULL) <<  1)
 
+#define MSR_MCU_OPT_CTRL                    0x00000123
+#define  MCU_OPT_CTRL_RNGDS_MITG_DIS        (_AC(1, ULL) <<  0)
+
 /* Intel MSRs. Some also available on other CPUs */
 #define MSR_IA32_PERFCTR0		0x000000c1
 #define MSR_IA32_A_PERFCTR0		0x000004c1
