@@ -510,6 +510,13 @@ void recalculate_cpuid_policy(struct domain *d)
             __clear_bit(X86_FEATURE_VMX, max_fs);
             __clear_bit(X86_FEATURE_SVM, max_fs);
         }
+
+        /*
+         * MPX is disabled by default, but we can support incoming VMs which
+         * have seen it, if the hardware is capable.
+         */
+        if ( cpu_has_mpx && cpu_has_vmx_mpx )
+            __set_bit(X86_FEATURE_MPX, max_fs);
     }
 
     /*
