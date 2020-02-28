@@ -1414,6 +1414,7 @@ static int __init amd_iommu_prepare_one(struct amd_iommu *iommu)
 int __init amd_iommu_prepare(bool xt)
 {
     struct amd_iommu *iommu;
+    bool has_xt = true;
     int rc = -ENODEV;
 
     BUG_ON( !iommu_found() );
@@ -1452,17 +1453,16 @@ int __init amd_iommu_prepare(bool xt)
         if ( rc )
             goto error_out;
 
-        rc = -ENODEV;
-        if ( xt && (!iommu->features.flds.ga_sup || !iommu->features.flds.xt_sup) )
-            goto error_out;
+        if ( !iommu->features.flds.ga_sup || !iommu->features.flds.xt_sup )
+            has_xt = false;
     }
 
     for_each_amd_iommu ( iommu )
     {
         /* NB: There's no need to actually write these out right here. */
-        iommu->ctrl.ga_en |= xt;
-        iommu->ctrl.xt_en = xt;
-        iommu->ctrl.int_cap_xt_en = xt;
+        iommu->ctrl.ga_en |= xt && has_xt;
+        iommu->ctrl.xt_en = xt && has_xt;
+        iommu->ctrl.int_cap_xt_en = xt && has_xt;
     }
 
     rc = amd_iommu_update_ivrs_mapping_acpi();
@@ -1474,7 +1474,7 @@ int __init amd_iommu_prepare(bool xt)
         ivhd_type = 0;
     }
 
-    return rc;
+    return rc ?: xt && !has_xt ? -ENODEV : 0;
 }
 
 int __init amd_iommu_init(bool xt)
