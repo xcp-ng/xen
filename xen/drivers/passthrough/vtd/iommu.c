@@ -2332,7 +2332,7 @@ static int __must_check init_vtd_hw(bool resume)
         {
             if ( ioapic_to_iommu(IO_APIC_ID(apic)) == NULL )
             {
-                iommu_intremap = 0;
+                iommu_intremap = iommu_intremap_off;
                 dprintk(XENLOG_ERR VTDPREFIX,
                     "ioapic_to_iommu: ioapic %#x (id: %#x) is NULL! "
                     "Will not try to enable Interrupt Remapping.\n",
@@ -2348,7 +2348,7 @@ static int __must_check init_vtd_hw(bool resume)
             iommu = drhd->iommu;
             if ( enable_intremap(iommu, 0) != 0 )
             {
-                iommu_intremap = 0;
+                iommu_intremap = iommu_intremap_off;
                 dprintk(XENLOG_WARNING VTDPREFIX,
                         "Interrupt Remapping not enabled\n");
 
@@ -2466,7 +2466,7 @@ static int __init vtd_setup(void)
             reg_inval_supported = false;
 
         if ( iommu_intremap && !ecap_intr_remap(iommu->ecap) )
-            iommu_intremap = 0;
+            iommu_intremap = iommu_intremap_off;
 
         /*
          * We cannot use posted interrupt if X86_FEATURE_CX16 is
@@ -2498,7 +2498,7 @@ static int __init vtd_setup(void)
 
     if ( !iommu_qinval && iommu_intremap )
     {
-        iommu_intremap = 0;
+        iommu_intremap = iommu_intremap_off;
         dprintk(XENLOG_WARNING VTDPREFIX, "Interrupt Remapping disabled "
             "since Queued Invalidation isn't supported or enabled.\n");
     }
@@ -2525,7 +2525,7 @@ static int __init vtd_setup(void)
     iommu_snoop = 0;
     iommu_hwdom_passthrough = false;
     iommu_qinval = 0;
-    iommu_intremap = 0;
+    iommu_intremap = iommu_intremap_off;
     iommu_intpost = 0;
     return ret;
 }
