@@ -80,12 +80,9 @@ long cpu_up_helper(void *data)
     unsigned int cpu = (unsigned long)data;
     int ret = cpu_up(cpu);
 
+    /* Have one more go on EBUSY. */
     if ( ret == -EBUSY )
-    {
-        /* On EBUSY, flush RCU work and have one more go. */
-        rcu_barrier();
         ret = cpu_up(cpu);
-    }
 
     if ( !ret && !opt_smt &&
          cpu_data[cpu].compute_unit_id == INVALID_CUID &&
@@ -105,12 +102,9 @@ long cpu_down_helper(void *data)
 {
     int cpu = (unsigned long)data;
     int ret = cpu_down(cpu);
+    /* Have one more go on EBUSY. */
     if ( ret == -EBUSY )
-    {
-        /* On EBUSY, flush RCU work and have one more go. */
-        rcu_barrier();
         ret = cpu_down(cpu);
-    }
     return ret;
 }
 
