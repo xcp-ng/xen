@@ -4,6 +4,7 @@
 #include <xen/types.h>
 #include <xen/spinlock.h>
 #include <xen/notifier.h>
+#include <xen/rcupdate.h>
 
 /* Safely access cpu_online_map, cpu_present_map, etc. */
 bool_t get_cpu_maps(void);
@@ -12,6 +13,7 @@ void put_cpu_maps(void);
 /* Safely perform CPU hotplug and update cpu_online_map, etc. */
 static inline bool cpu_hotplug_begin(void)
 {
+    rcu_barrier();
     return get_cpu_maps();
 }
 
