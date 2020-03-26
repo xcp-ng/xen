@@ -1905,6 +1905,7 @@ in_protmode(
 #define vcpu_has_rdpid()       (ctxt->cpuid->feat.rdpid)
 #define vcpu_has_avx512_4vnniw() (ctxt->cpuid->feat.avx512_4vnniw)
 #define vcpu_has_avx512_4fmaps() (ctxt->cpuid->feat.avx512_4fmaps)
+#define vcpu_has_avx512_bf16() (ctxt->cpuid->feat.avx512_bf16)
 
 #define vcpu_must_have(feat) \
     generate_exception_if(!vcpu_has_##feat(), EXC_UD)
@@ -9019,6 +9020,19 @@ x86_emulate(
     case X86EMUL_OPC_EVEX_66(0x0f38, 0x53): /* vpdpwssds [xyz]mm/mem,[xyz]mm,[xyz]mm{k} */
         host_and_vcpu_must_have(avx512_vnni);
         generate_exception_if(evex.w, EXC_UD);
+        goto avx512f_no_sae;
+
+    case X86EMUL_OPC_EVEX_F2(0x0f38, 0x72): /* vcvtne2ps2bf16 [xyz]mm/mem,[xyz]mm,[xyz]mm{k} */
+    case X86EMUL_OPC_EVEX_F3(0x0f38, 0x72): /* vcvtneps2bf16 [xyz]mm/mem,{x,y}mm{k} */
+        if ( evex.pfx == vex_f2 )
+            fault_suppression = false;
+        else
+            d |= TwoOp;
+        /* fall through */
+    case X86EMUL_OPC_EVEX_F3(0x0f38, 0x52): /* vdpbf16ps [xyz]mm/mem,[xyz]mm,[xyz]mm{k} */
+        host_and_vcpu_must_have(avx512_bf16);
+        generate_exception_if(evex.w, EXC_UD);
+        op_bytes = 16 << evex.lr;
         goto avx512f_no_sae;
 
     case X86EMUL_OPC_VEX_66(0x0f38, 0x58): /* vpbroadcastd xmm/m32,{x,y}mm */
