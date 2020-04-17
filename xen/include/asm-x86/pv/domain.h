@@ -23,6 +23,8 @@
 
 #include <xen/sched.h>
 
+extern int8_t opt_pv32;
+
 /*
  * PCID values for the address spaces of 64-bit pv domains:
  *
