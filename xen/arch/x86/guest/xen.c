@@ -271,6 +271,10 @@ void __init hypervisor_setup(void)
     }
 
     init_evtchn();
+
+    /* Check if assisted flush is available and disable the TLB clock if so. */
+    if ( !hypervisor_flush_tlb(cpumask_of(smp_processor_id()), NULL, 0) )
+        tlb_clk_enabled = false;
 }
 
 void hypervisor_ap_setup(void)
@@ -329,6 +333,15 @@ void hypervisor_resume(void)
 
     if ( pv_console )
         pv_console_init();
+}
+
+int hypervisor_flush_tlb(const cpumask_t *mask, const void *va,
+                         unsigned int order)
+{
+    if ( xen_guest )
+        return xen_hypercall_hvm_op(HVMOP_flush_tlbs, NULL);;
+
+    return -EOPNOTSUPP;
 }
 
 /*
