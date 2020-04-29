@@ -85,6 +85,12 @@ const char *const fetch_type_names[] = {
 };
 #endif
 
+/* Helper to perform a local TLB flush. */
+static void sh_flush_local(const struct domain *d)
+{
+    flush_local(guest_flush_tlb_flags(d));
+}
+
 /**************************************************************************/
 /* Hash table mapping from guest pagetables to shadows
  *
@@ -3073,7 +3079,7 @@ static int sh_page_fault(struct vcpu *v,
         perfc_incr(shadow_rm_write_flush_tlb);
         smp_wmb();
         atomic_inc(&d->arch.paging.shadow.gtable_dirty_version);
-        flush_tlb_mask(d->dirty_cpumask);
+        guest_flush_tlb_mask(d, d->dirty_cpumask);
     }
 
 #if (SHADOW_OPTIMIZATIONS & SHOPT_OUT_OF_SYNC)
@@ -3582,7 +3588,7 @@ static bool sh_invlpg(struct vcpu *v, unsigned long linear)
     if ( mfn_to_page(sl1mfn)->u.sh.type
          == SH_type_fl1_shadow )
     {
-        flush_tlb_local();
+        sh_flush_local(v->domain);
         return false;
     }
 
@@ -3817,7 +3823,7 @@ sh_update_linear_entries(struct vcpu *v)
          * table entry. But, without this change, it would fetch the wrong
          * value due to a stale TLB.
          */
-        flush_tlb_local();
+        sh_flush_local(d);
     }
 }
 
@@ -4024,7 +4030,7 @@ sh_update_cr3(struct vcpu *v, int do_locking, bool noflush)
      * (old) shadow linear maps in the writeable mapping heuristics. */
 #if GUEST_PAGING_LEVELS == 2
     if ( sh_remove_write_access(d, gmfn, 2, 0) != 0 )
-        flush_tlb_mask(d->dirty_cpumask);
+        guest_flush_tlb_mask(d, d->dirty_cpumask);
     sh_set_toplevel_shadow(v, 0, gmfn, SH_type_l2_shadow);
     if ( unlikely(pagetable_is_null(v->arch.shadow_table[0])) )
     {
@@ -4053,7 +4059,7 @@ sh_update_cr3(struct vcpu *v, int do_locking, bool noflush)
             }
         }
         if ( flush )
-            flush_tlb_mask(d->dirty_cpumask);
+            guest_flush_tlb_mask(d, d->dirty_cpumask);
         /* Now install the new shadows. */
         for ( i = 0; i < 4; i++ )
         {
@@ -4074,7 +4080,7 @@ sh_update_cr3(struct vcpu *v, int do_locking, bool noflush)
     }
 #elif GUEST_PAGING_LEVELS == 4
     if ( sh_remove_write_access(d, gmfn, 4, 0) != 0 )
-        flush_tlb_mask(d->dirty_cpumask);
+        guest_flush_tlb_mask(d, d->dirty_cpumask);
     sh_set_toplevel_shadow(v, 0, gmfn, SH_type_l4_shadow);
     if ( unlikely(pagetable_is_null(v->arch.shadow_table[0])) )
     {
@@ -4525,7 +4531,7 @@ static void sh_pagetable_dying(paddr_t gpa)
         }
     }
     if ( flush )
-        flush_tlb_mask(d->dirty_cpumask);
+        guest_flush_tlb_mask(d, d->dirty_cpumask);
 
     /* Remember that we've seen the guest use this interface, so we
      * can rely on it using it in future, instead of guessing at
@@ -4562,7 +4568,7 @@ static void sh_pagetable_dying(paddr_t gpa)
         mfn_to_page(gmfn)->pagetable_dying = true;
         shadow_unhook_mappings(d, smfn, 1/* user pages only */);
         /* Now flush the TLB: we removed toplevel mappings. */
-        flush_tlb_mask(d->dirty_cpumask);
+        guest_flush_tlb_mask(d, d->dirty_cpumask);
     }
 
     /* Remember that we've seen the guest use this interface, so we
