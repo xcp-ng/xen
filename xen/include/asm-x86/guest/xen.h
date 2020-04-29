@@ -38,6 +38,14 @@ int hypervisor_alloc_unused_page(mfn_t *mfn);
 int hypervisor_free_unused_page(mfn_t mfn);
 uint32_t hypervisor_cpuid_base(void);
 void hypervisor_resume(void);
+/*
+ * L0 assisted TLB flush.
+ * mask: cpumask of the dirty vCPUs that should be flushed.
+ * va: linear address to flush, or NULL for global flushes.
+ * order: order of the linear address pointed by va.
+ */
+int hypervisor_flush_tlb(const cpumask_t *mask, const void *va,
+                         unsigned int order);
 
 DECLARE_PER_CPU(unsigned int, vcpu_id);
 DECLARE_PER_CPU(struct vcpu_info *, vcpu_info);
@@ -56,6 +64,11 @@ static inline void hypervisor_setup(void)
 static inline void hypervisor_ap_setup(void)
 {
     ASSERT_UNREACHABLE();
+}
+static inline int hypervisor_flush_tlb(const cpumask_t *mask, const void *va,
+                                       unsigned int order)
+{
+    return -EOPNOTSUPP;
 }
 
 #endif /* CONFIG_XEN_GUEST */
