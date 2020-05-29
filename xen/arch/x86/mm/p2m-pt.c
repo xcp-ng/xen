@@ -340,7 +340,7 @@ static int do_recalc(struct p2m_domain *p2m, unsigned long gfn)
     unsigned long gfn_remainder = gfn;
     unsigned int level = 4;
     l1_pgentry_t *pent;
-    int err = 0;
+    int err = 0, rc = 0;
 
     table = map_domain_page(pagetable_get_mfn(p2m_get_pagetable(p2m)));
     while ( --level )
@@ -402,6 +402,8 @@ static int do_recalc(struct p2m_domain *p2m, unsigned long gfn)
                 clear_recalc(l1, e);
                 err = p2m->write_p2m_entry(p2m, gfn, pent, e, level + 1);
                 ASSERT(!err);
+
+                rc = 1;
             }
         }
         unmap_domain_page((void *)((unsigned long)pent & PAGE_MASK));
@@ -448,12 +450,14 @@ static int do_recalc(struct p2m_domain *p2m, unsigned long gfn)
             clear_recalc(l1, e);
         err = p2m->write_p2m_entry(p2m, gfn, pent, e, level + 1);
         ASSERT(!err);
+
+        rc = 1;
     }
 
  out:
     unmap_domain_page(table);
 
-    return err;
+    return err ? err : rc;
 }
 
 int p2m_pt_handle_deferred_changes(uint64_t gpa)
