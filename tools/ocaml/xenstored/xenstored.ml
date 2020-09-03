@@ -314,6 +314,11 @@ let _ =
 		);
 	);
 
+	(* required for xenstore-control to detect availability of live-update *)
+	Store.mkdir store Perms.Connection.full_rights (Store.Path.of_string "/tool");
+	Store.write store Perms.Connection.full_rights
+		(Store.Path.of_string "/tool/xenstored") Sys.executable_name;
+
 	Select.use_poll (not cf.use_select);
 
 	Sys.set_signal Sys.sighup (Sys.Signal_handle sighup_handler);
@@ -490,18 +495,28 @@ let _ =
 		in
 
 	Systemd.sd_notify_ready ();
+	let live_update = ref false in
 	while not (!quit && Connections.prevents_quit cons = [])
 	do
 		try
-			main_loop ()
+			main_loop ();
+			live_update := Process.LiveUpdate.should_run cons;
+			if !live_update || !quit then begin
+				(* don't initiate live update if saving state fails *)
+				DB.to_file store cons Disk.xs_daemon_database;
+				quit := true;
+			end
 		with exc ->
-			error "caught exception %s" (Printexc.to_string exc);
+			let bt = Printexc.get_backtrace () in
+			error "caught exception %s: %s" (Printexc.to_string exc) bt;
 			if cf.reraise_top_level then
 				raise exc
 	done;
 	info "stopping xenstored";
-		DB.to_file store cons Disk.xs_daemon_database;
-		(* unlink pidfile so that launch-xenstore works again *)
-		Unixext.unlink_safe pidfile;
-		(match cf.pidfile with Some pidfile -> Unixext.unlink_safe pidfile | None -> ());
-	()
+	(* unlink pidfile so that launch-xenstore works again *)
+	Unixext.unlink_safe pidfile;
+	(match cf.pidfile with Some pidfile -> Unixext.unlink_safe pidfile | None -> ());
+	if !live_update then begin
+		 Logging.live_update ();
+		 Process.LiveUpdate.launch_exn !Process.LiveUpdate.state
+	end
