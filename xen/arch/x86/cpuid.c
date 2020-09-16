@@ -553,7 +553,7 @@ void recalculate_cpuid_policy(struct domain *d)
      * This situation is compatible (albeit with a perf hit to any TSX code in
      * the guest), so allow the feature bits to remain set.
      */
-    if ( cpu_has_tsx_ctrl )
+    if ( cpu_has_tsx_ctrl || cpu_has_tsx_force_abort )
     {
         __set_bit(X86_FEATURE_HLE, max_fs);
         __set_bit(X86_FEATURE_RTM, max_fs);
