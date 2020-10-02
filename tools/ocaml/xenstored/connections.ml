@@ -37,7 +37,7 @@ let get_capacity () =
 	(* not multiplied by maxwatch on purpose: 2nd queue in watch itself! *)
 	{ Xenbus.Xb.maxoutstanding = !Define.maxoutstanding; maxwatchevents = !Define.maxwatchevents }
 
-let add_anonymous cons fd _can_write =
+let add_anonymous cons fd =
 	let capacity = get_capacity () in
 	let xbcon = Xenbus.Xb.open_fd fd ~capacity in
 	let con = Connection.create xbcon None in
