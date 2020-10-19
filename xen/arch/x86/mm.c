@@ -3918,7 +3918,7 @@ long do_mmu_update(
     struct vcpu *curr = current, *v = curr;
     struct domain *d = v->domain, *pt_owner = d, *pg_owner;
     mfn_t map_mfn = INVALID_MFN, mfn;
-    bool sync_guest = false;
+    bool sync_guest = false, full_flush = false;
     uint32_t xsm_needed = 0;
     uint32_t xsm_checked = 0;
     int rc = put_old_guest_table(curr);
@@ -4068,6 +4068,8 @@ long do_mmu_update(
                         break;
                     rc = mod_l2_entry(va, l2e_from_intpte(req.val), mfn,
                                       cmd == MMU_PT_UPDATE_PRESERVE_AD, v);
+                    if ( !rc )
+                        full_flush = true;
                     break;
 
                 case PGT_l3_page_table:
@@ -4075,6 +4077,8 @@ long do_mmu_update(
                         break;
                     rc = mod_l3_entry(va, l3e_from_intpte(req.val), mfn,
                                       cmd == MMU_PT_UPDATE_PRESERVE_AD, v);
+                    if ( !rc )
+                        full_flush = true;
                     break;
 
                 case PGT_l4_page_table:
@@ -4082,6 +4086,8 @@ long do_mmu_update(
                         break;
                     rc = mod_l4_entry(va, l4e_from_intpte(req.val), mfn,
                                       cmd == MMU_PT_UPDATE_PRESERVE_AD, v);
+                    if ( !rc )
+                        full_flush = true;
                     if ( !rc && pt_owner->arch.pv.xpti )
                     {
                         bool local_in_use = false;
@@ -4204,18 +4210,29 @@ long do_mmu_update(
     if ( va )
         unmap_domain_page(va);
 
-    if ( sync_guest )
+    if ( full_flush || sync_guest )
     {
         /*
          * Force other vCPU-s of the affected guest to pick up L4 entry
          * changes (if any).
          */
-        unsigned int cpu = smp_processor_id();
+        unsigned int cpu = smp_processor_id(), memflags = FLUSH_TLB_GLOBAL;
         cpumask_t *mask = per_cpu(scratch_cpumask, cpu);
 
-        cpumask_andnot(mask, pt_owner->dirty_cpumask, cpumask_of(cpu));
+        cpumask_copy(mask, pt_owner->dirty_cpumask);
+
+        if ( sync_guest )
+        {
+            /* Local doesn't need FLUSH_ROOT_PGTBL */
+            flush_local(memflags);
+
+            memflags |= FLUSH_ROOT_PGTBL;
+            __cpumask_clear_cpu(cpu, mask);
+
+        }
+
         if ( !cpumask_empty(mask) )
-            flush_mask(mask, FLUSH_TLB_GLOBAL | FLUSH_ROOT_PGTBL);
+            flush_mask(mask, memflags);
     }
 
     perfc_add(num_page_updates, i);
