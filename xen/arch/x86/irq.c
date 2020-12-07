@@ -430,7 +430,7 @@ int __init init_irq_data(void)
         irq_to_desc(irq)->irq = irq;
 
     if ( !irq_max_guests )
-        irq_max_guests = 16;
+        irq_max_guests = 32;
 
 #ifdef CONFIG_PV
     /* Never allocate the hypercall vector or Linux/BSD fast-trap vector. */
@@ -1721,6 +1721,7 @@ int pirq_guest_bind(struct vcpu *v, struct pirq *pirq, int will_share)
     unsigned int        irq;
     struct irq_desc         *desc;
     irq_guest_action_t *action, *newaction = NULL;
+    unsigned int        max_nr_guests = will_share ? irq_max_guests : 1;
     int                 rc = 0;
 
     WARN_ON(!spin_is_locked(&v->domain->event_lock));
@@ -1752,7 +1753,7 @@ int pirq_guest_bind(struct vcpu *v, struct pirq *pirq, int will_share)
         {
             spin_unlock_irq(&desc->lock);
             if ( (newaction = xmalloc_flex_struct(irq_guest_action_t, guest,
-                                                  irq_max_guests)) != NULL &&
+                                                  max_nr_guests)) != NULL &&
                  zalloc_cpumask_var(&newaction->cpu_eoi_map) )
                 goto retry;
             xfree(newaction);
@@ -1821,7 +1822,7 @@ int pirq_guest_bind(struct vcpu *v, struct pirq *pirq, int will_share)
         goto retry;
     }
 
-    if ( action->nr_guests == irq_max_guests )
+    if ( action->nr_guests >= max_nr_guests )
     {
         printk(XENLOG_G_INFO
                "Cannot bind IRQ%d to %pd: already at max share %u"
