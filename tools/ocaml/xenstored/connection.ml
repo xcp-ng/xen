@@ -439,7 +439,8 @@ let has_extra_connection_data con =
 	let has_socket = con.dom = None in
 	let has_nondefault_perms = make_perm con.dom <> con.perm in
 	has_in || has_out
-	|| has_socket (* dom0 sockets not dumped yet *)
+	(* TODO: what about SIGTERM, should use systemd to store FDS
+	|| has_socket (* dom0 sockets not * dumped yet *) *)
 	|| has_nondefault_perms (* set_target not dumped yet *)
 
 let has_transaction_data con =
@@ -462,16 +463,21 @@ let stats con =
 	Hashtbl.length con.watches, con.stat_nb_ops
 
 let dump con chan =
-	match con.dom with
+	let id = match con.dom with
 	| Some dom ->
 		let domid = Domain.get_id dom in
 		(* dump domain *)
 		Domain.dump dom chan;
-		(* dump watches *)
-		List.iter (fun (path, token) ->
-			Printf.fprintf chan "watch,%d,%s,%s\n" domid (Utils.hexify path) (Utils.hexify token)
-			) (list_watches con);
-	| None -> ()
+		domid
+	| None ->
+		let fd = con |> get_fd |> Utils.FD.to_int in
+		Printf.fprintf chan "socket,%d\n" fd;
+		-fd
+	in
+	(* dump watches *)
+	List.iter (fun (path, token) ->
+		Printf.fprintf chan "watch,%d,%s,%s\n" id (Utils.hexify path) (Utils.hexify token)
+		) (list_watches con)
 
 let debug con =
 	let domid = get_domstr con in
