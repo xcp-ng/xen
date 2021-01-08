@@ -225,3 +225,11 @@ let debug_watchevents cons con =
 	let pending = s |> Connection.Watch.Set.elements
 		|> List.map (fun w -> Connection.Watch.pending_watchevents w) |> List.fold_left (+) 0 in
 	Printf.sprintf "Watches with pending events: %d, pending events total: %d" (Connection.Watch.Set.cardinal s) pending
+
+let filter ~f cons =
+	let fold _ v acc = if f v then v :: acc else acc in
+	[]
+	|> Hashtbl.fold fold cons.anonymous
+	|> Hashtbl.fold fold cons.domains
+
+let prevents_quit cons = filter ~f:Connection.prevents_live_update cons
