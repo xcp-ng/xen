@@ -2273,11 +2273,16 @@ This set incorporates use of a hypercall for interprocessor interrupts.
 This enlightenment may improve performance of Windows guests with multiple
 virtual CPUs.
 
+=item B<cpu_hotplug>
+
+This set enables dynamic changes to Virtual processor states in Windows
+guests effectively allowing vCPU hotplug.
+
 =item B<defaults>
 
 This is a special value that enables the default set of groups, which
 is currently the B<base>, B<freq>, B<time_ref_count>, B<apic_assist>,
-B<crash_ctl> and B<stimer> groups.
+B<crash_ctl>, B<stimer> and B<cpu_hotplug> groups.
 
 =item B<all>
 
