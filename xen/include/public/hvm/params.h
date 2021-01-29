@@ -158,6 +158,10 @@
 #define _HVMPV_hcall_ipi 9
 #define HVMPV_hcall_ipi (1 << _HVMPV_hcall_ipi)
 
+/* Enable vCPU hotplug */
+#define _HVMPV_cpu_hotplug 12
+#define HVMPV_cpu_hotplug (1 << _HVMPV_cpu_hotplug)
+
 #define HVMPV_feature_mask \
         (HVMPV_base_freq | \
          HVMPV_no_freq | \
@@ -168,7 +172,8 @@
          HVMPV_crash_ctl | \
          HVMPV_synic | \
          HVMPV_stimer | \
-         HVMPV_hcall_ipi)
+         HVMPV_hcall_ipi | \
+         HVMPV_cpu_hotplug)
 
 #endif
 
