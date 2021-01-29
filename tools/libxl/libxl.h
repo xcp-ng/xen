@@ -342,6 +342,12 @@
 #define LIBXL_HAVE_VIRIDIAN_HCALL_IPI 1
 
 /*
+ * LIBXL_HAVE_VIRIDIAN_CPU_HOTPLUG indicates that the 'cpu_hotplug' value
+ * is present in the viridian enlightenment enumeration.
+ */
+#define LIBXL_HAVE_VIRIDIAN_CPU_HOTPLUG 1
+
+/*
  * LIBXL_HAVE_BUILDINFO_HVM_ACPI_LAPTOP_SLATE indicates that
  * libxl_domain_build_info has the u.hvm.acpi_laptop_slate field.
  */
