@@ -8,4 +8,4 @@ Version: @@version@@
 Cflags: -I${includedir} @@cflagslocal@@
 Libs: @@libsflag@@${libdir} -lxenstore
 Libs.private: -ldl
-Requires.private: xenevtchn,xencontrol,xengnttab,xentoolcore
+Requires.private: xentoolcore
