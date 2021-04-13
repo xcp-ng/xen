@@ -53,7 +53,7 @@
 /* Possible unfiltered LAPIC/MSI messages from untrusted sources? */
 bool __read_mostly untrusted_msi;
 
-int nr_iommus;
+static unsigned int __initdata nr_iommus;
 
 static struct tasklet vtd_fault_tasklet;
 
@@ -1172,13 +1172,6 @@ int __init iommu_alloc(struct acpi_drhd_unit *drhd)
     struct vtd_iommu *iommu;
     unsigned long sagaw, nr_dom;
     int agaw, rc;
-
-    if ( nr_iommus >= MAX_IOMMUS )
-    {
-        dprintk(XENLOG_ERR VTDPREFIX,
-                "IOMMU: nr_iommus %d > MAX_IOMMUS\n", nr_iommus + 1);
-        return -ENOMEM;
-    }
 
     iommu = xzalloc(struct vtd_iommu);
     if ( iommu == NULL )
@@ -2410,6 +2403,10 @@ static void __hwdom_init setup_hwdom_rmrr(struct domain *d)
     pcidevs_unlock();
 }
 
+static struct iommu_state {
+    uint32_t fectl;
+} *__read_mostly iommu_state;
+
 static int __init vtd_setup(void)
 {
     struct acpi_drhd_unit *drhd;
@@ -2433,6 +2430,13 @@ static int __init vtd_setup(void)
     if ( !iommu_enable )
     {
         ret = -ENODEV;
+        goto error;
+    }
+
+    iommu_state = xmalloc_array(struct iommu_state, nr_iommus);
+    if ( !iommu_state )
+    {
+        ret = -ENOMEM;
         goto error;
     }
 
@@ -2708,8 +2712,6 @@ static int intel_iommu_group_id(u16 seg, u8 bus, u8 devfn)
         return PCI_BDF2(bus, devfn);
 }
 
-static u32 iommu_state[MAX_IOMMUS][MAX_IOMMU_REGS];
-
 static int __must_check vtd_suspend(void)
 {
     struct acpi_drhd_unit *drhd;
@@ -2734,14 +2736,7 @@ static int __must_check vtd_suspend(void)
         iommu = drhd->iommu;
         i = iommu->index;
 
-        iommu_state[i][DMAR_FECTL_REG] =
-            (u32) dmar_readl(iommu->reg, DMAR_FECTL_REG);
-        iommu_state[i][DMAR_FEDATA_REG] =
-            (u32) dmar_readl(iommu->reg, DMAR_FEDATA_REG);
-        iommu_state[i][DMAR_FEADDR_REG] =
-            (u32) dmar_readl(iommu->reg, DMAR_FEADDR_REG);
-        iommu_state[i][DMAR_FEUADDR_REG] =
-            (u32) dmar_readl(iommu->reg, DMAR_FEUADDR_REG);
+        iommu_state[i].fectl = dmar_readl(iommu->reg, DMAR_FECTL_REG);
 
         /* don't disable VT-d engine when force_iommu is set. */
         if ( force_iommu )
@@ -2794,15 +2789,13 @@ static void vtd_resume(void)
     for_each_drhd_unit ( drhd )
     {
         iommu = drhd->iommu;
-        i = iommu->index;
 
         spin_lock_irqsave(&iommu->register_lock, flags);
-        dmar_writel(iommu->reg, DMAR_FEDATA_REG,
-                    iommu_state[i][DMAR_FEDATA_REG]);
-        dmar_writel(iommu->reg, DMAR_FEADDR_REG,
-                    iommu_state[i][DMAR_FEADDR_REG]);
-        dmar_writel(iommu->reg, DMAR_FEUADDR_REG,
-                    iommu_state[i][DMAR_FEUADDR_REG]);
+        dmar_writel(iommu->reg, DMAR_FEDATA_REG, iommu->msi.msg.data);
+        dmar_writel(iommu->reg, DMAR_FEADDR_REG, iommu->msi.msg.address_lo);
+        if ( x2apic_enabled )
+            dmar_writel(iommu->reg, DMAR_FEUADDR_REG,
+                        iommu->msi.msg.address_hi);
         spin_unlock_irqrestore(&iommu->register_lock, flags);
     }
 
@@ -2815,8 +2808,7 @@ static void vtd_resume(void)
         i = iommu->index;
 
         spin_lock_irqsave(&iommu->register_lock, flags);
-        dmar_writel(iommu->reg, DMAR_FECTL_REG,
-                    (u32) iommu_state[i][DMAR_FECTL_REG]);
+        dmar_writel(iommu->reg, DMAR_FECTL_REG, iommu_state[i].fectl);
         spin_unlock_irqrestore(&iommu->register_lock, flags);
 
         iommu_enable_translation(drhd);
