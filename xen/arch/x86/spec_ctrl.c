@@ -75,7 +75,6 @@ static bool __initdata cpu_has_bug_msbds_only; /* => minimal HT impact. */
 static bool __initdata cpu_has_bug_mds; /* Any other M{LP,SB,FB}DS combination. */
 
 static int8_t __initdata opt_srb_lock = -1;
-uint64_t __read_mostly default_xen_mcu_opt_ctrl;
 static bool __initdata opt_unpriv_mmio;
 static bool __read_mostly opt_fb_clear_mmio;
 
@@ -486,7 +485,7 @@ static void __init print_details(enum ind_thunk thunk, uint64_t caps)
            (default_xen_spec_ctrl & SPEC_CTRL_PSFD)  ? " PSFD+" : " PSFD-",
            !(caps & ARCH_CAPS_TSX_CTRL)              ? "" :
            (opt_tsx & 1)                             ? " TSX+" : " TSX-",
-           !boot_cpu_has(X86_FEATURE_SRBDS_CTRL)     ? "" :
+           !cpu_has_srbds_ctrl                       ? "" :
            opt_srb_lock                              ? " SRB_LOCK+" : " SRB_LOCK-",
            opt_ibpb_ctxt_switch                      ? " IBPB-ctxt" : "",
            opt_l1d_flush                             ? " L1D_FLUSH" : "",
@@ -1479,38 +1478,29 @@ void __init init_speculation_mitigations(void)
         tsx_init();
     }
 
-    /* Calculate suitable defaults for MSR_MCU_OPT_CTRL */
-    if ( boot_cpu_has(X86_FEATURE_SRBDS_CTRL) )
+    /*
+     * On some SRBDS-affected hardware, it may be safe to relax srb-lock by
+     * default.
+     *
+     * All parts with SRBDS_CTRL suffer SSDP, the mechanism by which stale RNG
+     * data becomes available to other contexts.  To recover the data, an
+     * attacker needs to use:
+     *  - SBDS (MDS or TAA to sample the cores fill buffer)
+     *  - SBDR (Architecturally retrieve stale transaction buffer contents)
+     *  - DRPW (Architecturally latch stale fill buffer data)
+     *
+     * On MDS_NO parts, and with TAA_NO or TSX unavailable/disabled, and there
+     * is no unprivileged MMIO access, the RNG data doesn't need protecting.
+     */
+    if ( cpu_has_srbds_ctrl )
     {
-        uint64_t val;
-
-        rdmsrl(MSR_MCU_OPT_CTRL, val);
-
-        /*
-         * On some SRBDS-affected hardware, it may be safe to relax srb-lock
-         * by default.
-         *
-         * All parts with SRBDS_CTRL suffer SSDP, the mechanism by which stale
-         * RNG data becomes available to other contexts.  To recover the data,
-         * an attacker needs to use:
-         *  - SBDS (MDS or TAA to sample the cores fill buffer)
-         *  - SBDR (Architecturally retrieve stale transaction buffer contents)
-         *  - DRPW (Architecturally latch stale fill buffer data)
-         *
-         * On MDS_NO parts, and with TAA_NO or TSX unavailable/disabled, and
-         * there is no unprivileged MMIO access, the RNG data doesn't need
-         * protecting.
-         */
         if ( opt_srb_lock == -1 && !opt_unpriv_mmio &&
              (caps & (ARCH_CAPS_MDS_NO|ARCH_CAPS_TAA_NO)) == ARCH_CAPS_MDS_NO &&
              (!cpu_has_hle || ((caps & ARCH_CAPS_TSX_CTRL) && rtm_disabled)) )
             opt_srb_lock = 0;
 
-        val &= ~MCU_OPT_CTRL_RNGDS_MITG_DIS;
-        if ( !opt_srb_lock )
-            val |= MCU_OPT_CTRL_RNGDS_MITG_DIS;
-
-        default_xen_mcu_opt_ctrl = val;
+        set_in_mcu_opt_ctrl(MCU_OPT_CTRL_RNGDS_MITG_DIS,
+                            opt_srb_lock ? 0 : MCU_OPT_CTRL_RNGDS_MITG_DIS);
     }
 
     print_details(thunk, caps);
@@ -1548,9 +1538,6 @@ void __init init_speculation_mitigations(void)
         wrmsrl(MSR_SPEC_CTRL, val);
         info->last_spec_ctrl = val;
     }
-
-    if ( boot_cpu_has(X86_FEATURE_SRBDS_CTRL) )
-        wrmsrl(MSR_MCU_OPT_CTRL, default_xen_mcu_opt_ctrl);
 }
 
 static void __init __maybe_unused build_assertions(void)
