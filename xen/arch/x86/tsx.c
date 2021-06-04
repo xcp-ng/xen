@@ -14,6 +14,7 @@
  */
 int8_t __read_mostly opt_tsx = -1;
 int8_t __read_mostly cpu_has_tsx_ctrl = -1;
+bool __read_mostly rtm_disabled;
 
 static int __init parse_tsx(const char *s)
 {
@@ -76,9 +77,11 @@ void tsx_init(void)
 
         rdmsrl(MSR_TSX_CTRL, val);
 
+        /* Check bottom bit only.  Higher bits are various sentinels. */
+        rtm_disabled = !(opt_tsx & 1);
+
         val &= ~(TSX_CTRL_RTM_DISABLE | TSX_CTRL_CPUID_CLEAR);
-        /* Check bottom bit only.  Higher bits are various sentinals. */
-        if ( !(opt_tsx & 1) )
+        if ( rtm_disabled )
             val |= TSX_CTRL_RTM_DISABLE | TSX_CTRL_CPUID_CLEAR;
 
         wrmsrl(MSR_TSX_CTRL, val);

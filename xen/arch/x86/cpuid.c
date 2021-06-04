@@ -349,6 +349,16 @@ static void __init guest_common_feature_adjustments(uint32_t *fs)
      */
     if ( host_cpuid_policy.feat.ibrsb )
         __set_bit(X86_FEATURE_IBPB, fs);
+
+    /*
+     * On certain hardware, speculative or errata workarounds can result in
+     * TSX being placed in "force-abort" mode, where it doesn't actually
+     * function as expected, but is technically compatible with the ISA.
+     *
+     * Do not advertise RTM to guests by default if it won't actually work.
+     */
+    if ( rtm_disabled )
+        __clear_bit(X86_FEATURE_RTM, fs);
 }
 
 static void __init calculate_pv_max_policy(void)
@@ -547,14 +557,15 @@ void recalculate_cpuid_policy(struct domain *d)
         __set_bit(X86_FEATURE_ITSC, max_fs);
 
     /*
-     * On hardware with MSR_TSX_CTRL, the admin may have elected to disable
-     * TSX and hide the feature bits.  Migrating-in VMs may have been booted
-     * pre-mitigation when the TSX features were visbile.
+     * On certain hardware, speculative or errata workarounds can result in us
+     * not wanting to expose TSX unilaterally to guests.  Migrating-in VMs may
+     * have been booted pre-mitigation when the TSX features were visible.
      *
      * This situation is compatible (albeit with a perf hit to any TSX code in
-     * the guest), so allow the feature bits to remain set.
+     * the guest), so allow the toolstack advertise the bits for compatibility
+     * reasons if there is any hint of TSX existing on the platform.
      */
-    if ( cpu_has_tsx_ctrl )
+    if ( cpu_has_hle || cpu_has_rtm )
     {
         __set_bit(X86_FEATURE_HLE, max_fs);
         __set_bit(X86_FEATURE_RTM, max_fs);
