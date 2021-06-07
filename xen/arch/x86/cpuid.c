@@ -12,7 +12,6 @@
 #include <asm/xstate.h>
 
 const uint32_t known_features[] = INIT_KNOWN_FEATURES;
-const uint32_t special_features[] = INIT_SPECIAL_FEATURES;
 
 static const uint32_t pv_featuremask[] = INIT_PV_FEATURES;
 static const uint32_t hvm_shadow_featuremask[] = INIT_HVM_SHADOW_FEATURES;
@@ -1140,7 +1139,6 @@ void guest_cpuid(const struct vcpu *v, uint32_t leaf,
 static void __init __maybe_unused build_assertions(void)
 {
     BUILD_BUG_ON(ARRAY_SIZE(known_features) != FSCAPINTS);
-    BUILD_BUG_ON(ARRAY_SIZE(special_features) != FSCAPINTS);
     BUILD_BUG_ON(ARRAY_SIZE(pv_featuremask) != FSCAPINTS);
     BUILD_BUG_ON(ARRAY_SIZE(hvm_shadow_featuremask) != FSCAPINTS);
     BUILD_BUG_ON(ARRAY_SIZE(hvm_hap_featuremask) != FSCAPINTS);
