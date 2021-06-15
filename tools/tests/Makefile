@@ -6,7 +6,6 @@ LDLIBS += $(LDLIBS_libxenctrl)
 
 SUBDIRS-y :=
 SUBDIRS-$(CONFIG_X86) += cpu-policy
-SUBDIRS-$(CONFIG_X86) += mce-test
 SUBDIRS-y += mem-sharing
 ifneq ($(clang),y)
 SUBDIRS-$(CONFIG_X86) += x86_emulator
