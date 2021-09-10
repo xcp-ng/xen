@@ -18,9 +18,6 @@
 #include <xen/sched.h>
 #include <xen/multiboot.h>
 
-typedef void xsm_op_t;
-DEFINE_XEN_GUEST_HANDLE(xsm_op_t);
-
 /* policy magic number (defined by XSM_MAGIC) */
 typedef u32 xsm_magic_t;
 
@@ -128,9 +125,9 @@ struct xsm_operations {
 
     int (*page_offline)(uint32_t cmd);
 
-    long (*do_xsm_op) (XEN_GUEST_HANDLE_PARAM(xsm_op_t) op);
+    long (*do_xsm_op) (XEN_GUEST_HANDLE_PARAM(void) op);
 #ifdef CONFIG_COMPAT
-    int (*do_compat_op) (XEN_GUEST_HANDLE_PARAM(xsm_op_t) op);
+    int (*do_compat_op) (XEN_GUEST_HANDLE_PARAM(void) op);
 #endif
 
     int (*hvm_param) (struct domain *d, unsigned long op);
@@ -537,13 +534,13 @@ static inline int xsm_page_offline(xsm_default_t def, uint32_t cmd)
     return xsm_ops->page_offline(cmd);
 }
 
-static inline long xsm_do_xsm_op (XEN_GUEST_HANDLE_PARAM(xsm_op_t) op)
+static inline long xsm_do_xsm_op (XEN_GUEST_HANDLE_PARAM(void) op)
 {
     return xsm_ops->do_xsm_op(op);
 }
 
 #ifdef CONFIG_COMPAT
-static inline int xsm_do_compat_op (XEN_GUEST_HANDLE_PARAM(xsm_op_t) op)
+static inline int xsm_do_compat_op (XEN_GUEST_HANDLE_PARAM(void) op)
 {
     return xsm_ops->do_compat_op(op);
 }
