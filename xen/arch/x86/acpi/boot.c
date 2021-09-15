@@ -54,6 +54,8 @@ bool __initdata acpi_ioapic;
 static bool __initdata acpi_skip_timer_override;
 boolean_param("acpi_skip_timer_override", acpi_skip_timer_override);
 
+static uint8_t __initdata madt_revision;
+
 static u64 acpi_lapic_addr __initdata = APIC_DEFAULT_PHYS_BASE;
 
 /* --------------------------------------------------------------------------
@@ -65,6 +67,8 @@ static int __init acpi_parse_madt(struct acpi_table_header *table)
 	struct acpi_table_madt *madt;
 
 	madt = (struct acpi_table_madt *)table;
+
+	madt_revision = madt->header.revision;
 
 	if (madt->address) {
 		acpi_lapic_addr = (u64) madt->address;
@@ -87,6 +91,12 @@ acpi_parse_x2apic(struct acpi_subtable_header *header, const unsigned long end)
 
 	if (BAD_MADT_ENTRY(processor, end))
 		return -EINVAL;
+
+	/* Don't register processors that cannot be onlined. */
+	if (madt_revision >= 5 &&
+	    !(processor->lapic_flags & ACPI_MADT_ENABLED) &&
+	    !(processor->lapic_flags & ACPI_MADT_ONLINE_CAPABLE))
+		return 0;
 
 	if ((processor->lapic_flags & ACPI_MADT_ENABLED) ||
 	    processor->local_apic_id != 0xffffffff || opt_cpu_info) {
@@ -136,6 +146,12 @@ acpi_parse_lapic(struct acpi_subtable_header * header, const unsigned long end)
 
 	if (BAD_MADT_ENTRY(processor, end))
 		return -EINVAL;
+
+	/* Don't register processors that cannot be onlined. */
+	if (madt_revision >= 5 &&
+	    !(processor->lapic_flags & ACPI_MADT_ENABLED) &&
+	    !(processor->lapic_flags & ACPI_MADT_ONLINE_CAPABLE))
+		return 0;
 
 	if ((processor->lapic_flags & ACPI_MADT_ENABLED) ||
 	    processor->id != 0xff || opt_cpu_info)
