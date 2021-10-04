@@ -25,17 +25,8 @@
 #include <xen/trace.h>
 #include <xen/softirq.h>
 
-#include <asm/apic.h>
 #include <asm/shared.h>
 #include <asm/traps.h>
-
-void do_entry_int82(struct cpu_user_regs *regs)
-{
-    if ( unlikely(untrusted_msi) )
-        check_for_unexpected_msi((uint8_t)regs->entry_vector);
-
-    pv_hypercall(regs);
-}
 
 void pv_inject_event(const struct x86_event *event)
 {
