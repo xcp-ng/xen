@@ -39,7 +39,6 @@ extern bool opt_ibpb;
 extern bool opt_ssbd;
 extern int8_t opt_eager_fpu;
 extern int8_t opt_l1d_flush;
-extern bool opt_branch_harden;
 
 extern bool bsp_delay_spec_ctrl;
 extern uint8_t default_xen_spec_ctrl;
