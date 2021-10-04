@@ -23,6 +23,7 @@
 #include <xen/hypercall.h>
 #include <xen/nospec.h>
 #include <xen/trace.h>
+#include <asm/apic.h>
 
 #define HYPERCALL(x)                                                \
     [ __HYPERVISOR_ ## x ] = { (hypercall_fn_t *) do_ ## x,         \
@@ -92,14 +93,14 @@ const hypercall_table_t pv_hypercall_table[] = {
 #undef COMPAT_CALL
 #undef HYPERCALL
 
-void pv_hypercall(struct cpu_user_regs *regs)
+/* Forced inline to cause 'compat' to be evaluated at compile time. */
+static void always_inline
+_pv_hypercall(struct cpu_user_regs *regs, bool compat)
 {
     struct vcpu *curr = current;
-    unsigned long eax;
+    unsigned long eax = compat ? regs->eax : regs->rax;
 
     ASSERT(guest_kernel_mode(curr, regs));
-
-    eax = is_pv_32bit_vcpu(curr) ? regs->eax : regs->rax;
 
     BUILD_BUG_ON(ARRAY_SIZE(pv_hypercall_table) >
                  ARRAY_SIZE(hypercall_args_table));
@@ -120,7 +121,7 @@ void pv_hypercall(struct cpu_user_regs *regs)
 
     curr->hcall_preempted = false;
 
-    if ( !is_pv_32bit_vcpu(curr) )
+    if ( !compat )
     {
         unsigned long rdi = regs->rdi;
         unsigned long rsi = regs->rsi;
@@ -327,6 +328,19 @@ void pv_ring1_init_hypercall_page(void *p)
         *(u16 *)(p+ 5) = (HYPERCALL_VECTOR << 8) | 0xcd; /* int  $xx */
         *(u8  *)(p+ 7) = 0xc3;    /* ret */
     }
+}
+
+void do_entry_int82(struct cpu_user_regs *regs)
+{
+    if ( unlikely(untrusted_msi) )
+        check_for_unexpected_msi((uint8_t)regs->entry_vector);
+
+    _pv_hypercall(regs, true /* compat */);
+}
+
+void pv_hypercall(struct cpu_user_regs *regs)
+{
+    _pv_hypercall(regs, false /* native */);
 }
 
 /*
