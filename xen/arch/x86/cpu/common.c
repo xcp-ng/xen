@@ -13,6 +13,7 @@
 #include <asm/io.h>
 #include <asm/mpspec.h>
 #include <asm/apic.h>
+#include <asm/prot-key.h>
 #include <asm/random.h>
 #include <asm/setup.h>
 #include <asm/shstk.h>
