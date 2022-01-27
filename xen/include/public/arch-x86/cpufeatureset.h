@@ -282,6 +282,8 @@ XEN_CPUFEATURE(AVX512_BF16,  10*32+ 5) /*A  AVX512 BFloat16 Instructions */
 
 /* Intel-defined CPU features, CPUID level 0x00000007:1.ebx, word 12 */
 
+/* Intel-defined CPU features, CPUID level 0x00000007:2.edx, word 13 */
+
 #endif /* XEN_CPUFEATURE */
 
 /* Clean up from a default include.  Close the enum (for C). */
