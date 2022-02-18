@@ -2334,9 +2334,6 @@ cache-warming. 1ms (1000) has been measured as a good value.
 ### vesa-map
 > `= <integer>`
 
-### vesa-mtrr
-> `= <integer>`
-
 ### vesa-ram
 > `= <integer>`
 
