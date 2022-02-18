@@ -8,9 +8,9 @@
 #include <xen/lib.h>
 #include <xen/xmalloc.h>
 #include <xen/kernel.h>
+#include <xen/mm.h>
 #include <xen/vga.h>
 #include <asm/io.h>
-#include <asm/page.h>
 #include "font.h"
 #include "lfb.h"
 
@@ -102,7 +102,7 @@ void __init vesa_init(void)
     lfbp.text_columns = vlfb_info.width / font->width;
     lfbp.text_rows = vlfb_info.height / font->height;
 
-    lfbp.lfb = lfb = ioremap(lfb_base(), vram_remap);
+    lfbp.lfb = lfb = ioremap_wc(lfb_base(), vram_remap);
     if ( !lfb )
         return;
 
@@ -178,8 +178,7 @@ void __init vesa_mtrr_init(void)
 
 static void lfb_flush(void)
 {
-    if ( vesa_mtrr == 3 )
-        __asm__ __volatile__ ("sfence" : : : "memory");
+    __asm__ __volatile__ ("sfence" : : : "memory");
 }
 
 void __init vesa_endboot(bool_t keep)
