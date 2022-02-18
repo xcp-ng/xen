@@ -41,7 +41,12 @@
 #define SPEC_CTRL_IBRS			(_AC(1, ULL) << 0)
 #define SPEC_CTRL_STIBP			(_AC(1, ULL) << 1)
 #define SPEC_CTRL_SSBD			(_AC(1, ULL) << 2)
+#define SPEC_CTRL_IPRED_DIS_U		(_AC(1, ULL) <<	3)
+#define SPEC_CTRL_IPRED_DIS_S		(_AC(1, ULL) <<	4)
+#define SPEC_CTRL_RRSBA_DIS_U		(_AC(1, ULL) <<	5)
+#define SPEC_CTRL_RRSBA_DIS_S		(_AC(1, ULL) <<	6)
 #define SPEC_CTRL_PSFD			(_AC(1, ULL) << 7)
+#define SPEC_CTRL_BHI_DIS_S		(_AC(1, ULL) << 10)
 
 #define MSR_PRED_CMD			0x00000049
 #define PRED_CMD_IBPB			(_AC(1, ULL) << 0)
@@ -61,6 +66,8 @@
 #define ARCH_CAPS_PSDP_NO		(_AC(1, ULL) << 15)
 #define ARCH_CAPS_FB_CLEAR		(_AC(1, ULL) << 17)
 #define ARCH_CAPS_FB_CLEAR_CTRL		(_AC(1, ULL) << 18)
+#define ARCH_CAPS_RRSBA			(_AC(1, ULL) << 19)
+#define ARCH_CAPS_BHI_NO		(_AC(1, ULL) << 20)
 
 #define MSR_FLUSH_CMD			0x0000010b
 #define FLUSH_CMD_L1D			(_AC(1, ULL) << 0)
