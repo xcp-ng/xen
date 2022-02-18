@@ -1655,8 +1655,6 @@ void __init noreturn __start_xen(unsigned long mbi_p)
 
     local_irq_enable();
 
-    vesa_mtrr_init();
-
     early_msi_init();
 
     iommu_setup();    /* setup iommu if available */
