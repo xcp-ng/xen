@@ -15,6 +15,7 @@
 #include <xen/acpi.h>
 #include <xen/event.h>
 #include <xen/iocap.h>
+#include <xen/sizes.h>
 #include <xen/device_tree.h>
 #include <xen/libfdt/libfdt.h>
 #include <acpi/actables.h>
@@ -31,6 +32,7 @@ static int __init acpi_iomem_deny_access(struct domain *d)
 {
     acpi_status status;
     struct acpi_table_spcr *spcr = NULL;
+    struct acpi_table_iort *iort;
     unsigned long mfn;
     int rc;
 
@@ -54,6 +56,44 @@ static int __init acpi_iomem_deny_access(struct domain *d)
     else
     {
         printk("Failed to get SPCR table, Xen console may be unavailable\n");
+    }
+
+    status = acpi_get_table(ACPI_SIG_IORT, 0,
+                            (struct acpi_table_header **)&iort);
+
+    if ( ACPI_SUCCESS(status) )
+    {
+        int i;
+        struct acpi_iort_node *node, *end;
+        node = ACPI_ADD_PTR(struct acpi_iort_node, iort, iort->node_offset);
+        end = ACPI_ADD_PTR(struct acpi_iort_node, iort, iort->header.length);
+
+        for ( i = 0; i < iort->node_count; i++ )
+        {
+            if ( node >= end )
+                break;
+
+            switch ( node->type )
+            {
+                case ACPI_IORT_NODE_SMMU_V3:
+                {
+                    struct acpi_iort_smmu_v3 *smmu;
+                    smmu = (struct acpi_iort_smmu_v3 *)node->node_data;
+                    mfn = paddr_to_pfn(smmu->base_address);
+                    rc = iomem_deny_access(d, mfn, mfn + PFN_UP(SZ_128K));
+                    if ( rc )
+                        printk("iomem_deny_access failed for SMMUv3\n");
+                    node->type = 0xff;
+                    break;
+                }
+            }
+            node = ACPI_ADD_PTR(struct acpi_iort_node, node, node->length);
+        }
+    }
+    else
+    {
+        printk("Failed to get IORT table\n");
+        return -EINVAL;
     }
 
     /* Deny MMIO access for GIC regions */
