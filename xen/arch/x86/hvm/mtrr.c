@@ -833,6 +833,10 @@ int epte_get_entry_emt(struct domain *d, unsigned long gfn, mfn_t mfn,
         return MTRR_TYPE_UNCACHABLE;
     }
 
+    /*
+     * Conditional must be kept in sync with the code in
+     * {iomem,ioports}_{permit,deny}_access().
+     */
     if ( !is_iommu_enabled(d) && !cache_flush_permitted(d) )
     {
         *ipat = 1;
