@@ -56,6 +56,7 @@
 #define ARCH_CAPS_IF_PSCHANGE_MC_NO	(_AC(1, ULL) << 6)
 #define ARCH_CAPS_TSX_CTRL		(_AC(1, ULL) << 7)
 #define ARCH_CAPS_TAA_NO		(_AC(1, ULL) << 8)
+#define ARCH_CAPS_DOITM			(_AC(1, ULL) << 12)
 #define ARCH_CAPS_SBDR_SSDP_NO		(_AC(1, ULL) << 13)
 #define ARCH_CAPS_FBSDP_NO		(_AC(1, ULL) << 14)
 #define ARCH_CAPS_PSDP_NO		(_AC(1, ULL) << 15)
@@ -239,6 +240,9 @@
 #define MSR_PL2_SSP                         0x000006a6
 #define MSR_PL3_SSP                         0x000006a7
 #define MSR_INTERRUPT_SSP_TABLE             0x000006a8
+
+#define MSR_UARCH_MISC_CTRL                 0x00001b01
+#define  UARCH_CTRL_DOITM                   (_AC(1, ULL) <<  0)
 
 /* K7/K8 MSRs. Not complete. See the architecture manual for a more
    complete list. */
