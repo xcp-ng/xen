@@ -254,6 +254,9 @@
 #define MSR_PL3_SSP                         0x000006a7
 #define MSR_INTERRUPT_SSP_TABLE             0x000006a8
 
+#define MSR_UARCH_MISC_CTRL                 0x00001b01
+#define  UARCH_CTRL_DOITM                   (_AC(1, ULL) <<  0)
+
 /* K7/K8 MSRs. Not complete. See the architecture manual for a more
    complete list. */
 #define MSR_K7_EVNTSEL0			0xc0010000
