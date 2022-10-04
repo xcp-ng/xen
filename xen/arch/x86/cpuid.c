@@ -66,7 +66,10 @@ static int __init parse_xen_cpuid(const char *s)
             if ( (val = parse_boolean(mid->name, s, ss)) >= 0 )
             {
                 if ( unlikely(mid->bit == ~0u) )
-                    ;
+                {
+                    if ( strcmp(mid->name, "doitm") == 0 )
+                        opt_doitm = val;
+                }
                 else if ( !val )
                     setup_clear_cpu_cap(mid->bit);
                 else if ( mid->bit == X86_FEATURE_RDRAND &&
