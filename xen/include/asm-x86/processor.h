@@ -621,6 +621,8 @@ void set_in_mcu_opt_ctrl(uint32_t mask, uint32_t val);
 
 void amd_check_zenbleed(void);
 
+extern bool opt_doitm;
+
 #endif /* !__ASSEMBLY__ */
 
 #endif /* __ASM_X86_PROCESSOR_H */

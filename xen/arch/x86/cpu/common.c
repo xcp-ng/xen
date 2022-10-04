@@ -204,6 +204,34 @@ void ctxt_switch_levelling(const struct vcpu *next)
 		alternative_vcall(ctxt_switch_masking, next);
 }
 
+bool __read_mostly opt_doitm = true;
+
+static void doitm_init(void)
+{
+    uint64_t val;
+
+    if ( !opt_doitm || !cpu_has_arch_caps )
+        return;
+
+    rdmsrl(MSR_ARCH_CAPABILITIES, val);
+    if ( !(val & ARCH_CAPS_DOITM) )
+        return;
+
+    /*
+     * We are currently unable to enumerate MSR_ARCH_CAPS to guest.  As a
+     * consequence, guest kernels will believe they're safe even when they are
+     * not.
+     *
+     * Until we can enumerate DOITM properly for guests, set it unilaterally.
+     * This prevents otherwise-correct crypto from becoming vulnerable to
+     * timing sidechannels.
+     */
+
+    rdmsrl(MSR_UARCH_MISC_CTRL, val);
+    val |= UARCH_CTRL_DOITM;
+    wrmsrl(MSR_UARCH_MISC_CTRL, val);
+}
+
 bool_t opt_cpu_info;
 boolean_param("cpuinfo", opt_cpu_info);
 
@@ -500,6 +528,7 @@ void identify_cpu(struct cpuinfo_x86 *c)
 	/* Now the feature flags better reflect actual CPU features! */
 
 	xstate_init(c);
+	doitm_init();
 
 #ifdef NOISY_CAPS
 	printk(KERN_DEBUG "CPU: After all inits, caps:");
