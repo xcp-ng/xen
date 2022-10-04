@@ -294,6 +294,19 @@ def crunch_numbers(state):
         AMD_STIBP: [STIBP_ALWAYS],
     }
 
+    #
+    # Pseudo feature names.  These don't map to a feature bit, but are
+    # inserted into the values dictionary so they can be parsed and handled
+    # specially
+    #
+    pseduo_names = (
+    )
+
+    for n in pseduo_names:
+        if n in state.values:
+            raise Fail("Pseduo feature name %s aliases real feature" % (n, ))
+        state.values[n] = 0xffffffff
+
     deep_features = tuple(sorted(deps.keys()))
     state.deep_deps = {}
 

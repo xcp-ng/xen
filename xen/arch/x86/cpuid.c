@@ -65,7 +65,9 @@ static int __init parse_xen_cpuid(const char *s)
 
             if ( (val = parse_boolean(mid->name, s, ss)) >= 0 )
             {
-                if ( !val )
+                if ( unlikely(mid->bit == ~0u) )
+                    ;
+                else if ( !val )
                     setup_clear_cpu_cap(mid->bit);
                 else if ( mid->bit == X86_FEATURE_RDRAND &&
                           (cpuid_ecx(1) & cpufeat_mask(X86_FEATURE_RDRAND)) )
