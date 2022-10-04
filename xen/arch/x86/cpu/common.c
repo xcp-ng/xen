@@ -206,6 +206,26 @@ void ctxt_switch_levelling(const struct vcpu *next)
 		alternative_vcall(ctxt_switch_masking, next);
 }
 
+static void doitm_init(void)
+{
+    uint64_t val;
+
+    if ( !cpu_has_doitm )
+        return;
+
+    /*
+     * We don't currently enumerate DOITM to guests.  As a conseqeuence, guest
+     * kernels will believe they're safe even when they are not.
+     *
+     * For now, set it unilaterally.  This prevents otherwise-correct crypto
+     * code from becoming vulnerable to timing sidechannels.
+     */
+
+    rdmsrl(MSR_UARCH_MISC_CTRL, val);
+    val |= UARCH_CTRL_DOITM;
+    wrmsrl(MSR_UARCH_MISC_CTRL, val);
+}
+
 bool_t opt_cpu_info;
 boolean_param("cpuinfo", opt_cpu_info);
 
@@ -510,6 +530,7 @@ void identify_cpu(struct cpuinfo_x86 *c)
 	/* Now the feature flags better reflect actual CPU features! */
 
 	xstate_init(c);
+	doitm_init();
 
 #ifdef NOISY_CAPS
 	printk(KERN_DEBUG "CPU: After all inits, caps:");
