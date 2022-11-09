@@ -333,6 +333,8 @@ struct scheduler {
                                     struct xen_sysctl_scheduler_op *);
     void         (*dump_settings)  (const struct scheduler *);
     void         (*dump_cpu_state) (const struct scheduler *, int);
+    void         (*move_timers)    (const struct scheduler *,
+                                    struct sched_resource *);
 };
 
 static inline int sched_init(struct scheduler *s)
@@ -492,6 +494,13 @@ static inline int sched_adjust_cpupool(const struct scheduler *s,
                                        struct xen_sysctl_scheduler_op *op)
 {
     return s->adjust_global ? s->adjust_global(s, op) : 0;
+}
+
+static inline void sched_move_timers(const struct scheduler *s,
+                                     struct sched_resource *sr)
+{
+    if ( s->move_timers )
+        s->move_timers(s, sr);
 }
 
 static inline void sched_unit_pause_nosync(const struct sched_unit *unit)

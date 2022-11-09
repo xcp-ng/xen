@@ -624,6 +624,18 @@ csched_init_pdata(const struct scheduler *ops, void *pdata, int cpu)
     spin_unlock_irqrestore(&prv->lock, flags);
 }
 
+static void
+csched_move_timers(const struct scheduler *ops, struct sched_resource *sr)
+{
+    struct csched_private *prv = CSCHED_PRIV(ops);
+    struct csched_pcpu *spc = sr->sched_priv;
+
+    if ( sr->master_cpu == prv->master )
+        migrate_timer(&prv->master_ticker, prv->master);
+
+    migrate_timer(&spc->ticker, sr->master_cpu);
+}
+
 /* Change the scheduler of cpu to us (Credit). */
 static spinlock_t *
 csched_switch_sched(struct scheduler *new_ops, unsigned int cpu,
@@ -2279,6 +2291,7 @@ static const struct scheduler sched_credit_def = {
     .switch_sched   = csched_switch_sched,
     .alloc_domdata  = csched_alloc_domdata,
     .free_domdata   = csched_free_domdata,
+    .move_timers    = csched_move_timers,
 };
 
 REGISTER_SCHEDULER(sched_credit_def);
