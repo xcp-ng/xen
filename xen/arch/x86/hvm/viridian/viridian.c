@@ -681,13 +681,18 @@ int viridian_hypercall(struct cpu_user_regs *regs)
 
         for_each_vcpu ( currd, v )
         {
+            struct vlapic *vlapic;
+
             if ( v->vcpu_id >= (sizeof(vcpu_mask) * 8) )
                 break;
 
             if ( !(vcpu_mask & (1ul << v->vcpu_id)) )
                 continue;
 
-            vlapic_set_irq(vcpu_vlapic(v), vector, 0);
+            vlapic = vcpu_vlapic(v);
+
+            if ( vlapic_enabled(vlapic) )
+                vlapic_set_irq(vlapic, vector, 0);
         }
 
         status = HV_STATUS_SUCCESS;
