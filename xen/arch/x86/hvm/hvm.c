@@ -1425,7 +1425,6 @@ static int cf_check hvm_load_cpu_msrs(struct domain *d, hvm_domain_context_t *h)
     struct vcpu *v;
     const struct hvm_save_descriptor *desc;
     struct hvm_msr *ctxt;
-    int err = 0;
 
     if ( vcpuid >= d->max_vcpus || (v = d->vcpu[vcpuid]) == NULL )
     {
@@ -1476,7 +1475,7 @@ static int cf_check hvm_load_cpu_msrs(struct domain *d, hvm_domain_context_t *h)
             return -EOPNOTSUPP;
     /* Checking finished */
 
-    for ( i = 0; !err && i < ctxt->count; ++i )
+    for ( i = 0; i < ctxt->count; ++i )
     {
         switch ( ctxt->msr[i].index )
         {
@@ -1492,17 +1491,15 @@ static int cf_check hvm_load_cpu_msrs(struct domain *d, hvm_domain_context_t *h)
             rc = guest_wrmsr(v, ctxt->msr[i].index, ctxt->msr[i].val);
 
             if ( rc != X86EMUL_OKAY )
-                err = -ENXIO;
+                return -ENXIO;
             break;
 
         default:
-            if ( !ctxt->msr[i]._rsvd )
-                err = -ENXIO;
-            break;
+            return -ENXIO;
         }
     }
 
-    return err;
+    return 0;
 }
 
 /* We need variable length data chunks for XSAVE area and MSRs, hence
