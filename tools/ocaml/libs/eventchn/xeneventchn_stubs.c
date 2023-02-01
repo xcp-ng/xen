@@ -64,6 +64,8 @@ CAMLprim value stub_eventchn_init(value cloexec)
 	if ( !Bool_val(cloexec) )
 		flags |= XENEVTCHN_NO_CLOEXEC;
 
+	result = caml_alloc_custom(&xenevtchn_ops, sizeof(xce), 0, 1);
+
 	caml_enter_blocking_section();
 	xce = xenevtchn_open(NULL, flags);
 	caml_leave_blocking_section();
@@ -71,7 +73,6 @@ CAMLprim value stub_eventchn_init(value cloexec)
 	if (xce == NULL)
 		caml_failwith("open failed");
 
-	result = caml_alloc_custom(&xenevtchn_ops, sizeof(xce), 0, 1);
 	*(xenevtchn_handle **)Data_custom_val(result) = xce;
 
 	CAMLreturn(result);
@@ -83,6 +84,8 @@ CAMLprim value stub_eventchn_fdopen(value fdval)
 	CAMLlocal1(result);
 	xenevtchn_handle *xce;
 
+	result = caml_alloc_custom(&xenevtchn_ops, sizeof(xce), 0, 1);
+
 	caml_enter_blocking_section();
 	xce = xenevtchn_fdopen(NULL, Int_val(fdval), 0);
 	caml_leave_blocking_section();
@@ -90,7 +93,6 @@ CAMLprim value stub_eventchn_fdopen(value fdval)
 	if (xce == NULL)
 		caml_failwith("evtchn fdopen failed");
 
-	result = caml_alloc_custom(&xenevtchn_ops, sizeof(xce), 0, 1);
 	*(xenevtchn_handle **)Data_custom_val(result) = xce;
 
 	CAMLreturn(result);
