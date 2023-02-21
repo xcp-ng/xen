@@ -177,10 +177,15 @@ static enum microcode_match_result microcode_fits(
         return MIS_UCODE;
     }
 
-    if ( mc_header->patch_id <= sig->rev )
+    if ( mc_header->patch_id < sig->rev )
     {
-        pr_debug("microcode: patch is already at required level or greater.\n");
+        pr_debug("microcode: patch is already at a greater level.\n");
         return OLD_UCODE;
+    }
+    else if ( mc_header->patch_id == sig->rev )
+    {
+        pr_debug("microcode: patch is at the same level.\n");
+        return SAME_UCODE;
     }
 
     pr_debug("microcode: CPU%d found a matching microcode update with version %#x (current=%#x)\n",
@@ -191,7 +196,13 @@ static enum microcode_match_result microcode_fits(
 
 static bool match_cpu(const struct microcode_patch *patch)
 {
-    return patch && (microcode_fits(patch->mc_amd) == NEW_UCODE);
+    enum microcode_match_result res = microcode_fits(patch->mc_amd);
+
+    /*
+     * Allow application of the same revision to pick up SMT-specific changes
+     * even if the revision of the other SMT thread is already up-to-date.
+     */
+    return patch && (res == NEW_UCODE || res == SAME_UCODE);
 }
 
 static void free_patch(void *mc)

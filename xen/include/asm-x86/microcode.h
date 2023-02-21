@@ -4,7 +4,8 @@
 #include <xen/percpu.h>
 
 enum microcode_match_result {
-    OLD_UCODE, /* signature matched, but revision id is older or equal */
+    OLD_UCODE, /* signature matched, but revision id is older */
+    SAME_UCODE, /* signature matched, but revision id is the same */
     NEW_UCODE, /* signature matched, but revision id is newer */
     MIS_UCODE, /* signature mismatched */
 };
