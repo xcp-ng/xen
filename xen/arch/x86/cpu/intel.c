@@ -446,6 +446,18 @@ static void init_intel(struct cpuinfo_x86 *c)
 	     ( c->cpuid_level >= 0x00000006 ) &&
 	     ( cpuid_eax(0x00000006) & (1u<<2) ) )
 		__set_bit(X86_FEATURE_ARAT, c->x86_capability);
+
+	/*
+	 * The Gather Data Sampling microcode mitigation (August 2023) has an
+	 * adverse performance impact on the CLWB instruction on SKX/CLX/CPX.
+	 *
+	 * On this model, CLWB has equivalent behaviour to CLFLUSHOPT but the
+	 * latter is not impacted.  Hide CLWB to cause Xen to fall back to
+	 * using CLFLUSHOPT instead.
+	 */
+	if (c == &boot_cpu_data &&
+	    c->x86 == 6 && c->x86_model == 0x55 /* INTEL_FAM6_SKYLAKE_X */)
+		setup_clear_cpu_cap(X86_FEATURE_CLWB);
 }
 
 const struct cpu_dev intel_cpu_dev = {
