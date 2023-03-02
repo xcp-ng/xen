@@ -185,6 +185,7 @@ int __must_check iommu_iotlb_flush_all(struct domain *d,
 enum iommu_feature
 {
     IOMMU_FEAT_COHERENT_WALK,
+    IOMMU_FEAT_XS_PV_IOMMU,
     IOMMU_FEAT_count
 };
 

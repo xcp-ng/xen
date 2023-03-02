@@ -253,6 +253,18 @@
  */
 #define XEN_ELFNOTE_DUMPCORE_FORMAT_VERSION     0x2000003
 
+
+/* XenServer specific ELF notes */
+
+/*
+ * If this note is present, Dom0 can use PV-IOMMU.
+ * Xen should initialise PV-IOMMU only if Dom0 supports it. Otherwise it leads
+ * to DMA errors.
+ */
+#define XS_ELFNOTE_PV_IOMMU               0
+
+#define XS_ELFNOTE_MAX XS_ELFNOTE_PV_IOMMU
+
 #endif /* __XEN_PUBLIC_ELFNOTE_H__ */
 
 /*

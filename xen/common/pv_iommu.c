@@ -80,6 +80,9 @@ int can_use_iommu_check(struct domain *d)
     if ( boot_cpu_data.x86_vendor == X86_VENDOR_AMD )
         return 0;
 
+    if ( !iommu_has_feature(d, IOMMU_FEAT_XS_PV_IOMMU) )
+        return 0;
+
     return 1;
 }
 
