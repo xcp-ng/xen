@@ -220,6 +220,53 @@ elf_errorstatus elf_xen_parse_note(struct elf_binary *elf,
     return 0;
 }
 
+/* mostly copy-paste of elf_xen_parse_note() */
+elf_errorstatus elf_xs_parse_note(struct elf_binary *elf,
+                       struct elf_dom_parms *parms,
+                       ELF_HANDLE_DECL(elf_note) note)
+{
+/* *INDENT-OFF* */
+    static const struct {
+        char *name;
+        bool str;
+    } note_desc[] = {
+        [XS_ELFNOTE_PV_IOMMU] = { "XS_PV_IOMMU", 0},
+    };
+/* *INDENT-ON* */
+
+    const char *str = NULL;
+    uint64_t val = 0;
+    unsigned type = elf_uval(elf, note, type);
+
+    if ( (type >= sizeof(note_desc) / sizeof(note_desc[0])) ||
+         (note_desc[type].name == NULL) )
+    {
+        elf_msg(elf, "XS ELF: note: unknown (%#x)\n", type);
+        return 0;
+    }
+
+    if ( note_desc[type].str )
+    {
+        str = elf_strval(elf, elf_note_desc(elf, note));
+        if (str == NULL)
+            /* elf_strval will mark elf broken if it fails so no need to log */
+            return 0;
+        elf_msg(elf, "XS ELF: note: %s = \"%s\"\n", note_desc[type].name, str);
+        parms->xs_elf_notes[type].type = XEN_ENT_STR;
+        parms->xs_elf_notes[type].data.str = str;
+    }
+    else
+    {
+        val = elf_note_numeric(elf, note);
+        elf_msg(elf, "XS ELF: note: %s = %#" PRIx64 "\n", note_desc[type].name, val);
+        parms->xs_elf_notes[type].type = XEN_ENT_LONG;
+        parms->xs_elf_notes[type].data.num = val;
+    }
+    parms->xs_elf_notes[type].name = note_desc[type].name;
+
+    return 0;
+}
+
 #define ELF_NOTE_INVALID (~0U)
 
 static unsigned elf_xen_parse_notes(struct elf_binary *elf,
@@ -251,6 +298,11 @@ static unsigned elf_xen_parse_notes(struct elf_binary *elf,
         note_name = elf_note_name(elf, note);
         if ( note_name == NULL )
             continue;
+        if ( !strcmp(note_name, "XS") )
+        {
+            elf_xs_parse_note(elf, parms, note);
+            continue;
+        }
         if ( strcmp(note_name, "Xen") )
             continue;
         if ( elf_xen_parse_note(elf, parms, note) )
