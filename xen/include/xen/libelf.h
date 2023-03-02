@@ -417,6 +417,7 @@ struct elf_dom_parms {
     elf_ptrval elf_note_start;
     elf_ptrval elf_note_end;
     struct xen_elfnote elf_notes[XEN_ELFNOTE_MAX + 1];
+    struct xen_elfnote xs_elf_notes[XS_ELFNOTE_MAX + 1];
 
     /* parsed */
     char guest_os[16];
@@ -460,6 +461,9 @@ elf_errorstatus elf_xen_parse_features(const char *features,
 elf_errorstatus elf_xen_parse_note(struct elf_binary *elf,
                                    struct elf_dom_parms *parms,
                                    ELF_HANDLE_DECL(elf_note) note);
+elf_errorstatus elf_xs_parse_note(struct elf_binary *elf,
+                                  struct elf_dom_parms *parms,
+                                  ELF_HANDLE_DECL(elf_note) note);
 elf_errorstatus elf_xen_parse_guest_info(struct elf_binary *elf,
                                          struct elf_dom_parms *parms);
 elf_errorstatus elf_xen_parse(struct elf_binary *elf,

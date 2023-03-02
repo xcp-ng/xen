@@ -1027,7 +1027,11 @@ static int __init dom0_construct(const struct boot_domain *bd)
     BUG_ON(rc != 0);
 
     if ( d->domain_id == hardware_domid )
+    {
+        if ( parms.xs_elf_notes[XS_ELFNOTE_PV_IOMMU].data.num != 0 )
+            iommu_set_feature(d, IOMMU_FEAT_XS_PV_IOMMU);
         iommu_hwdom_init(d);
+    }
 
 #ifdef CONFIG_SHADOW_PAGING
     /* Fill the shadow pool if necessary. */
