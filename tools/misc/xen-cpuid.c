@@ -629,9 +629,10 @@ int main(int argc, char **argv)
                 if ( i == nr_features )
                     break;
 
-                if ( *ptr == ':' )
+                if ( *ptr == ':' || *ptr == '-' )
                 {
-                    ptr++; continue;
+                    ptr++;
+                    continue;
                 }
                 break;
             }
