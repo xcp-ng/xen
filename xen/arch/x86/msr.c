@@ -24,6 +24,7 @@
 #include <xen/nospec.h>
 #include <xen/sched.h>
 
+#include <asm/cpu-policy.h>
 #include <asm/debugreg.h>
 #include <asm/msr.h>
 #include <asm/pv/domain.h>
@@ -31,21 +32,12 @@
 
 DEFINE_PER_CPU(uint32_t, tsc_aux);
 
-struct msr_policy __read_mostly     raw_msr_policy,
-                  __read_mostly    host_msr_policy;
-#ifdef CONFIG_PV
-struct msr_policy __read_mostly  pv_max_msr_policy;
-#endif
-#ifdef CONFIG_HVM
-struct msr_policy __read_mostly hvm_max_msr_policy;
-#endif
-
 struct vcpu_msrs __read_mostly hvm_max_vcpu_msrs,
                  __read_mostly  pv_max_vcpu_msrs;
 
 static void __init calculate_raw_policy(void)
 {
-    struct msr_policy *mp = &raw_msr_policy;
+    struct msr_policy *mp = &raw_cpu_policy;
 
     /* 0x000000ce  MSR_INTEL_PLATFORM_INFO */
     /* Was already added by probe_cpuid_faulting() */
@@ -56,9 +48,9 @@ static void __init calculate_raw_policy(void)
 
 static void __init calculate_host_policy(void)
 {
-    struct msr_policy *mp = &host_msr_policy;
+    struct msr_policy *mp = &host_cpu_policy;
 
-    *mp = raw_msr_policy;
+    *mp = raw_cpu_policy;
 
     /* 0x000000ce  MSR_INTEL_PLATFORM_INFO */
     /* probe_cpuid_faulting() sanity checks presence of MISC_FEATURES_ENABLES */
@@ -76,9 +68,9 @@ static void __init calculate_host_policy(void)
 
 static void __init calculate_hvm_max_policy(void)
 {
-    struct msr_policy *mp = &hvm_max_msr_policy;
+    struct msr_policy *mp = &hvm_max_cpu_policy;
 
-    *mp = host_msr_policy;
+    *mp = host_cpu_policy;
 
     /* It's always possible to emulate CPUID faulting for HVM guests */
     mp->platform_info.cpuid_faulting = true;
@@ -88,9 +80,9 @@ static void __init calculate_hvm_max_policy(void)
 
 static void __init calculate_pv_max_policy(void)
 {
-    struct msr_policy *mp = &pv_max_msr_policy;
+    struct msr_policy *mp = &pv_max_cpu_policy;
 
-    *mp = host_msr_policy;
+    *mp = host_cpu_policy;
 
     mp->arch_caps.raw = 0; /* Not supported yet. */
 }
@@ -110,8 +102,8 @@ void __init init_guest_msr_policy(void)
 int init_domain_msr_policy(struct domain *d)
 {
     struct msr_policy *mp = is_pv_domain(d)
-        ? (IS_ENABLED(CONFIG_PV)  ?  &pv_max_msr_policy : NULL)
-        : (IS_ENABLED(CONFIG_HVM) ? &hvm_max_msr_policy : NULL);
+        ? (IS_ENABLED(CONFIG_PV)  ?  &pv_max_cpu_policy : NULL)
+        : (IS_ENABLED(CONFIG_HVM) ? &hvm_max_cpu_policy : NULL);
 
     if ( !mp )
     {
