@@ -69,7 +69,7 @@ static void test_vendor_identification(void)
 static void test_cpuid_serialise_success(void)
 {
     static const struct test {
-        struct cpuid_policy p;
+        struct cpu_policy p;
         const char *name;
         unsigned int nr_leaves;
     } tests[] = {
@@ -186,7 +186,7 @@ static void test_cpuid_serialise_success(void)
 static void test_msr_serialise_success(void)
 {
     static const struct test {
-        struct msr_policy p;
+        struct cpu_policy p;
         const char *name;
         unsigned int nr_msrs;
     } tests[] = {
@@ -367,7 +367,7 @@ static void test_cpuid_out_of_range_clearing(void)
     static const struct test {
         const char *name;
         unsigned int nr_markers;
-        struct cpuid_policy p;
+        struct cpu_policy p;
     } tests[] = {
         {
             .name = "basic",
@@ -487,7 +487,7 @@ static void test_cpuid_out_of_range_clearing(void)
     for ( size_t i = 0; i < ARRAY_SIZE(tests); ++i )
     {
         const struct test *t = &tests[i];
-        struct cpuid_policy *p = memdup(&t->p);
+        struct cpu_policy *p = memdup(&t->p);
         void *ptr;
         unsigned int nr_markers;
 
@@ -511,23 +511,20 @@ static void test_is_compatible_success(void)
 {
     static struct test {
         const char *name;
-        struct cpuid_policy host_cpuid;
-        struct cpuid_policy guest_cpuid;
-        struct msr_policy host_msr;
-        struct msr_policy guest_msr;
+        struct cpu_policy host, guest;
     } tests[] = {
         {
             .name = "Host CPUID faulting, Guest not",
-            .host_msr = {
+            .host = {
                 .platform_info.cpuid_faulting = true,
             },
         },
         {
             .name = "Host CPUID faulting, Guest wanted",
-            .host_msr = {
+            .host = {
                 .platform_info.cpuid_faulting = true,
             },
-            .guest_msr = {
+            .guest = {
                 .platform_info.cpuid_faulting = true,
             },
         },
@@ -539,15 +536,8 @@ static void test_is_compatible_success(void)
     for ( size_t i = 0; i < ARRAY_SIZE(tests); ++i )
     {
         struct test *t = &tests[i];
-        struct old_cpu_policy sys = {
-            &t->host_cpuid,
-            &t->host_msr,
-        }, new = {
-            &t->guest_cpuid,
-            &t->guest_msr,
-        };
         struct cpu_policy_errors e;
-        int res = x86_cpu_policies_are_compatible(&sys, &new, &e);
+        int res = x86_cpu_policies_are_compatible(&t->host, &t->guest, &e);
 
         /* Check the expected error output. */
         if ( res != 0 || memcmp(&no_errors, &e, sizeof(no_errors)) )
@@ -561,25 +551,22 @@ static void test_is_compatible_failure(void)
 {
     static struct test {
         const char *name;
-        struct cpuid_policy host_cpuid;
-        struct cpuid_policy guest_cpuid;
-        struct msr_policy host_msr;
-        struct msr_policy guest_msr;
+        struct cpu_policy host, guest;
         struct cpu_policy_errors e;
     } tests[] = {
         {
             .name = "Host basic.max_leaf out of range",
-            .guest_cpuid.basic.max_leaf = 1,
+            .guest.basic.max_leaf = 1,
             .e = { 0, -1, -1 },
         },
         {
             .name = "Host extd.max_leaf out of range",
-            .guest_cpuid.extd.max_leaf = 1,
+            .guest.extd.max_leaf = 1,
             .e = { 0x80000000, -1, -1 },
         },
         {
             .name = "Host no CPUID faulting, Guest wanted",
-            .guest_msr = {
+            .guest = {
                 .platform_info.cpuid_faulting = true,
             },
             .e = { -1, -1, 0xce },
@@ -591,15 +578,8 @@ static void test_is_compatible_failure(void)
     for ( size_t i = 0; i < ARRAY_SIZE(tests); ++i )
     {
         struct test *t = &tests[i];
-        struct old_cpu_policy sys = {
-            &t->host_cpuid,
-            &t->host_msr,
-        }, new = {
-            &t->guest_cpuid,
-            &t->guest_msr,
-        };
         struct cpu_policy_errors e;
-        int res = x86_cpu_policies_are_compatible(&sys, &new, &e);
+        int res = x86_cpu_policies_are_compatible(&t->host, &t->guest, &e);
 
         /* Check the expected error output. */
         if ( res == 0 || memcmp(&t->e, &e, sizeof(t->e)) )
