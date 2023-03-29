@@ -462,7 +462,7 @@ int xc_cpuid_apply_policy(xc_interface *xch, uint32_t domid,
     xc_dominfo_t di;
     unsigned int i, nr_leaves, nr_msrs;
     xen_cpuid_leaf_t *leaves = NULL;
-    struct cpuid_policy *p = NULL;
+    struct cpu_policy *p = NULL;
     uint32_t err_leaf = -1, err_subleaf = -1, err_msr = -1;
 
     if ( xc_domain_getinfo(xch, domid, 1, &di) != 1 ||
