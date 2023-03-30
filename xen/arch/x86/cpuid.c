@@ -359,7 +359,7 @@ static void __init calculate_host_policy(void)
     p->extd.max_leaf = 0x80000000 | min_t(uint32_t, max_extd_leaf & 0xffff,
                                           ARRAY_SIZE(p->extd.raw) - 1);
 
-    cpuid_featureset_to_policy(boot_cpu_data.x86_capability, p);
+    x86_cpu_featureset_to_policy(boot_cpu_data.x86_capability, p);
     recalculate_xstate(p);
     recalculate_misc(p);
 
@@ -422,7 +422,7 @@ static void __init calculate_pv_max_policy(void)
     unsigned int i;
 
     *p = host_cpu_policy;
-    cpuid_policy_to_featureset(p, pv_featureset);
+    x86_cpu_policy_to_featureset(p, pv_featureset);
 
     for ( i = 0; i < ARRAY_SIZE(pv_featureset); ++i )
         pv_featureset[i] &= pv_featuremask[i];
@@ -440,7 +440,7 @@ static void __init calculate_pv_max_policy(void)
     guest_common_feature_adjustments(pv_featureset);
 
     sanitise_featureset(pv_featureset);
-    cpuid_featureset_to_policy(pv_featureset, p);
+    x86_cpu_featureset_to_policy(pv_featureset, p);
     recalculate_xstate(p);
 
     p->extd.raw[0xa] = EMPTY_LEAF; /* No SVM for PV guests. */
@@ -454,7 +454,7 @@ static void __init calculate_hvm_max_policy(void)
     const uint32_t *hvm_featuremask;
 
     *p = host_cpu_policy;
-    cpuid_policy_to_featureset(p, hvm_featureset);
+    x86_cpu_policy_to_featureset(p, hvm_featureset);
 
     hvm_featuremask = hvm_hap_supported() ?
         hvm_hap_featuremask : hvm_shadow_featuremask;
@@ -503,7 +503,7 @@ static void __init calculate_hvm_max_policy(void)
     guest_common_feature_adjustments(hvm_featureset);
 
     sanitise_featureset(hvm_featureset);
-    cpuid_featureset_to_policy(hvm_featureset, p);
+    x86_cpu_featureset_to_policy(hvm_featureset, p);
     recalculate_xstate(p);
 }
 
@@ -567,8 +567,8 @@ void recalculate_cpuid_policy(struct domain *d)
                                             ? CPUID_GUEST_NR_EXTD_AMD
                                             : CPUID_GUEST_NR_EXTD_INTEL) - 1);
 
-    cpuid_policy_to_featureset(p, fs);
-    cpuid_policy_to_featureset(max, max_fs);
+    x86_cpu_policy_to_featureset(p, fs);
+    x86_cpu_policy_to_featureset(max, max_fs);
 
     if ( is_hvm_domain(d) )
     {
@@ -655,7 +655,7 @@ void recalculate_cpuid_policy(struct domain *d)
                            (cpufeat_mask(X86_FEATURE_FDP_EXCP_ONLY) |
                             cpufeat_mask(X86_FEATURE_NO_FPU_SEL)));
 
-    cpuid_featureset_to_policy(fs, p);
+    x86_cpu_featureset_to_policy(fs, p);
 
     /* Pass host cacheline size through to guests. */
     p->basic.clflush_size = max->basic.clflush_size;
@@ -721,7 +721,7 @@ void __init init_dom0_cpuid_policy(struct domain *d)
         uint32_t fs[FSCAPINTS];
         unsigned int i;
 
-        cpuid_policy_to_featureset(p, fs);
+        x86_cpu_policy_to_featureset(p, fs);
 
         for ( i = 0; i < ARRAY_SIZE(fs); ++i )
         {
@@ -729,7 +729,7 @@ void __init init_dom0_cpuid_policy(struct domain *d)
             fs[i] &= ~dom0_disable_feat[i];
         }
 
-        cpuid_featureset_to_policy(fs, p);
+        x86_cpu_featureset_to_policy(fs, p);
 
         recalculate_cpuid_policy(d);
     }
