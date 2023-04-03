@@ -10,6 +10,9 @@ extern struct cpu_policy    host_cpu_policy;
 extern struct cpu_policy  pv_max_cpu_policy;
 extern struct cpu_policy hvm_max_cpu_policy;
 
+/* Initialise the guest cpu_policy objects. */
+void init_guest_cpu_policies(void);
+
 /* Allocate and initialise a CPU policy suitable for the domain. */
 int init_domain_cpu_policy(struct domain *d);
 
