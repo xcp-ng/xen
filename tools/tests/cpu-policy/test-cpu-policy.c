@@ -491,7 +491,7 @@ static void test_cpuid_out_of_range_clearing(void)
         void *ptr;
         unsigned int nr_markers;
 
-        x86_cpuid_policy_clear_out_of_range_leaves(p);
+        x86_cpu_policy_clear_out_of_range_leaves(p);
 
         /* Count the number of 0xc2's still remaining. */
         for ( ptr = p, nr_markers = 0;
