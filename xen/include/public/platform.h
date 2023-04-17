@@ -605,6 +605,16 @@ struct xenpf_symdata {
 typedef struct xenpf_symdata xenpf_symdata_t;
 DEFINE_XEN_GUEST_HANDLE(xenpf_symdata_t);
 
+#define XENPF_get_ucode_revision 65
+struct xenpf_ucode_revision {
+    uint32_t cpu;             /* IN:  CPU number to get the revision from.  */
+    uint32_t signature;       /* OUT: CPU signature (CPUID.1.EAX).          */
+    uint32_t pf;              /* OUT: Platform Flags (Intel only)           */
+    uint32_t revision;        /* OUT: Microcode Revision.                   */
+};
+typedef struct xenpf_ucode_revision xenpf_ucode_revision_t;
+DEFINE_XEN_GUEST_HANDLE(xenpf_ucode_revision_t);
+
 /*
  * ` enum neg_errnoval
  * ` HYPERVISOR_platform_op(const struct xen_platform_op*);
@@ -635,6 +645,7 @@ struct xen_platform_op {
         xenpf_core_parking_t          core_parking;
         xenpf_resource_op_t           resource_op;
         xenpf_symdata_t               symdata;
+        xenpf_ucode_revision_t        ucode_revision;
         uint8_t                       pad[128];
     } u;
 };
