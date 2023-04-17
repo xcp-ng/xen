@@ -2012,6 +2012,7 @@ amd_like(const struct x86_emulate_ctxt *ctxt)
 #define vcpu_has_tsxldtrk()    (ctxt->cpuid->feat.tsxldtrk)
 #define vcpu_has_avx_vnni()    (ctxt->cpuid->feat.avx_vnni)
 #define vcpu_has_avx512_bf16() (ctxt->cpuid->feat.avx512_bf16)
+#define vcpu_has_wrmsrns()     (ctxt->cpuid->feat.wrmsrns)
 
 #define vcpu_must_have(feat) \
     generate_exception_if(!vcpu_has_##feat(), EXC_UD)
@@ -5729,6 +5730,20 @@ x86_emulate(
 
         switch( modrm )
         {
+        case 0xc6:
+            switch ( vex.pfx )
+            {
+            case vex_none: /* wrmsrns */
+                vcpu_must_have(wrmsrns);
+                generate_exception_if(!mode_ring0(), X86_EXC_GP, 0);
+                fail_if(!ops->write_msr);
+                rc = ops->write_msr(_regs.ecx,
+                                    ((uint64_t)_regs.r(dx) << 32) | _regs.eax,
+                                    ctxt);
+                goto done;
+            }
+            generate_exception(X86_EXC_UD);
+
         case 0xca: /* clac */
         case 0xcb: /* stac */
             vcpu_must_have(smap);
