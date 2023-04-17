@@ -27,6 +27,7 @@
 #include <public/platform.h>
 #include <acpi/cpufreq/processor_perf.h>
 #include <asm/edd.h>
+#include <asm/microcode.h>
 #include <asm/mtrr.h>
 #include <asm/io_apic.h>
 #include <asm/setup.h>
@@ -605,6 +606,35 @@ ret_t do_platform_op(XEN_GUEST_HANDLE_PARAM(xen_platform_op_t) u_xenpf_op)
         put_cpu_maps();
 
         if ( __copy_field_to_guest(u_xenpf_op, op, u.pcpu_version) )
+            ret = -EFAULT;
+    }
+    break;
+
+    case XENPF_get_ucode_revision:
+    {
+        struct xenpf_ucode_revision *rev = &op->u.ucode_revision;
+
+        if ( !get_cpu_maps() )
+        {
+            ret = -EBUSY;
+            break;
+        }
+
+        /* TODO: make it possible to know ucode revisions for parked CPUs */
+        if ( (rev->cpu >= nr_cpu_ids) || !cpu_online(rev->cpu) )
+            ret = -ENOENT;
+        else
+        {
+            const struct cpu_signature *sig = &per_cpu(cpu_sig, rev->cpu);
+
+            rev->signature = sig->sig;
+            rev->pf = sig->pf;
+            rev->revision = sig->rev;
+        }
+
+        put_cpu_maps();
+
+        if ( __copy_field_to_guest(u_xenpf_op, op, u.ucode_revision) )
             ret = -EFAULT;
     }
     break;
