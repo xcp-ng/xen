@@ -333,7 +333,7 @@ static void recalculate_misc(struct cpu_policy *p)
     }
 }
 
-static void __init calculate_raw_policy(void)
+void calculate_raw_cpu_policy(void)
 {
     struct cpu_policy *p = &raw_cpu_policy;
 
@@ -545,7 +545,7 @@ static void __init calculate_hvm_max_policy(void)
 
 void __init init_guest_cpu_policies(void)
 {
-    calculate_raw_policy();
+    calculate_raw_cpu_policy();
     calculate_host_policy();
 
     if ( IS_ENABLED(CONFIG_PV) )
