@@ -192,6 +192,9 @@ gdt_48: .word   .Ltrampoline_gdt_end - trampoline_gdt - 1
 
         .code32
 trampoline_boot_cpu_entry:
+        /* Switch to relocated trampoline GDT. */
+        lgdt    bootsym_rel(gdt_48, 4)
+
         cmpb    $0,bootsym_rel(skip_realmode,5)
         jnz     .Lskip_realmode
 
