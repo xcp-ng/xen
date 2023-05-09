@@ -365,7 +365,7 @@ long do_domctl(XEN_GUEST_HANDLE_PARAM(xen_domctl_t) u_domctl)
         /* fall through */
     default:
         d = rcu_lock_domain_by_id(op->domain);
-        if ( !d && op->cmd != XEN_DOMCTL_getdomaininfo )
+        if ( !d )
             return -ESRCH;
     }
 
@@ -373,27 +373,6 @@ long do_domctl(XEN_GUEST_HANDLE_PARAM(xen_domctl_t) u_domctl)
     switch ( op->cmd )
     {
     case XEN_DOMCTL_getdomaininfo:
-    {
-        domid_t dom = DOMID_INVALID;
-
-        if ( !d )
-        {
-            ret = -EINVAL;
-            if ( op->domain >= DOMID_FIRST_RESERVED )
-                goto domctl_out_unlock_domonly;
-
-            rcu_read_lock(&domlist_read_lock);
-
-            dom = op->domain;
-            for_each_domain ( d )
-                if ( d->domain_id >= dom )
-                    break;
-        }
-
-        ret = -ESRCH;
-        if ( !d )
-            goto getdomaininfo_out;
-
         ret = xsm_getdomaininfo(XSM_XS_PRIV, d);
         if ( !ret )
         {
@@ -401,18 +380,9 @@ long do_domctl(XEN_GUEST_HANDLE_PARAM(xen_domctl_t) u_domctl)
 
             op->domain = op->u.getdomaininfo.domain;
             copyback = true;
-
-    getdomaininfo_out:
-            /* When d was non-NULL upon entry, no cleanup is needed. */
-            if ( dom == DOMID_INVALID )
-                goto domctl_out_unlock_domonly;
-
-            rcu_read_unlock(&domlist_read_lock);
-            d = NULL;
         }
 
         goto domctl_out_unlock_domonly;
-    }
 
     case XEN_DOMCTL_iomem_permission:
     {
