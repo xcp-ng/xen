@@ -335,15 +335,14 @@ static int destroy_domain(void *_domain)
 	return 0;
 }
 
-static bool get_domain_info(unsigned int domid, xc_dominfo_t *dominfo)
+static bool get_domain_info(unsigned int domid, xc_domaininfo_t *dominfo)
 {
-	return xc_domain_getinfo(*xc_handle, domid, 1, dominfo) == 1 &&
-	       dominfo->domid == domid;
+	return xc_domain_getinfo_single(*xc_handle, domid, dominfo) == 0;
 }
 
 void check_domains(void)
 {
-	xc_dominfo_t dominfo;
+	xc_domaininfo_t dominfo;
 	struct domain *domain;
 	struct connection *conn;
 	int notify = 0;
@@ -360,12 +359,12 @@ void check_domains(void)
 			continue;
 		}
 		if (dom_valid) {
-			if ((dominfo.crashed || dominfo.shutdown)
+			if ((dominfo.flags & XEN_DOMINF_shutdown)
 			    && !domain->shutdown) {
 				domain->shutdown = true;
 				notify = 1;
 			}
-			if (!dominfo.dying)
+			if (!(dominfo.flags & XEN_DOMINF_dying))
 				continue;
 		}
 		if (domain->conn) {
@@ -488,7 +487,7 @@ static struct domain *find_or_alloc_domain(const void *ctx, unsigned int domid)
 static struct domain *find_or_alloc_existing_domain(unsigned int domid)
 {
 	struct domain *domain;
-	xc_dominfo_t dominfo;
+	xc_domaininfo_t dominfo;
 
 	domain = find_domain_struct(domid);
 	if (!domain && get_domain_info(domid, &dominfo))
@@ -1012,7 +1011,7 @@ int domain_alloc_permrefs(struct node_perms *perms)
 {
 	unsigned int i, domid;
 	struct domain *d;
-	xc_dominfo_t dominfo;
+	xc_domaininfo_t dominfo;
 
 	for (i = 0; i < perms->num; i++) {
 		domid = perms->p[i].id;
