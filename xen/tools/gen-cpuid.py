@@ -310,6 +310,9 @@ def crunch_numbers(state):
         IBRS: [AMD_STIBP, AMD_SSBD, PSFD,
                IBRS_ALWAYS, IBRS_FAST, IBRS_SAME_MODE],
         AMD_STIBP: [STIBP_ALWAYS],
+
+        # The ARCH_CAPS CPUID bit enumerates the availability of the whole register.
+        ARCH_CAPS: list(range(RDCL_NO, RDCL_NO + 64)),
     }
 
     deep_features = tuple(sorted(deps.keys()))
