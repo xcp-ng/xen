@@ -461,8 +461,6 @@ static void __init calculate_pv_max_policy(void)
     recalculate_xstate(p);
 
     p->extd.raw[0xa] = EMPTY_LEAF; /* No SVM for PV guests. */
-
-    p->arch_caps.raw = 0; /* Not supported yet. */
 }
 
 static void __init calculate_hvm_max_policy(void)
@@ -527,8 +525,6 @@ static void __init calculate_hvm_max_policy(void)
 
     /* It's always possible to emulate CPUID faulting for HVM guests */
     p->platform_info.cpuid_faulting = true;
-
-    p->arch_caps.raw = 0; /* Not supported yet. */
 }
 
 void __init init_guest_cpu_policies(void)
@@ -664,6 +660,22 @@ void recalculate_cpuid_policy(struct domain *d)
         __set_bit(X86_FEATURE_RTM, max_fs);
     }
 
+    if ( boot_cpu_data.x86_vendor == X86_VENDOR_INTEL )
+    {
+        /*
+         * MSR_ARCH_CAPS is just feature data, and we can offer it to guests
+         * unconditionally, although limit it to Intel systems as it is highly
+         * uarch-specific.
+         *
+         * In particular, the RSBA and RRSBA bits mean "you might migrate to a
+         * system where RSB underflow uses alternative predictors (a.k.a
+         * Retpoline not safe)", so these need to be visible to a guest in all
+         * cases, even when it's only some other server in the pool which
+         * suffers the identified behaviour.
+         */
+        __set_bit(X86_FEATURE_ARCH_CAPS, fs);
+    }
+
     /* Clamp the toolstacks choices to reality. */
     for ( i = 0; i < ARRAY_SIZE(fs); i++ )
         fs[i] &= max_fs[i];
@@ -742,7 +754,10 @@ void __init init_dom0_cpuid_policy(struct domain *d)
      * domain policy logic gains a better understanding of MSRs.
      */
     if ( is_hardware_domain(d) && cpu_has_arch_caps )
+    {
         p->feat.arch_caps = true;
+        p->arch_caps.raw = host_cpu_policy.arch_caps.raw;
+    }
 
     /* Apply dom0-cpuid= command line settings, if provided. */
     if ( dom0_cpuid_cmdline )
@@ -772,20 +787,6 @@ void __init init_dom0_cpuid_policy(struct domain *d)
         p->platform_info.cpuid_faulting = false;
 
     recalculate_cpuid_policy(d);
-
-    if ( is_hardware_domain(d) && cpu_has_arch_caps )
-    {
-        uint64_t val;
-
-        rdmsrl(MSR_ARCH_CAPABILITIES, val);
-
-        p->arch_caps.raw = val &
-            (ARCH_CAPS_RDCL_NO | ARCH_CAPS_IBRS_ALL | ARCH_CAPS_RSBA |
-             ARCH_CAPS_SSB_NO | ARCH_CAPS_MDS_NO | ARCH_CAPS_IF_PSCHANGE_MC_NO |
-             ARCH_CAPS_TAA_NO | ARCH_CAPS_SBDR_SSDP_NO | ARCH_CAPS_FBSDP_NO |
-             ARCH_CAPS_PSDP_NO | ARCH_CAPS_FB_CLEAR | ARCH_CAPS_RRSBA |
-             ARCH_CAPS_BHI_NO | ARCH_CAPS_PBRSB_NO);
-    }
 }
 
 static void __init __maybe_unused build_assertions(void)
