@@ -222,7 +222,12 @@ void x86_cpu_policy_fill_native(struct cpu_policy *p)
                           ARRAY_SIZE(p->extd.raw) - 1); ++i )
         cpuid_leaf(0x80000000 + i, &p->extd.raw[i]);
 
-    /* TODO MSRs */
+#ifdef __XEN__
+    /* TODO MSR_PLATFORM_INFO */
+
+    if ( p->feat.arch_caps )
+        rdmsrl(MSR_ARCH_CAPABILITIES, p->arch_caps.raw);
+#endif
 
     x86_cpu_policy_recalc_synth(p);
 }
