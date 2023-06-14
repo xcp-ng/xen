@@ -51,6 +51,7 @@
 
 #define MSR_PRED_CMD			0x00000049
 #define PRED_CMD_IBPB			(_AC(1, ULL) << 0)
+#define PRED_CMD_SBPB			(_AC(1, ULL) << 7)
 
 #define MSR_ARCH_CAPABILITIES		0x0000010a
 #define ARCH_CAPS_RDCL_NO		(_AC(1, ULL) << 0)
