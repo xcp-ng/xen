@@ -142,10 +142,12 @@ efi_platform:
 
         .section .init.text, "ax", @progbits
 
-bad_cpu:
+early_error: /* Here to improve the disassembly. */
+
+.Lbad_cpu:
         mov     $sym_offs(.Lbad_cpu_msg), %ecx
         jmp     .Lget_vtb
-not_multiboot:
+.Lnot_multiboot:
         mov     $sym_offs(.Lbad_ldr_msg), %ecx
         jmp     .Lget_vtb
 .Lnot_aligned:
@@ -180,7 +182,7 @@ not_multiboot:
         xor     %edi,%edi                       # No VGA text buffer
         jmp     .Lprint_err
 .Lget_vtb:
-        mov     sym_esi(vga_text_buffer),%edi
+        mov     sym_esi(vga_text_buffer), %edi
 .Lprint_err:
         add     %ecx, %esi     # Add string offset to relocation base.
         # NOTE: No further use of sym_esi() till the end of the "function"!
@@ -205,6 +207,9 @@ not_multiboot:
 .Lhalt: hlt
         jmp     .Lhalt
 
+        .size early_error, . - early_error
+        .type early_error, @function
+
         .code64
 
 __efi64_mb2_start:
@@ -224,8 +229,8 @@ __efi64_mb2_start:
         cmp     $MULTIBOOT2_BOOTLOADER_MAGIC,%eax
         je      .Lefi_multiboot2_proto
 
-        /* Jump to not_multiboot after switching CPU to x86_32 mode. */
-        lea     not_multiboot(%rip),%r15
+        /* Jump to .Lnot_multiboot after switching CPU to x86_32 mode. */
+        lea     .Lnot_multiboot(%rip), %r15
         jmp     x86_32_switch
 
 .Lefi_multiboot2_proto:
@@ -467,7 +472,7 @@ __start:
 
         /* Check for Multiboot bootloader. */
         cmp     $MULTIBOOT_BOOTLOADER_MAGIC,%eax
-        jne     not_multiboot
+        jne     .Lnot_multiboot
 
         /* Get mem_lower from Multiboot information. */
         testb   $MBI_MEMLIMITS,MB_flags(%ebx)
@@ -658,7 +663,7 @@ trampoline_setup:
 
         /* Check for availability of long mode. */
         bt      $cpufeat_bit(X86_FEATURE_LM),%edx
-        jnc     bad_cpu
+        jnc     .Lbad_cpu
 
         /* Stash TSC to calculate a good approximation of time-since-boot */
         rdtsc
