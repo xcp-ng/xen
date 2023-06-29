@@ -67,4 +67,7 @@
 #define __must_check __attribute__((__warn_unused_result__))
 #endif
 
+#define __AC(X, Y)   (X ## Y)
+#define _AC(X, Y)    __AC(X, Y)
+
 #endif	/* __XEN_TOOLS_LIBS__ */
