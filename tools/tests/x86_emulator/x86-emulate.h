@@ -59,9 +59,6 @@
     (type *)((char *)mptr__ - offsetof(type, member)); \
 })
 
-#define AC_(n,t) (n##t)
-#define _AC(n,t) AC_(n,t)
-
 #define hweight32 __builtin_popcount
 #define hweight64 __builtin_popcountll
 
