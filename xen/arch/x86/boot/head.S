@@ -240,9 +240,10 @@ __efi64_mb2_start:
         jmp     x86_32_switch
 
 .Lefi_multiboot2_proto:
-        /* Zero EFI SystemTable and EFI ImageHandle addresses. */
+        /* Zero EFI SystemTable, EFI ImageHandle addresses and cmdline. */
         xor     %esi,%esi
         xor     %edi,%edi
+        xor     %edx,%edx
 
         /* Skip Multiboot2 information fixed part. */
         lea     (MB2_fixed_sizeof+MULTIBOOT2_TAG_ALIGN-1)(%rbx),%ecx
@@ -279,6 +280,13 @@ __efi64_mb2_start:
         cmpl    $MULTIBOOT2_TAG_TYPE_EFI64_IH,MB2_tag_type(%rcx)
         cmove   MB2_efi64_ih(%rcx),%rdi
         je      .Lefi_mb2_next_tag
+
+        /* Get command line from Multiboot2 information. */
+        cmpl    $MULTIBOOT2_TAG_TYPE_CMDLINE, MB2_tag_type(%rcx)
+        jne     .Lno_cmdline
+        lea     MB2_tag_string(%rcx), %rdx
+        jmp     .Lefi_mb2_next_tag
+.Lno_cmdline:
 
         /* Is it the end of Multiboot2 information? */
         cmpl    $MULTIBOOT2_TAG_TYPE_END,MB2_tag_type(%rcx)
@@ -343,7 +351,8 @@ __efi64_mb2_start:
 
         /*
          * efi_multiboot2() is called according to System V AMD64 ABI:
-         *   - IN:  %rdi - EFI ImageHandle, %rsi - EFI SystemTable.
+         *   - IN:  %rdi - EFI ImageHandle, %rsi - EFI SystemTable,
+         *          %rdx - MB2 cmdline
          */
         call    efi_multiboot2
 
