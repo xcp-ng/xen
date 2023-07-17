@@ -1057,3 +1057,120 @@ bool xc_cpu_policy_is_compatible(xc_interface *xch, xc_cpu_policy_t *host,
 
     return false;
 }
+
+/*
+ * Combine @p1 and @p2 which expected to be Guest PV/HVM default featuresets.
+ *
+ * Neither policy are necesserily relevant to this host, so no querying
+ * Xen. The caller passes us 3 bitmaps (p1, p2, out) of @len words.
+ *
+ * This is mostly an intersection of p1 and p2, but a few features need
+ * unioning, and some need calculating specifically.
+ */
+void xc_combine_cpu_featuresets(
+    const uint32_t *p1, const uint32_t *p2, uint32_t *out, size_t len)
+{
+    static const uint32_t or[] = INIT_SIMPLE_OR;
+
+    size_t i;
+
+    /* Mostly an intersection.  A few features are unioned, although ... */
+    for ( i = 0; i < len; ++i )
+    {
+        out[i] = p1[i] & p2[i];
+
+        if ( i < ARRAY_SIZE(or) && or[i] )
+            out[i] |= (or[i] & (p1[i] | p2[i]));
+    }
+
+    /* ... they might have unmet dependenices. */
+    clear_deep_deps(out, len);
+
+    /*
+     * Recalculate the RSBA/RRSBA bit.  If either p1 or p2 suffer any form of
+     * (R)RSBA, so must the resulting policy, and which depends on whether the
+     * eIBRS is visible.
+     */
+    if ( len > (X86_FEATURE_EIBRS >> 5) &&
+         test_bit(X86_FEATURE_ARCH_CAPS, out) &&
+         (test_bit(X86_FEATURE_RSBA, p1) || test_bit(X86_FEATURE_RRSBA, p1) ||
+          test_bit(X86_FEATURE_RSBA, p2) || test_bit(X86_FEATURE_RRSBA, p2)) )
+    {
+        bool eibrs = test_bit(X86_FEATURE_EIBRS, out);
+
+        clear_bit(X86_FEATURE_RSBA, out);
+        clear_bit(X86_FEATURE_RRSBA, out);
+
+        set_bit(eibrs ? X86_FEATURE_RRSBA
+                      : X86_FEATURE_RSBA, out);
+    }
+}
+
+static const struct bit_name {
+    const char *name;
+    unsigned int bit;
+} bit_names[] = INIT_BIT_NAMES;
+
+static int compare_bit_name(const void *_l, const void *_r)
+{
+    const struct bit_name *l = _l, *r = _r;
+
+    return l->bit - r->bit;
+}
+
+static const char *feat_name(unsigned int feat)
+{
+    struct bit_name key = { .bit = feat }, *res;
+
+    res = bsearch(&key, bit_names, ARRAY_SIZE(bit_names),
+                  sizeof(bit_names[0]), compare_bit_name);
+
+    return res ? res->name : NULL;
+}
+
+/*
+ * Check if @vm can run on @host.  The caller passes t bitmaps (vm, host) of
+ * @len words, and some scratch space for an error string.
+ *
+ * Returns NULL on success, or a string describing the missing features on
+ * error.
+ */
+const char *xc_cpu_featuresets_are_compatible(
+    const uint32_t *vm, const uint32_t *host, size_t len, char err[128])
+{
+    size_t i, space = 128;
+    uint32_t missing;
+    char *p = err;
+
+    for ( i = 0; i < len; ++i )
+    {
+        missing = vm[i] & ~host[i];
+        if ( missing )
+            goto not_compatible;
+    }
+
+    /* Compatible */
+    return NULL;
+
+ not_compatible:
+    /* Not compatible.  Render the missing features. */
+
+    while ( missing && (p - err) < 128 )
+    {
+        unsigned int bit = ffs(missing) - 1;
+        uint32_t feat = i * 32 + bit;
+        const char *name = feat_name(feat);
+        int nr;
+
+        if ( name )
+            nr = snprintf(p, space, " %s", name);
+        else
+            nr = snprintf(p, space, " <%zu*32+%u>", i, bit);
+
+        p += nr;
+        missing &= ~(1u << bit);
+    }
+    err[127] = '\0';
+
+    return err + 1; /* Trim leading space */
+}
