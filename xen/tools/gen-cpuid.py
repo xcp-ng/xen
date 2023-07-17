@@ -499,6 +499,22 @@ def write_results(state):
     state.output.write(
 """}
 
+#define INIT_BIT_NAMES { \\
+""")
+
+    try:
+        _tmp = state.names.iteritems()
+    except AttributeError:
+        _tmp = state.names.items()
+
+    for bit, name in sorted(_tmp):
+        state.output.write(
+            '    { "%s", %sU },\\\n' % (name, bit)
+            )
+
+    state.output.write(
+"""}
+
 """)
 
     for idx, text in enumerate(state.bitfields):
