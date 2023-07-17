@@ -826,6 +826,11 @@ int xc_set_domain_cpu_policy(xc_interface *xch, uint32_t domid,
 
 uint32_t xc_get_cpu_featureset_size(void);
 
+void xc_combine_cpu_featuresets(
+    const uint32_t *p1, const uint32_t *p2, uint32_t *out, size_t len);
+const char *xc_cpu_featuresets_are_compatible(
+    const uint32_t *vm, const uint32_t *host, size_t len, char err[128]);
+
 enum xc_static_cpu_featuremask {
     XC_FEATUREMASK_KNOWN,
     XC_FEATUREMASK_SPECIAL,
