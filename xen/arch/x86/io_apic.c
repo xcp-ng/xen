@@ -1271,7 +1271,7 @@ static void _print_IO_APIC_keyhandler(unsigned char key)
     __print_IO_APIC(0);
 }
 
-static void __init enable_IO_APIC(void)
+void __init enable_IO_APIC(void)
 {
     int i8259_apic, i8259_pin;
     int i, apic;
@@ -2066,8 +2066,6 @@ static void __init ioapic_pm_state_alloc(void)
 
 void __init setup_IO_APIC(void)
 {
-    enable_IO_APIC();
-
     if (acpi_ioapic)
         io_apic_irqs = ~0;	/* all IRQs go through IOAPIC */
     else
