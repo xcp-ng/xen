@@ -93,7 +93,7 @@ int intel_iommu_get_reserved_device_memory(iommu_grdm_t *func, void *ctxt);
 
 unsigned int io_apic_read_remap_rte(unsigned int apic, unsigned int reg);
 void io_apic_write_remap_rte(unsigned int apic,
-                             unsigned int reg, unsigned int value);
+                             unsigned int reg, uint64_t rte);
 
 struct msi_desc;
 struct msi_msg;
