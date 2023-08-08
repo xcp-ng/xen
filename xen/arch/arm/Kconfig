@@ -15,7 +15,6 @@ config ARM
 	select HAS_ALTERNATIVE
 	select HAS_DEVICE_TREE
 	select HAS_PASSTHROUGH
-	select HAS_PDX
 	select HAS_PMAP
 	select IOMMU_FORCE_PT_SHARE
 
