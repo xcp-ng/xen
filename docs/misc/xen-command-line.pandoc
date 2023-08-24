@@ -1673,7 +1673,7 @@ record with other registers.
 ### loglvl
 > `= <level>[/<rate-limited level>]` where level is `none | error | warning | info | debug | all`
 
-> Default: `loglvl=warning`
+> Default: `loglvl=info`
 
 > Can be modified at runtime
 
