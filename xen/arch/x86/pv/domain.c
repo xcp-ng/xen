@@ -394,12 +394,15 @@ bool __init xpti_pcid_enabled(void)
 
 static void _toggle_guest_pt(struct vcpu *v)
 {
+    bool guest_update;
+    pagetable_t old_shadow;
     const struct domain *d = v->domain;
     struct cpu_info *cpu_info = get_cpu_info();
     unsigned long cr3;
 
     v->arch.flags ^= TF_kernel_mode;
-    update_cr3(v);
+    guest_update = v->arch.flags & TF_kernel_mode;
+    old_shadow = update_cr3(v);
     if ( d->arch.pv.xpti )
     {
         cpu_info->root_pgt_changed = true;
@@ -415,16 +418,32 @@ static void _toggle_guest_pt(struct vcpu *v)
      * have changed behind our backs. To be on the safe side, suppress the
      * no-flush unconditionally in this case. The XPTI CR3 write, if enabled,
      * will then need to be a flushing one too.
+     *
+     * Furthermore in shadow mode update_cr3() can fail, in which case here
+     * we're still running on the prior top-level shadow (which we're about
+     * to release). Switch to the idle page tables in such an event; the
+     * guest will have been crashed already.
      */
     cr3 = v->arch.cr3;
     if ( shadow_mode_enabled(d) )
     {
         cr3 &= ~X86_CR3_NOFLUSH;
         cpu_info->pv_cr3 &= ~X86_CR3_NOFLUSH;
+
+        if ( unlikely(mfn_eq(pagetable_get_mfn(old_shadow),
+                             maddr_to_mfn(cr3))) )
+        {
+            cr3 = idle_vcpu[v->processor]->arch.cr3;
+            /* Also suppress runstate/time area updates below. */
+            guest_update = false;
+        }
     }
     write_cr3(cr3);
 
-    if ( !(v->arch.flags & TF_kernel_mode) )
+    if ( !pagetable_is_null(old_shadow) )
+        shadow_put_top_level(v->domain, old_shadow);
+
+    if ( !guest_update )
         return;
 
     if ( v->arch.pv.need_update_runstate_area && update_runstate_area(v) )

@@ -3856,7 +3856,7 @@ sh_detach_old_tables(struct vcpu *v)
 }
 
 /* Set up the top-level shadow and install it in slot 'slot' of shadow_table */
-static void
+static pagetable_t
 sh_set_toplevel_shadow(struct vcpu *v,
                        int slot,
                        mfn_t gmfn,
@@ -3918,24 +3918,30 @@ sh_set_toplevel_shadow(struct vcpu *v,
                   mfn_x(gmfn), mfn_x(pagetable_get_mfn(new_entry)));
     v->arch.shadow_table[slot] = new_entry;
 
-    /* Decrement the refcount of the old contents of this slot */
-    if ( !pagetable_is_null(old_entry) ) {
-        mfn_t old_smfn = pagetable_get_mfn(old_entry);
-        /* Need to repin the old toplevel shadow if it's been unpinned
-         * by shadow_prealloc(): in PV mode we're still running on this
-         * shadow and it's not safe to free it yet. */
-        if ( !mfn_to_page(old_smfn)->u.sh.pinned && !sh_pin(d, old_smfn) )
-        {
-            printk(XENLOG_G_ERR "can't re-pin %"PRI_mfn"\n", mfn_x(old_smfn));
-            domain_crash(d);
-        }
-        sh_put_ref(d, old_smfn, 0);
+    /*
+     * Decrement the refcount of the old contents of this slot, unless
+     * we're still running on that shadow - in that case it'll need holding
+     * on to until the actual page table switch did occur.
+     */
+    if ( !pagetable_is_null(old_entry) && (v != current || !is_pv_domain(d)) )
+    {
+        sh_put_ref(d, pagetable_get_mfn(old_entry), 0);
+        old_entry = pagetable_null();
     }
+
+    /*
+     * 2- and 3-level shadow mode is used for HVM only. Therefore we never run
+     * on such a shadow, so only call sites requesting an L4 shadow need to pay
+     * attention to the returned value.
+     */
+    ASSERT(pagetable_is_null(old_entry) || root_type == SH_type_l4_64_shadow);
+
+    return old_entry;
 }
 
 
-static void
-sh_update_cr3(struct vcpu *v, int do_locking, bool noflush)
+static pagetable_t
+sh_update_cr3(struct vcpu *v, bool do_locking, bool noflush)
 /* Updates vcpu->arch.cr3 after the guest has changed CR3.
  * Paravirtual guests should set v->arch.guest_table (and guest_table_user,
  * if appropriate).
@@ -3949,6 +3955,7 @@ sh_update_cr3(struct vcpu *v, int do_locking, bool noflush)
 {
     struct domain *d = v->domain;
     mfn_t gmfn;
+    pagetable_t old_entry = pagetable_null();
 #if GUEST_PAGING_LEVELS == 3
     const guest_l3e_t *gl3e;
     unsigned int i, guest_idx;
@@ -3958,7 +3965,7 @@ sh_update_cr3(struct vcpu *v, int do_locking, bool noflush)
     if ( is_pv_domain(d) && !v->is_initialised )
     {
         ASSERT(v->arch.cr3 == 0);
-        return;
+        return old_entry;
     }
 
     if ( do_locking ) paging_lock(v->domain);
@@ -4031,11 +4038,12 @@ sh_update_cr3(struct vcpu *v, int do_locking, bool noflush)
 #if GUEST_PAGING_LEVELS == 2
     if ( sh_remove_write_access(d, gmfn, 2, 0) != 0 )
         guest_flush_tlb_mask(d, d->dirty_cpumask);
-    sh_set_toplevel_shadow(v, 0, gmfn, SH_type_l2_shadow);
+    old_entry = sh_set_toplevel_shadow(v, 0, gmfn, SH_type_l2_shadow);
+    ASSERT(pagetable_is_null(old_entry));
     if ( unlikely(pagetable_is_null(v->arch.shadow_table[0])) )
     {
         ASSERT(d->is_dying || d->is_shutting_down);
-        return;
+        return old_entry;
     }
 #elif GUEST_PAGING_LEVELS == 3
     /* PAE guests have four shadow_table entries, based on the
@@ -4068,24 +4076,26 @@ sh_update_cr3(struct vcpu *v, int do_locking, bool noflush)
                 gl2gfn = guest_l3e_get_gfn(gl3e[i]);
                 gl2mfn = get_gfn_query_unlocked(d, gfn_x(gl2gfn), &p2mt);
                 if ( p2m_is_ram(p2mt) )
-                    sh_set_toplevel_shadow(v, i, gl2mfn, (i == 3)
-                                           ? SH_type_l2h_shadow
-                                           : SH_type_l2_shadow);
+                    old_entry = sh_set_toplevel_shadow(v, i, gl2mfn, (i == 3)
+                                                       ? SH_type_l2h_shadow
+                                                       : SH_type_l2_shadow);
                 else
-                    sh_set_toplevel_shadow(v, i, INVALID_MFN, 0);
+                    old_entry = sh_set_toplevel_shadow(v, i, INVALID_MFN, 0);
             }
             else
-                sh_set_toplevel_shadow(v, i, INVALID_MFN, 0);
+                old_entry = sh_set_toplevel_shadow(v, i, INVALID_MFN, 0);
+
+            ASSERT(pagetable_is_null(old_entry));
         }
     }
 #elif GUEST_PAGING_LEVELS == 4
     if ( sh_remove_write_access(d, gmfn, 4, 0) != 0 )
         guest_flush_tlb_mask(d, d->dirty_cpumask);
-    sh_set_toplevel_shadow(v, 0, gmfn, SH_type_l4_shadow);
+    old_entry = sh_set_toplevel_shadow(v, 0, gmfn, SH_type_l4_shadow);
     if ( unlikely(pagetable_is_null(v->arch.shadow_table[0])) )
     {
         ASSERT(d->is_dying || d->is_shutting_down);
-        return;
+        return old_entry;
     }
     if ( !shadow_mode_external(d) && !is_pv_32bit_domain(d) )
     {
@@ -4184,6 +4194,8 @@ sh_update_cr3(struct vcpu *v, int do_locking, bool noflush)
 
     /* Release the lock, if we took it (otherwise it's the caller's problem) */
     if ( do_locking ) paging_unlock(v->domain);
+
+    return old_entry;
 }
 
 

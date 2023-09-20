@@ -2630,6 +2630,18 @@ void shadow_update_paging_modes(struct vcpu *v)
     paging_unlock(v->domain);
 }
 
+/*
+ * Helper invoked when releasing of a top-level shadow's reference was
+ * deferred in sh_set_toplevel_shadow().
+ */
+void shadow_put_top_level(struct domain *d, pagetable_t old_entry)
+{
+    ASSERT(!pagetable_is_null(old_entry));
+    paging_lock(d);
+    sh_put_ref(d, pagetable_get_mfn(old_entry), 0);
+    paging_unlock(d);
+}
+
 /**************************************************************************/
 /* Turning on and off shadow features */
 
