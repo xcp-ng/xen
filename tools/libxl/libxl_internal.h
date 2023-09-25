@@ -4775,6 +4775,14 @@ _hidden int libxl__domain_pvcontrol(libxl__egc *egc,
                                     libxl__xswait_state *pvcontrol,
                                     domid_t domid, const char *cmd);
 
+struct passwd;
+_hidden int userlookup_helper_getpwnam(libxl__gc*, const char *user,
+                                       struct passwd *res,
+                                       struct passwd **out);
+_hidden int userlookup_helper_getpwuid(libxl__gc*, uid_t uid,
+                                       struct passwd *res,
+                                       struct passwd **out);
+
 #endif
 
 /*
