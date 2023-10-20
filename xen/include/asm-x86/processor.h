@@ -175,6 +175,8 @@ extern unsigned int init_intel_cacheinfo(struct cpuinfo_x86 *c);
 
 unsigned int apicid_to_socket(unsigned int);
 
+extern bool opt_dit;
+
 /*
  * Generic CPUID function
  * clear %ecx since some cpus (Cyrix MII) do not set or clear %ecx
