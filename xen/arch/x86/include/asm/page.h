@@ -327,6 +327,9 @@ void efi_update_l4_pgtable(unsigned int l4idx, l4_pgentry_t);
 #ifndef __ASSEMBLY__
 /* Dependency on NX being available can't be expressed. */
 #define _PAGE_NX       (cpu_has_nx ? _PAGE_NX_BIT : 0)
+/* Dependency on AMD SME being availbale can't be expressed */
+extern uint64_t pt_c_bit_mask;
+#define _PAGE_MEM_ENCRYPT  (cpu_has_sme ? pte_c_bit_mask : 0)
 #endif
 
 #define PAGE_CACHE_ATTRS (_PAGE_PAT | _PAGE_PCD | _PAGE_PWT)

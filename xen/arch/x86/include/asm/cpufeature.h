@@ -222,6 +222,10 @@ static inline bool boot_cpu_has(unsigned int feat)
 #define cpu_bug_fpu_ptrs        boot_cpu_has(X86_BUG_FPU_PTRS)
 #define cpu_bug_null_seg        boot_cpu_has(X86_BUG_NULL_SEG)
 
+/*AMD SME*/
+#define cpu_has_sme             boot_cpu_has(X86_FEATURE_AMD_MEM_ENCRYPT)
+#define cpu_has_sme_coherency   boot_cpu_has(X86_FEATURE_AMD_SME_COHERENCY)
+
 enum _cache_type {
     CACHE_TYPE_NULL = 0,
     CACHE_TYPE_DATA = 1,
