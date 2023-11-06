@@ -501,6 +501,11 @@ bool p2m_mem_access_sanity_check(const struct domain *d)
     return is_hvm_domain(d) && cpu_has_vmx && hap_enabled(d);
 }
 
+int p2m_handle_encrypt(struct domain *d, gfn_t gfn, bool set, unsigned int altp2m_idx)
+{
+    return 0;
+}
+
 /*
  * Local variables:
  * mode: C

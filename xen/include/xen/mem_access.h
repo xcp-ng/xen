@@ -91,6 +91,8 @@ long p2m_set_mem_access_multi(struct domain *d,
 int p2m_get_mem_access(struct domain *d, gfn_t gfn, xenmem_access_t *access,
                        unsigned int altp2m_idx);
 
+int p2m_handle_encrypt(struct domain *d, gfn_t gfn, bool set, unsigned int altp2m_idx);
+
 #ifdef CONFIG_MEM_ACCESS
 int mem_access_memop(unsigned long cmd,
                      XEN_GUEST_HANDLE_PARAM(xen_mem_access_op_t) arg);

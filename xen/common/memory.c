@@ -1391,10 +1391,40 @@ static int acquire_resource(
     return rc;
 }
 
-int mem_encrypt_op(unsigned long cmd,
+long mem_encrypt_op(unsigned long cmd,
                      XEN_GUEST_HANDLE_PARAM(xen_mem_encrypt_op_t) arg)
 {
-    return -ENOSYS;
+    xen_mem_encrypt_op_t meo;
+    long rc;
+    bool set;
+    struct domain *d, *curr_d = current->domain;
+
+    if (!is_hardware_domain(curr_d))
+        return -EFAULT;
+
+    if ( copy_from_guest(&meo, arg, 1) )
+        return -EFAULT;
+
+    d = rcu_lock_domain_by_any_id(meo.domid);
+    if ( d == NULL )
+        return -EFAULT;
+
+    rc = -EINVAL;
+    /* Actually can only operate on itself */
+    if ( curr_d != d) {
+        goto out;
+    }
+
+    if ( (meo.pfn > domain_get_maximum_gpfn(d)) && meo.pfn != ~0ULL )
+        goto out;
+
+    set = meo.op == XENMEM_encrypt_on ? true : false;
+
+    rc = p2m_handle_encrypt(d, _gfn(meo.pfn), set, 0);
+
+out:
+    rcu_unlock_domain(d);
+    return rc;
 }
 
 long do_memory_op(unsigned long cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
