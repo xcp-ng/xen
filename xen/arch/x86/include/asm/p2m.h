@@ -269,6 +269,12 @@ struct p2m_domain {
 #if P2M_AUDIT
     long               (*audit_p2m)(struct p2m_domain *p2m);
 #endif
+    int                (*set_encrypt)(struct p2m_domain *p2m,
+                                    gfn_t gfn,
+                                    mfn_t mfn,
+                                    p2m_type_t p2mt,
+                                    p2m_access_t p2ma,
+                                    bool encrypt);
 
     /*
      * P2M updates may require TLBs to be flushed (invalidated).

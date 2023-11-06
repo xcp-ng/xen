@@ -560,6 +560,92 @@ static void check_entry(mfn_t mfn, p2m_type_t new, p2m_type_t old,
         ASSERT(mfn_valid(mfn));
 }
 
+static int cf_check
+p2m_pt_set_encrypt(struct p2m_domain *p2m, gfn_t gfn_, mfn_t mfn,
+		   p2m_type_t p2mt, p2m_access_t p2ma, bool encrypt)
+{
+
+    struct domain *d = p2m->domain;
+    void *table;
+    unsigned long gfn = gfn_x(gfn_);
+    unsigned long old_mfn = mfn_x(INVALID_MFN);
+    unsigned long gfn_remainder = gfn;
+    l1_pgentry_t *p2m_entry, entry_content;
+    unsigned int iommu_pte_flags;
+    int rc;
+
+    if (!cpu_has_sme)
+	return -ENOSYS;
+
+    ASSERT(p2mt != p2m_invalid);
+    ASSERT(mfn_valid(mfn));
+
+    /* Carry out any eventually pending earlier changes first. */
+    rc = do_recalc(p2m, gfn);
+    if ( rc < 0 )
+        return rc;
+
+    /* Lookup p2m_entry */
+    table = map_domain_page(pagetable_get_mfn(p2m_get_pagetable(p2m)));
+
+    if ( rc )
+        goto out;
+
+    rc = p2m_next_level(p2m, &table, &gfn_remainder, gfn,
+                        L4_PAGETABLE_SHIFT - PAGE_SHIFT,
+                        L4_PAGETABLE_ENTRIES, 3, 1);
+   if ( rc )
+        goto out;
+
+    rc = p2m_next_level(p2m, &table, &gfn_remainder, gfn,
+			L3_PAGETABLE_SHIFT - PAGE_SHIFT,
+			L3_PAGETABLE_ENTRIES, 2, 1);
+    if ( rc )
+	goto out;
+
+    rc = p2m_next_level(p2m, &table, &gfn_remainder, gfn,
+			L2_PAGETABLE_SHIFT - PAGE_SHIFT,
+			L2_PAGETABLE_ENTRIES, 1, 1);
+   if ( rc )
+       goto out;
+
+   p2m_entry = p2m_find_entry(table, &gfn_remainder, gfn,
+			      0, L1_PAGETABLE_ENTRIES);
+   ASSERT(p2m_entry);
+
+   old_mfn = l1e_get_pfn(*p2m_entry);
+   ASSERT(old_mfn == mfn_x(mfn));
+
+   /* Make new entry p2m entry and finally write the it*/
+   entry_content = p2m_l1e_from_pfn(mfn_x(mfn),
+				    p2m_type_to_flags(p2m, p2mt, mfn, 0));
+
+   if(encrypt)
+       entry_content = l1e_from_intpte_raw(l1e_get_intpte(entry_content) | pte_c_bit_mask);
+
+   rc = write_p2m_entry(p2m, gfn, p2m_entry, entry_content, 1);
+   if ( rc )
+       goto out;
+
+    /* Track the highest gfn for which we have ever had a valid mapping */
+    if (gfn + (1UL << PAGE_ORDER_4K) - 1 > p2m->max_mapped_pfn )
+        p2m->max_mapped_pfn = gfn + (1UL << PAGE_ORDER_4K) - 1;
+
+
+    /* Sync with iommu if flags changed */
+    if ( need_iommu_pt_sync(p2m->domain)) {
+	iommu_pte_flags = encrypt ? 0 : p2m_get_iommu_flags(p2mt, p2ma, mfn);
+        rc = iommu_pte_flags
+             ? iommu_legacy_map(d, _dfn(gfn), mfn, 1UL << PAGE_ORDER_4K,
+				iommu_pte_flags)
+             : iommu_legacy_unmap(d, _dfn(gfn), 1UL << PAGE_ORDER_4K);
+    }
+
+ out:
+    unmap_domain_page(table);
+    return rc;
+}
+
 /* Returns: 0 for success, -errno for failure */
 static int cf_check
 p2m_pt_set_entry(struct p2m_domain *p2m, gfn_t gfn_, mfn_t mfn,
@@ -1169,6 +1255,7 @@ void p2m_pt_init(struct p2m_domain *p2m)
     p2m->recalc = do_recalc;
     p2m->change_entry_type_global = p2m_pt_change_entry_type_global;
     p2m->change_entry_type_range = p2m_pt_change_entry_type_range;
+    p2m->set_encrypt = p2m_pt_set_encrypt;
 
     /* Still too early to use paging_mode_hap(). */
     if ( hap_enabled(p2m->domain) )

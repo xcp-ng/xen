@@ -503,7 +503,24 @@ bool p2m_mem_access_sanity_check(const struct domain *d)
 
 int p2m_handle_encrypt(struct domain *d, gfn_t gfn, bool set, unsigned int altp2m_idx)
 {
-    return 0;
+    struct p2m_domain *p2m = p2m_get_hostp2m(d);
+    p2m_access_t a;
+    p2m_type_t t;
+    mfn_t mfn;
+    int rc;
+
+    if ( altp2m_idx)
+        return -EINVAL;
+
+    if  (!p2m->set_encrypt)
+        return -EINVAL;
+
+    mfn = p2m_get_gfn_type_access(p2m, gfn, &t, &a,
+                                            P2M_ALLOC, NULL, false);
+
+    rc = p2m->set_encrypt(p2m, gfn, mfn, t, a, set);
+
+    return rc;
 }
 
 /*

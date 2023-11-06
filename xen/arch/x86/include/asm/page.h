@@ -159,6 +159,11 @@ static inline l4_pgentry_t l4e_from_paddr(paddr_t pa, unsigned int flags)
 #define l3e_from_intpte(intpte)    ((l3_pgentry_t) { (intpte_t)(intpte) & (~PAGE_MEM_ENCRYPT_MASK) })
 #define l4e_from_intpte(intpte)    ((l4_pgentry_t) { (intpte_t)(intpte) & (~PAGE_MEM_ENCRYPT_MASK) })
 
+#define l1e_from_intpte_raw(intpte)    ((l1_pgentry_t) { (intpte_t)(intpte) })
+#define l2e_from_intpte_raw(intpte)    ((l2_pgentry_t) { (intpte_t)(intpte) })
+#define l3e_from_intpte_raw(intpte)    ((l3_pgentry_t) { (intpte_t)(intpte) })
+#define l4e_from_intpte_raw(intpte)    ((l4_pgentry_t) { (intpte_t)(intpte) })
+
 /* Construct a pte from a page pointer and access flags. */
 #define l1e_from_page(page, flags) l1e_from_mfn(page_to_mfn(page), flags)
 #define l2e_from_page(page, flags) l2e_from_mfn(page_to_mfn(page), flags)
