@@ -163,6 +163,49 @@ config XEN_ALIGN_2M
 
 endchoice
 
+choice
+	prompt "x2APIC Driver default"
+	default X2APIC_MIXED
+	help
+	  Select APIC addressing when x2APIC is enabled.
+
+	  The default mode is mixed which should provide the best aspects
+	  of both physical and cluster modes.
+
+config X2APIC_PHYSICAL
+	bool "Physical Destination mode"
+	help
+	  When using this mode APICs are addressed using the Physical
+	  Destination mode, which allows using all dynamic vectors on each
+	  CPU independently.
+
+	  Physical Destination has the benefit of having more vectors available
+	  for external interrupts, but it also makes the delivery of multi
+	  destination inter processor interrupts (IPIs) slightly slower than
+	  Logical Destination mode.
+
+config X2APIC_CLUSTER
+	bool "Cluster Destination mode"
+	help
+	  When using this mode APICs are addressed using the Cluster Logical
+	  Destination mode.
+
+	  Cluster Destination has the benefit of sending IPIs faster since
+	  multiple APICs can be targeted as destinations of a single IPI.
+	  However the vector space is shared between all CPUs on the cluster,
+	  and hence using this mode reduces the number of available vectors
+	  when compared to Physical mode.
+
+config X2APIC_MIXED
+	bool "Mixed Destination mode"
+	help
+	  When using this mode APICs are addressed using the Cluster Logical
+	  Destination mode for IPIs and Physical mode for external interrupts.
+
+	  Should provide the best of both modes.
+
+endchoice
+
 config XEN_GUEST
 	def_bool n
 	prompt "Xen Guest"
