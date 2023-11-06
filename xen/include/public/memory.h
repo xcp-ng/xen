@@ -731,7 +731,21 @@ struct xen_vnuma_topology_info {
 typedef struct xen_vnuma_topology_info xen_vnuma_topology_info_t;
 DEFINE_XEN_GUEST_HANDLE(xen_vnuma_topology_info_t);
 
-/* Next available subop number is 29 */
+
+#define XENMEM_encrypt_op      29
+#define XENMEM_encrypt_on      0
+#define XENMEM_encrypt_off     1
+
+struct xen_mem_encrypt_op {
+    uint8_t     op;         /* XENMEM_encrypt_[on|off]*/
+    domid_t     domid;
+    /* IN:  pfn of page being operated on */
+    uint64_t    pfn;
+};
+typedef struct xen_mem_encrypt_op xen_mem_encrypt_op_t;
+DEFINE_XEN_GUEST_HANDLE(xen_mem_encrypt_op_t);
+
+/* Next available subop number is 30 */
 
 #endif /* __XEN_PUBLIC_MEMORY_H__ */
 

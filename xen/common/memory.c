@@ -1391,6 +1391,12 @@ static int acquire_resource(
     return rc;
 }
 
+int mem_encrypt_op(unsigned long cmd,
+                     XEN_GUEST_HANDLE_PARAM(xen_mem_encrypt_op_t) arg)
+{
+    return -ENOSYS;
+}
+
 long do_memory_op(unsigned long cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
 {
     struct domain *d, *curr_d = current->domain;
@@ -1850,6 +1856,10 @@ long do_memory_op(unsigned long cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
         rc = acquire_resource(
             guest_handle_cast(arg, xen_mem_acquire_resource_t),
             start_extent);
+        break;
+
+    case XENMEM_encrypt_op:
+        rc = mem_encrypt_op(cmd, guest_handle_cast(arg, xen_mem_encrypt_op_t));
         break;
 
     default:

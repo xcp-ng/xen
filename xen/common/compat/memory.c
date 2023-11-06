@@ -469,6 +469,10 @@ int compat_memory_op(unsigned int cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
             }
             break;
         }
+        case XENMEM_encrypt_op:
+        {
+	   return -EINVAL;
+        }
         default:
             return compat_arch_memory_op(cmd, arg);
         }
