@@ -15,54 +15,64 @@
 
 #include <asm/x86_64/page.h>
 
+#ifndef __ASSEMBLY__
+extern uint64_t pte_c_bit_mask;
+#define PAGE_MEM_ENCRYPT_MASK  (pte_c_bit_mask)
+#endif
+
 /* Read a pte atomically from memory. */
 #define l1e_read_atomic(l1ep) \
-    l1e_from_intpte(pte_read_atomic(&l1e_get_intpte(*(l1ep))))
+    l1e_from_intpte(pte_read_atomic(&l1e_intpte_ptr(*(l1ep))))
 #define l2e_read_atomic(l2ep) \
-    l2e_from_intpte(pte_read_atomic(&l2e_get_intpte(*(l2ep))))
+    l2e_from_intpte(pte_read_atomic(&l2e_intpte_ptr(*(l2ep))))
 #define l3e_read_atomic(l3ep) \
-    l3e_from_intpte(pte_read_atomic(&l3e_get_intpte(*(l3ep))))
+    l3e_from_intpte(pte_read_atomic(&l3e_intpte_ptr(*(l3ep))))
 #define l4e_read_atomic(l4ep) \
-    l4e_from_intpte(pte_read_atomic(&l4e_get_intpte(*(l4ep))))
+    l4e_from_intpte(pte_read_atomic(&l4e_intpte_ptr(*(l4ep))))
 
 /* Write a pte atomically to memory. */
 #define l1e_write_atomic(l1ep, l1e) \
-    pte_write_atomic(&l1e_get_intpte(*(l1ep)), l1e_get_intpte(l1e))
+    pte_write_atomic(&l1e_intpte_ptr(*(l1ep)), l1e_get_intpte(l1e))
 #define l2e_write_atomic(l2ep, l2e) \
-    pte_write_atomic(&l2e_get_intpte(*(l2ep)), l2e_get_intpte(l2e))
+    pte_write_atomic(&l2e_intpte_ptr(*(l2ep)), l2e_get_intpte(l2e))
 #define l3e_write_atomic(l3ep, l3e) \
-    pte_write_atomic(&l3e_get_intpte(*(l3ep)), l3e_get_intpte(l3e))
+    pte_write_atomic(&l3e_intpte_ptr(*(l3ep)), l3e_get_intpte(l3e))
 #define l4e_write_atomic(l4ep, l4e) \
-    pte_write_atomic(&l4e_get_intpte(*(l4ep)), l4e_get_intpte(l4e))
+    pte_write_atomic(&l4e_intpte_ptr(*(l4ep)), l4e_get_intpte(l4e))
 
 /*
  * Write a pte safely but non-atomically to memory.
  * The PTE may become temporarily not-present during the update.
  */
 #define l1e_write(l1ep, l1e) \
-    pte_write(&l1e_get_intpte(*(l1ep)), l1e_get_intpte(l1e))
+    pte_write(&l1e_intpte_ptr(*(l1ep)), l1e_get_intpte(l1e))
 #define l2e_write(l2ep, l2e) \
-    pte_write(&l2e_get_intpte(*(l2ep)), l2e_get_intpte(l2e))
+    pte_write(&l2e_intpte_ptr(*(l2ep)), l2e_get_intpte(l2e))
 #define l3e_write(l3ep, l3e) \
-    pte_write(&l3e_get_intpte(*(l3ep)), l3e_get_intpte(l3e))
+    pte_write(&l3e_intpte_ptr(*(l3ep)), l3e_get_intpte(l3e))
 #define l4e_write(l4ep, l4e) \
-    pte_write(&l4e_get_intpte(*(l4ep)), l4e_get_intpte(l4e))
+    pte_write(&l4e_intpte_ptr(*(l4ep)), l4e_get_intpte(l4e))
 
 /* Get direct integer representation of a pte's contents (intpte_t). */
-#define l1e_get_intpte(x)          ((x).l1)
-#define l2e_get_intpte(x)          ((x).l2)
-#define l3e_get_intpte(x)          ((x).l3)
-#define l4e_get_intpte(x)          ((x).l4)
+#define l1e_intpte_ptr(x)          ((x).l1)
+#define l2e_intpte_ptr(x)          ((x).l2)
+#define l3e_intpte_ptr(x)          ((x).l3)
+#define l4e_intpte_ptr(x)          ((x).l4)
+
+#define l1e_get_intpte(x)      ((x).l1 & (~PAGE_MEM_ENCRYPT_MASK))
+#define l2e_get_intpte(x)      ((x).l2 & (~PAGE_MEM_ENCRYPT_MASK))
+#define l3e_get_intpte(x)      ((x).l3 & (~PAGE_MEM_ENCRYPT_MASK))
+#define l4e_get_intpte(x)      ((x).l4 & (~PAGE_MEM_ENCRYPT_MASK))
 
 /* Get pfn mapped by pte (unsigned long). */
 #define l1e_get_pfn(x)             \
-    ((unsigned long)(((x).l1 & (PADDR_MASK&PAGE_MASK)) >> PAGE_SHIFT))
+    ((unsigned long)(((x).l1 & ((PADDR_MASK&PAGE_MASK)&(~PAGE_MEM_ENCRYPT_MASK))) >> PAGE_SHIFT))
 #define l2e_get_pfn(x)             \
-    ((unsigned long)(((x).l2 & (PADDR_MASK&PAGE_MASK)) >> PAGE_SHIFT))
+    ((unsigned long)(((x).l2 & ((PADDR_MASK&PAGE_MASK)&(~PAGE_MEM_ENCRYPT_MASK))) >> PAGE_SHIFT))
 #define l3e_get_pfn(x)             \
-    ((unsigned long)(((x).l3 & (PADDR_MASK&PAGE_MASK)) >> PAGE_SHIFT))
+    ((unsigned long)(((x).l3 & ((PADDR_MASK&PAGE_MASK)&(~PAGE_MEM_ENCRYPT_MASK))) >> PAGE_SHIFT))
 #define l4e_get_pfn(x)             \
-    ((unsigned long)(((x).l4 & (PADDR_MASK&PAGE_MASK)) >> PAGE_SHIFT))
+    ((unsigned long)(((x).l4 & ((PADDR_MASK&PAGE_MASK)&(~PAGE_MEM_ENCRYPT_MASK))) >> PAGE_SHIFT))
 
 /* Get mfn mapped by pte (mfn_t). */
 #define l1e_get_mfn(x) _mfn(l1e_get_pfn(x))
@@ -72,13 +82,13 @@
 
 /* Get physical address of page mapped by pte (paddr_t). */
 #define l1e_get_paddr(x)           \
-    ((paddr_t)(((x).l1 & (PADDR_MASK&PAGE_MASK))))
+    ((paddr_t)(((x).l1 & (PADDR_MASK&PAGE_MASK))&(~PAGE_MEM_ENCRYPT_MASK)))
 #define l2e_get_paddr(x)           \
-    ((paddr_t)(((x).l2 & (PADDR_MASK&PAGE_MASK))))
+    ((paddr_t)(((x).l2 & (PADDR_MASK&PAGE_MASK))&(~PAGE_MEM_ENCRYPT_MASK)))
 #define l3e_get_paddr(x)           \
-    ((paddr_t)(((x).l3 & (PADDR_MASK&PAGE_MASK))))
+    ((paddr_t)(((x).l3 & (PADDR_MASK&PAGE_MASK))&(~PAGE_MEM_ENCRYPT_MASK)))
 #define l4e_get_paddr(x)           \
-    ((paddr_t)(((x).l4 & (PADDR_MASK&PAGE_MASK))))
+    ((paddr_t)(((x).l4 & (PADDR_MASK&PAGE_MASK))&(~PAGE_MEM_ENCRYPT_MASK)))
 
 /* Get pointer to info structure of page mapped by pte (struct page_info *). */
 #define l1e_get_page(x)           mfn_to_page(l1e_get_mfn(x))
@@ -144,10 +154,10 @@ static inline l4_pgentry_t l4e_from_paddr(paddr_t pa, unsigned int flags)
 #endif /* !__ASSEMBLY__ */
 
 /* Construct a pte from its direct integer representation. */
-#define l1e_from_intpte(intpte)    ((l1_pgentry_t) { (intpte_t)(intpte) })
-#define l2e_from_intpte(intpte)    ((l2_pgentry_t) { (intpte_t)(intpte) })
-#define l3e_from_intpte(intpte)    ((l3_pgentry_t) { (intpte_t)(intpte) })
-#define l4e_from_intpte(intpte)    ((l4_pgentry_t) { (intpte_t)(intpte) })
+#define l1e_from_intpte(intpte)    ((l1_pgentry_t) { (intpte_t)(intpte) & (~PAGE_MEM_ENCRYPT_MASK) })
+#define l2e_from_intpte(intpte)    ((l2_pgentry_t) { (intpte_t)(intpte) & (~PAGE_MEM_ENCRYPT_MASK) })
+#define l3e_from_intpte(intpte)    ((l3_pgentry_t) { (intpte_t)(intpte) & (~PAGE_MEM_ENCRYPT_MASK) })
+#define l4e_from_intpte(intpte)    ((l4_pgentry_t) { (intpte_t)(intpte) & (~PAGE_MEM_ENCRYPT_MASK) })
 
 /* Construct a pte from a page pointer and access flags. */
 #define l1e_from_page(page, flags) l1e_from_mfn(page_to_mfn(page), flags)
@@ -327,9 +337,6 @@ void efi_update_l4_pgtable(unsigned int l4idx, l4_pgentry_t);
 #ifndef __ASSEMBLY__
 /* Dependency on NX being available can't be expressed. */
 #define _PAGE_NX       (cpu_has_nx ? _PAGE_NX_BIT : 0)
-/* Dependency on AMD SME being availbale can't be expressed */
-extern uint64_t pt_c_bit_mask;
-#define _PAGE_MEM_ENCRYPT  (cpu_has_sme ? pte_c_bit_mask : 0)
 #endif
 
 #define PAGE_CACHE_ATTRS (_PAGE_PAT | _PAGE_PCD | _PAGE_PWT)

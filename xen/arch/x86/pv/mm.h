@@ -103,7 +103,7 @@ static inline bool update_intpte(intpte_t *p, intpte_t old, intpte_t new,
  * Arguments are: type, ptr, old, new, mfn, vcpu
  */
 #define UPDATE_ENTRY(_t,_p,_o,_n,_m,_v,_ad)                         \
-    update_intpte(&_t ## e_get_intpte(*(_p)),                       \
+    update_intpte(&_t ## e_intpte_ptr(*(_p)),                       \
                   _t ## e_get_intpte(_o), _t ## e_get_intpte(_n),   \
                   (_m), (_v), (_ad))
 
