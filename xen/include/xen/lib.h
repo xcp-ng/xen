@@ -22,6 +22,15 @@
 #define __STR(...) #__VA_ARGS__
 #define STR(...) __STR(__VA_ARGS__)
 
+#define ARG1_(x, y...) (x)
+#define ARG2_(x, y...) ARG1_(y)
+#define ARG3_(x, y...) ARG2_(y)
+#define ARG4_(x, y...) ARG3_(y)
+
+#define ARG__(nr) ARG ## nr ## _
+#define ARG_(nr)  ARG__(nr)
+#define LASTARG(x, y...) ARG_(count_args(x, ## y))(x, ## y)
+
 #ifndef __ASSEMBLY__
 
 #include <xen/inttypes.h>
