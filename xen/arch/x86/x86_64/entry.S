@@ -24,7 +24,7 @@
 
 #ifdef CONFIG_PV
 /* %rbx: struct vcpu */
-switch_to_kernel:
+FUNC_LOCAL(switch_to_kernel)
         leaq  VCPU_trap_bounce(%rbx),%rdx
 
         /* TB_eip = 32-bit syscall ? syscall32_addr : syscall_addr */
@@ -99,24 +99,21 @@ test_guest_events:
         call  create_bounce_frame
         jmp   test_all_events
 
-        ALIGN
 /* %rbx: struct vcpu */
-process_softirqs:
+LABEL_LOCAL(process_softirqs)
         sti
         call do_softirq
         jmp  test_all_events
 
-        ALIGN
 /* %rbx: struct vcpu, %rdx struct trap_bounce */
-.Lprocess_trapbounce:
+LABEL_LOCAL(.Lprocess_trapbounce)
         sti
 .Lbounce_exception:
         call  create_bounce_frame
         jmp   test_all_events
 
-        ALIGN
 /* %rbx: struct vcpu */
-process_mce:
+LABEL_LOCAL(process_mce)
         testb $1 << VCPU_TRAP_MCE, VCPU_async_exception_mask(%rbx)
         jnz  .Ltest_guest_nmi
         sti
@@ -130,9 +127,8 @@ process_mce:
         movb %dl, VCPU_async_exception_mask(%rbx)
         jmp  process_trap
 
-        ALIGN
 /* %rbx: struct vcpu */
-process_nmi:
+LABEL_LOCAL(process_nmi)
         testb $1 << VCPU_TRAP_NMI, VCPU_async_exception_mask(%rbx)
         jnz  test_guest_events
         sti
@@ -149,11 +145,12 @@ process_trap:
         leaq VCPU_trap_bounce(%rbx), %rdx
         call create_bounce_frame
         jmp  test_all_events
+END(switch_to_kernel)
 
         .section .text.entry, "ax", @progbits
 
 /* %rbx: struct vcpu, interrupts disabled */
-restore_all_guest:
+FUNC_LOCAL(restore_all_guest)
         ASSERT_INTERRUPTS_DISABLED
 
         /* Stash guest SPEC_CTRL value while we can read struct vcpu. */
@@ -233,8 +230,7 @@ restore_all_guest:
         sysretq
 1:      sysretl
 
-        ALIGN
-.Lrestore_rcx_iret_exit_to_guest:
+LABEL_LOCAL(.Lrestore_rcx_iret_exit_to_guest)
         mov   EFRAME_rip(%rsp), %rcx
 /* No special register assumptions. */
 iret_exit_to_guest:
@@ -246,6 +242,7 @@ iret_exit_to_guest:
         addq  $8,%rsp
 .Lft0:  iretq
         _ASM_PRE_EXTABLE(.Lft0, handle_exception)
+END(restore_all_guest)
 
 /*
  * When entering SYSCALL from kernel mode:
@@ -262,7 +259,7 @@ iret_exit_to_guest:
  *  - Guest %rsp stored in %rax
  *  - Xen stack loaded, pointing at the %ss slot
  */
-ENTRY(lstar_enter)
+FUNC(lstar_enter)
 #ifdef CONFIG_XEN_SHSTK
         ALTERNATIVE "", "setssbsy", X86_FEATURE_XEN_SHSTK
 #endif
@@ -298,9 +295,10 @@ ENTRY(lstar_enter)
         mov   %rsp, %rdi
         call  pv_hypercall
         jmp   test_all_events
+END(lstar_enter)
 
 /* See lstar_enter for entry register state. */
-ENTRY(cstar_enter)
+FUNC(cstar_enter)
 #ifdef CONFIG_XEN_SHSTK
         ALTERNATIVE "", "setssbsy", X86_FEATURE_XEN_SHSTK
 #endif
@@ -339,8 +337,9 @@ ENTRY(cstar_enter)
         jne   compat_syscall
 #endif
         jmp   switch_to_kernel
+END(cstar_enter)
 
-ENTRY(sysenter_entry)
+FUNC(sysenter_entry)
         ENDBR64
 #ifdef CONFIG_XEN_SHSTK
         ALTERNATIVE "", "setssbsy", X86_FEATURE_XEN_SHSTK
@@ -348,7 +347,7 @@ ENTRY(sysenter_entry)
         pushq $FLAT_USER_SS
         pushq $0
         pushfq
-GLOBAL(sysenter_eflags_saved)
+LABEL(sysenter_eflags_saved, 0)
         ALTERNATIVE "", clac, X86_FEATURE_XEN_SMAP
         pushq $3 /* ring 3 null cs */
         pushq $0 /* null rip */
@@ -403,8 +402,9 @@ UNLIKELY_END(sysenter_gpf)
         jne   compat_sysenter
 #endif
         jmp   .Lbounce_exception
+END(sysenter_entry)
 
-ENTRY(int80_direct_trap)
+FUNC(int80_direct_trap)
         ENDBR64
         ALTERNATIVE "", clac, X86_FEATURE_XEN_SMAP
         pushq $0
@@ -493,6 +493,7 @@ int80_slow_path:
          */
         GET_STACK_END(14)
         jmp   handle_exception_saved
+END(int80_direct_trap)
 
         /* create_bounce_frame & helpers don't need to be in .text.entry */
         .text
@@ -501,7 +502,7 @@ int80_slow_path:
 /*   { RCX, R11, [ERRCODE,] RIP, CS, RFLAGS, RSP, SS }                   */
 /* %rdx: trap_bounce, %rbx: struct vcpu                                  */
 /* On return only %rbx and %rdx are guaranteed non-clobbered.            */
-create_bounce_frame:
+FUNC_LOCAL(create_bounce_frame)
         ASSERT_INTERRUPTS_ENABLED
         testb $TF_kernel_mode,VCPU_thread_flags(%rbx)
         jnz   1f
@@ -637,6 +638,7 @@ ENTRY(dom_crash_sync_extable)
         xorl  %edi,%edi
         jmp   asm_domain_crash_synchronous /* Does not return */
         .popsection
+END(create_bounce_frame)
 #endif /* CONFIG_PV */
 
 /* --- CODE BELOW THIS LINE (MOSTLY) NOT GUEST RELATED --- */
@@ -645,7 +647,7 @@ ENTRY(dom_crash_sync_extable)
 
 /* No special register assumptions. */
 #ifdef CONFIG_PV
-ENTRY(continue_pv_domain)
+FUNC(continue_pv_domain)
         ENDBR64
 
         /*
@@ -670,26 +672,28 @@ ret_from_intr:
 #else
         jmp   test_all_events
 #endif
+END(continue_pv_domain)
 #else
-ret_from_intr:
+FUNC_LOCAL(ret_from_intr, 0)
         ASSERT_CONTEXT_IS_XEN
         jmp   restore_all_xen
+END(ret_from_intr)
 #endif
 
         .section .init.text, "ax", @progbits
-ENTRY(early_page_fault)
+FUNC(early_page_fault)
         ENDBR64
         movl  $TRAP_page_fault, EFRAME_entry_vector(%rsp)
         SAVE_ALL
         movq  %rsp, %rdi
         call  do_early_page_fault
         jmp   restore_all_xen
+END(early_page_fault)
 
         .section .text.entry, "ax", @progbits
 
-        ALIGN
 /* %r12=ist_exit */
-restore_all_xen:
+FUNC_LOCAL(restore_all_xen)
 
 #ifdef CONFIG_DEBUG
         mov   %rsp, %rdi
@@ -726,8 +730,9 @@ UNLIKELY_END(exit_cr3)
             sel=STK_REL(EFRAME_shadow_sel, EFRAME_rip)
 
         iretq
+END(restore_all_xen)
 
-ENTRY(common_interrupt)
+FUNC(common_interrupt)
         ALTERNATIVE "", clac, X86_FEATURE_XEN_SMAP
         SAVE_ALL
 
@@ -756,12 +761,13 @@ ENTRY(common_interrupt)
         mov   %r15, STACK_CPUINFO_FIELD(xen_cr3)(%r14)
         mov   %bl, STACK_CPUINFO_FIELD(use_pv_cr3)(%r14)
         jmp ret_from_intr
+END(common_interrupt)
 
-ENTRY(page_fault)
+FUNC(page_fault)
         ENDBR64
         movl  $TRAP_page_fault, EFRAME_entry_vector(%rsp)
 /* No special register assumptions. */
-GLOBAL(handle_exception)
+FUNC(handle_exception, 0)
         ALTERNATIVE "", clac, X86_FEATURE_XEN_SMAP
         SAVE_ALL
 
@@ -931,92 +937,108 @@ FATAL_exception_with_ints_disabled:
         movq  %rsp,%rdi
         call  fatal_trap
         BUG   /* fatal_trap() shouldn't return. */
+END(handle_exception)
 
-ENTRY(divide_error)
+FUNC(divide_error)
         ENDBR64
         pushq $0
         movl  $TRAP_divide_error, EFRAME_entry_vector(%rsp)
         jmp   handle_exception
+END(divide_error)
 
-ENTRY(coprocessor_error)
+FUNC(coprocessor_error)
         ENDBR64
         pushq $0
         movl  $TRAP_copro_error, EFRAME_entry_vector(%rsp)
         jmp   handle_exception
+END(coprocessor_error)
 
-ENTRY(simd_coprocessor_error)
+FUNC(simd_coprocessor_error)
         ENDBR64
         pushq $0
         movl  $TRAP_simd_error, EFRAME_entry_vector(%rsp)
         jmp   handle_exception
+END(simd_coprocessor_error)
 
-ENTRY(device_not_available)
+FUNC(device_not_available)
         ENDBR64
         pushq $0
         movl  $TRAP_no_device, EFRAME_entry_vector(%rsp)
         jmp   handle_exception
+END(device_not_available)
 
-ENTRY(debug)
+FUNC(debug)
         ENDBR64
         pushq $0
         movl  $TRAP_debug, EFRAME_entry_vector(%rsp)
         jmp   handle_ist_exception
+END(debug)
 
-ENTRY(int3)
+FUNC(int3)
         ENDBR64
         pushq $0
         movl  $TRAP_int3, EFRAME_entry_vector(%rsp)
         jmp   handle_exception
+END(int3)
 
-ENTRY(overflow)
+FUNC(overflow)
         ENDBR64
         pushq $0
         movl  $TRAP_overflow, EFRAME_entry_vector(%rsp)
         jmp   handle_exception
+END(overflow)
 
-ENTRY(bounds)
+FUNC(bounds)
         ENDBR64
         pushq $0
         movl  $TRAP_bounds, EFRAME_entry_vector(%rsp)
         jmp   handle_exception
+END(bounds)
 
-ENTRY(invalid_op)
+FUNC(invalid_op)
         ENDBR64
         pushq $0
         movl  $TRAP_invalid_op, EFRAME_entry_vector(%rsp)
         jmp   handle_exception
+END(invalid_op)
 
-ENTRY(invalid_TSS)
+FUNC(invalid_TSS)
         ENDBR64
         movl  $TRAP_invalid_tss, EFRAME_entry_vector(%rsp)
         jmp   handle_exception
+END(invalid_TSS)
 
-ENTRY(segment_not_present)
+FUNC(segment_not_present)
         ENDBR64
         movl  $TRAP_no_segment, EFRAME_entry_vector(%rsp)
         jmp   handle_exception
+END(segment_not_present)
 
-ENTRY(stack_segment)
+FUNC(stack_segment)
         ENDBR64
         movl  $TRAP_stack_error, EFRAME_entry_vector(%rsp)
         jmp   handle_exception
+END(stack_segment)
 
-ENTRY(general_protection)
+FUNC(general_protection)
         ENDBR64
         movl  $TRAP_gp_fault, EFRAME_entry_vector(%rsp)
         jmp   handle_exception
+END(general_protection)
 
-ENTRY(alignment_check)
+FUNC(alignment_check)
         ENDBR64
         movl  $TRAP_alignment_check, EFRAME_entry_vector(%rsp)
         jmp   handle_exception
+END(alignment_check)
 
-ENTRY(entry_CP)
+FUNC(entry_CP)
         ENDBR64
         movl  $X86_EXC_CP, EFRAME_entry_vector(%rsp)
         jmp   handle_exception
+END(entry_CP)
 
-ENTRY(double_fault)
+FUNC(double_fault)
         ENDBR64
         movl  $TRAP_double_fault, EFRAME_entry_vector(%rsp)
         /* Set AC to reduce chance of further SMAP faults */
@@ -1040,8 +1062,9 @@ ENTRY(double_fault)
         movq  %rsp,%rdi
         call  do_double_fault
         BUG   /* do_double_fault() shouldn't return. */
+END(double_fault)
 
-ENTRY(nmi)
+FUNC(nmi)
         ENDBR64
         pushq $0
         movl  $TRAP_nmi, EFRAME_entry_vector(%rsp)
@@ -1173,21 +1196,24 @@ handle_ist_exception:
         ASSERT_CONTEXT_IS_XEN
         jmp   restore_all_xen
 #endif
+END(nmi)
 
-ENTRY(machine_check)
+FUNC(machine_check)
         ENDBR64
         pushq $0
         movl  $TRAP_machine_check, EFRAME_entry_vector(%rsp)
         jmp   handle_ist_exception
+END(machine_check)
 
 /* No op trap handler.  Required for kexec crash path. */
-GLOBAL(trap_nop)
+FUNC(trap_nop, 0)
         ENDBR64
         iretq
+END(trap_nop)
 
 /* Table of automatically generated entry points.  One per vector. */
         .pushsection .init.rodata, "a", @progbits
-GLOBAL(autogen_entrypoints)
+DATA(autogen_entrypoints, 8)
         /* pop into the .init.rodata section and record an entry point. */
         .macro entrypoint ent
         .pushsection .init.rodata, "a", @progbits
@@ -1196,7 +1222,7 @@ GLOBAL(autogen_entrypoints)
         .endm
 
         .popsection
-autogen_stubs: /* Automatically generated stubs. */
+FUNC_LOCAL(autogen_stubs, 0) /* Automatically generated stubs. */
 
         vec = 0
         .rept X86_NR_VECTORS
@@ -1240,6 +1266,7 @@ autogen_stubs: /* Automatically generated stubs. */
 
         vec = vec + 1
         .endr
+END(autogen_stubs)
 
         .section .init.rodata, "a", @progbits
-        .size autogen_entrypoints, . - autogen_entrypoints
+END(autogen_entrypoints)
