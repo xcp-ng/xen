@@ -44,6 +44,7 @@ void discard_initial_images(void);
 void *bootstrap_map(const module_t *mod);
 
 int xen_in_range(unsigned long mfn);
+int remove_xen_ranges(struct rangeset *r);
 
 void microcode_grab_module(
     unsigned long *, const multiboot_info_t *);
