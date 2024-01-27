@@ -187,15 +187,15 @@ FUNC_LOCAL(restore_all_guest)
         SPEC_CTRL_EXIT_TO_PV    /* Req: a=spec_ctrl %rsp=regs/cpuinfo, Clob: cd */
 
         RESTORE_ALL
-        testw $TRAP_syscall,4(%rsp)
+        testw $TRAP_syscall, EFRAME_entry_vector(%rsp)
         jz    iret_exit_to_guest
 
-        movq  24(%rsp),%r11           # RFLAGS
+        mov   EFRAME_eflags(%rsp), %r11
         andq  $~(X86_EFLAGS_IOPL | X86_EFLAGS_VM), %r11
         orq   $X86_EFLAGS_IF,%r11
 
         /* Don't use SYSRET path if the return address is not canonical. */
-        movq  8(%rsp),%rcx
+        mov   EFRAME_rip(%rsp), %rcx
         sarq  $47,%rcx
         incl  %ecx
         cmpl  $1,%ecx
@@ -210,19 +210,19 @@ FUNC_LOCAL(restore_all_guest)
         ALTERNATIVE "", rag_clrssbsy, X86_FEATURE_XEN_SHSTK
 #endif
 
-        movq  8(%rsp), %rcx           # RIP
-        cmpw  $FLAT_USER_CS32,16(%rsp)# CS
-        movq  32(%rsp),%rsp           # RSP
+        mov   EFRAME_rip(%rsp), %rcx
+        cmpw  $FLAT_USER_CS32, EFRAME_cs(%rsp)
+        mov   EFRAME_rsp(%rsp), %rsp
         je    1f
         sysretq
 1:      sysretl
 
 LABEL_LOCAL(.Lrestore_rcx_iret_exit_to_guest)
-        movq  8(%rsp), %rcx           # RIP
+        mov   EFRAME_rip(%rsp), %rcx
 /* No special register assumptions. */
 iret_exit_to_guest:
-        andl  $~(X86_EFLAGS_IOPL | X86_EFLAGS_VM), 24(%rsp)
-        orl   $X86_EFLAGS_IF,24(%rsp)
+        andl  $~(X86_EFLAGS_IOPL | X86_EFLAGS_VM), EFRAME_eflags(%rsp)
+        orl   $X86_EFLAGS_IF, EFRAME_eflags(%rsp)
         addq  $8,%rsp
 .Lft0:  iretq
         _ASM_PRE_EXTABLE(.Lft0, handle_exception)
@@ -254,7 +254,7 @@ FUNC(lstar_enter)
         pushq $FLAT_KERNEL_CS64
         pushq %rcx
         pushq $0
-        movl  $TRAP_syscall, 4(%rsp)
+        movl  $TRAP_syscall, EFRAME_entry_vector(%rsp)
         SAVE_ALL
 
         SPEC_CTRL_ENTRY_FROM_PV /* Req: %rsp=regs/cpuinfo, %rdx=0, Clob: acd */
@@ -292,7 +292,7 @@ FUNC(cstar_enter)
         pushq $FLAT_USER_CS32
         pushq %rcx
         pushq $0
-        movl  $TRAP_syscall, 4(%rsp)
+        movl  $TRAP_syscall, EFRAME_entry_vector(%rsp)
         SAVE_ALL
 
         SPEC_CTRL_ENTRY_FROM_PV /* Req: %rsp=regs/cpuinfo, %rdx=0, Clob: acd */
@@ -334,7 +334,7 @@ LABEL(sysenter_eflags_saved, 0)
         pushq $3 /* ring 3 null cs */
         pushq $0 /* null rip */
         pushq $0
-        movl  $TRAP_syscall, 4(%rsp)
+        movl  $TRAP_syscall, EFRAME_entry_vector(%rsp)
         SAVE_ALL
 
         SPEC_CTRL_ENTRY_FROM_PV /* Req: %rsp=regs/cpuinfo, %rdx=0, Clob: acd */
@@ -389,7 +389,7 @@ FUNC(int80_direct_trap)
         ENDBR64
         ALTERNATIVE "", clac, X86_FEATURE_XEN_SMAP
         pushq $0
-        movl  $0x80, 4(%rsp)
+        movl  $0x80, EFRAME_entry_vector(%rsp)
         SAVE_ALL
 
         SPEC_CTRL_ENTRY_FROM_PV /* Req: %rsp=regs/cpuinfo, %rdx=0, Clob: acd */
@@ -653,7 +653,7 @@ END(ret_from_intr)
         .section .init.text, "ax", @progbits
 FUNC(early_page_fault)
         ENDBR64
-        movl  $TRAP_page_fault, 4(%rsp)
+        movl  $TRAP_page_fault, EFRAME_entry_vector(%rsp)
         SAVE_ALL
         movq  %rsp, %rdi
         call  do_early_page_fault
@@ -722,7 +722,7 @@ END(common_interrupt)
 
 FUNC(page_fault)
         ENDBR64
-        movl  $TRAP_page_fault,4(%rsp)
+        movl  $TRAP_page_fault, EFRAME_entry_vector(%rsp)
 /* No special register assumptions. */
 FUNC(handle_exception, 0)
         ALTERNATIVE "", clac, X86_FEATURE_XEN_SMAP
@@ -899,105 +899,105 @@ END(handle_exception)
 FUNC(divide_error)
         ENDBR64
         pushq $0
-        movl  $TRAP_divide_error,4(%rsp)
+        movl  $TRAP_divide_error, EFRAME_entry_vector(%rsp)
         jmp   handle_exception
 END(divide_error)
 
 FUNC(coprocessor_error)
         ENDBR64
         pushq $0
-        movl  $TRAP_copro_error,4(%rsp)
+        movl  $TRAP_copro_error, EFRAME_entry_vector(%rsp)
         jmp   handle_exception
 END(coprocessor_error)
 
 FUNC(simd_coprocessor_error)
         ENDBR64
         pushq $0
-        movl  $TRAP_simd_error,4(%rsp)
+        movl  $TRAP_simd_error, EFRAME_entry_vector(%rsp)
         jmp   handle_exception
 END(simd_coprocessor_error)
 
 FUNC(device_not_available)
         ENDBR64
         pushq $0
-        movl  $TRAP_no_device,4(%rsp)
+        movl  $TRAP_no_device, EFRAME_entry_vector(%rsp)
         jmp   handle_exception
 END(device_not_available)
 
 FUNC(debug)
         ENDBR64
         pushq $0
-        movl  $TRAP_debug,4(%rsp)
+        movl  $TRAP_debug, EFRAME_entry_vector(%rsp)
         jmp   handle_ist_exception
 END(debug)
 
 FUNC(int3)
         ENDBR64
         pushq $0
-        movl  $TRAP_int3,4(%rsp)
+        movl  $TRAP_int3, EFRAME_entry_vector(%rsp)
         jmp   handle_exception
 END(int3)
 
 FUNC(overflow)
         ENDBR64
         pushq $0
-        movl  $TRAP_overflow,4(%rsp)
+        movl  $TRAP_overflow, EFRAME_entry_vector(%rsp)
         jmp   handle_exception
 END(overflow)
 
 FUNC(bounds)
         ENDBR64
         pushq $0
-        movl  $TRAP_bounds,4(%rsp)
+        movl  $TRAP_bounds, EFRAME_entry_vector(%rsp)
         jmp   handle_exception
 END(bounds)
 
 FUNC(invalid_op)
         ENDBR64
         pushq $0
-        movl  $TRAP_invalid_op,4(%rsp)
+        movl  $TRAP_invalid_op, EFRAME_entry_vector(%rsp)
         jmp   handle_exception
 END(invalid_op)
 
 FUNC(invalid_TSS)
         ENDBR64
-        movl  $TRAP_invalid_tss,4(%rsp)
+        movl  $TRAP_invalid_tss, EFRAME_entry_vector(%rsp)
         jmp   handle_exception
 END(invalid_TSS)
 
 FUNC(segment_not_present)
         ENDBR64
-        movl  $TRAP_no_segment,4(%rsp)
+        movl  $TRAP_no_segment, EFRAME_entry_vector(%rsp)
         jmp   handle_exception
 END(segment_not_present)
 
 FUNC(stack_segment)
         ENDBR64
-        movl  $TRAP_stack_error,4(%rsp)
+        movl  $TRAP_stack_error, EFRAME_entry_vector(%rsp)
         jmp   handle_exception
 END(stack_segment)
 
 FUNC(general_protection)
         ENDBR64
-        movl  $TRAP_gp_fault,4(%rsp)
+        movl  $TRAP_gp_fault, EFRAME_entry_vector(%rsp)
         jmp   handle_exception
 END(general_protection)
 
 FUNC(alignment_check)
         ENDBR64
-        movl  $TRAP_alignment_check,4(%rsp)
+        movl  $TRAP_alignment_check, EFRAME_entry_vector(%rsp)
         jmp   handle_exception
 END(alignment_check)
 
 FUNC(entry_CP)
         ENDBR64
-        movl  $X86_EXC_CP, 4(%rsp)
+        movl  $X86_EXC_CP, EFRAME_entry_vector(%rsp)
         jmp   handle_exception
 END(entry_CP)
 
 FUNC(double_fault)
         ENDBR64
-        movl  $TRAP_double_fault,4(%rsp)
+        movl  $TRAP_double_fault, EFRAME_entry_vector(%rsp)
         /* Set AC to reduce chance of further SMAP faults */
         ALTERNATIVE "", stac, X86_FEATURE_XEN_SMAP
         SAVE_ALL
@@ -1024,7 +1024,7 @@ END(double_fault)
 FUNC(nmi)
         ENDBR64
         pushq $0
-        movl  $TRAP_nmi,4(%rsp)
+        movl  $TRAP_nmi, EFRAME_entry_vector(%rsp)
 END(nmi)
 
 FUNC(handle_ist_exception)
@@ -1160,7 +1160,7 @@ END(handle_ist_exception)
 FUNC(machine_check)
         ENDBR64
         pushq $0
-        movl  $TRAP_machine_check,4(%rsp)
+        movl  $TRAP_machine_check, EFRAME_entry_vector(%rsp)
         jmp   handle_ist_exception
 END(machine_check)
 
@@ -1199,7 +1199,7 @@ FUNC_LOCAL(autogen_stubs, 0) /* Automatically generated stubs. */
 1:
         ENDBR64
         pushq $0
-        movb  $vec,4(%rsp)
+        movb  $vec, EFRAME_entry_vector(%rsp)
         jmp   common_interrupt
 
         entrypoint 1b
@@ -1213,7 +1213,7 @@ FUNC_LOCAL(autogen_stubs, 0) /* Automatically generated stubs. */
         test  $8,%spl        /* 64bit exception frames are 16 byte aligned, but the word */
         jz    2f             /* size is 8 bytes.  Check whether the processor gave us an */
         pushq $0             /* error code, and insert an empty one if not.              */
-2:      movb  $vec,4(%rsp)
+2:      movb  $vec, EFRAME_entry_vector(%rsp)
         jmp   handle_exception
 
         entrypoint 1b
