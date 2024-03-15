@@ -219,6 +219,7 @@
 #define  SYSCFG_MTRR_VAR_DRAM_EN            (_AC(1, ULL) << 20)
 #define  SYSCFG_MTRR_TOM2_EN                (_AC(1, ULL) << 21)
 #define  SYSCFG_TOM2_FORCE_WB               (_AC(1, ULL) << 22)
+#define  SYSCFG_MEM_ENCRYPT                 (_AC(1, ULL) << 23)
 
 #define MSR_K8_IORR_BASE0                   _AC(0xc0010016, U)
 #define MSR_K8_IORR_MASK0                   _AC(0xc0010017, U)
