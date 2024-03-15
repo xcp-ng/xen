@@ -1,0 +1,10 @@
+config AMD_SP
+        bool "AMD Secure Processor" if EXPERT
+        depends on X86
+        default y
+        help
+          Enables AMD Secure Processor.
+          
+          If your platform includes AMD Secure Processor devices and you are
+          intended to use AMD Secure Virtualization Technology, say Y.
+          If in doubt, say N.
