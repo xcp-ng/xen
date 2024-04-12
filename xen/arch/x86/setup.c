@@ -58,6 +58,7 @@
 #include <asm/microcode.h>
 #include <asm/prot-key.h>
 #include <asm/pv/domain.h>
+#include <asm/hvm/svm/svm.h>
 
 /* opt_nosmp: If true, secondary processors are ignored. */
 static bool __initdata opt_nosmp;
@@ -1001,6 +1002,7 @@ void asmlinkage __init noreturn __start_xen(unsigned long mbi_p)
         .stop_bits = 1
     };
     const char *hypervisor_name;
+    struct svm_asid_data *svm;
 
     /* Critical region without IDT or TSS.  Any fault is deadly! */
 
@@ -2004,6 +2006,13 @@ void asmlinkage __init noreturn __start_xen(unsigned long mbi_p)
         printk(XENLOG_INFO "Parked %u CPUs\n", num_parked);
     smp_cpus_done();
 
+    if (cpu_has_svm) {
+        for_each_online_cpu (i) {
+        svm = &per_cpu(svm_asid_data, i);
+        svm->last_vmcbs = (struct vmcb_struct **)xzalloc_array(void *, svm->nr_asids);
+        }
+    }
+    
     do_initcalls();
 
     if ( opt_watchdog ) 

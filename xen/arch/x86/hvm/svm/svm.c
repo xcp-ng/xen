@@ -60,6 +60,7 @@ static DEFINE_PER_CPU(struct vmcb_struct *, host_vmcb_va);
 #endif
 
 static bool amd_erratum383_found __read_mostly;
+DEFINE_PER_CPU(struct svm_asid_data, svm_asid_data);
 
 /* OSVW bits */
 static uint64_t osvw_length, osvw_status;
@@ -1014,6 +1015,9 @@ void asmlinkage svm_vmenter_helper(void)
     const struct cpu_user_regs *regs = guest_cpu_user_regs();
     struct vcpu *curr = current;
     struct vmcb_struct *vmcb = curr->arch.hvm.svm.vmcb;
+    struct svm_asid_data *data = &this_cpu(svm_asid_data);
+    struct svm_vcpu *svm = &curr->arch.hvm.svm;
+    int asid;
 
     ASSERT(hvmemul_cache_disabled(curr));
 
@@ -1030,6 +1034,13 @@ void asmlinkage svm_vmenter_helper(void)
     vmcb->rip = regs->rip;
     vmcb->rsp = regs->rsp;
     vmcb->rflags = regs->rflags | X86_EFLAGS_MBS;
+
+    asid = vmcb_get_asid(vmcb);
+    
+    if (asid != 0)
+        data->last_vmcbs[asid] = vmcb;
+
+    svm->last_cpu = smp_processor_id();
 }
 
 static void svm_guest_osvw_init(struct domain *d)
@@ -1409,6 +1420,7 @@ static void cf_check svm_cpu_dead(unsigned int cpu)
 {
     paddr_t *this_hsa = &per_cpu(hsa, cpu);
     paddr_t *this_vmcb = &per_cpu(host_vmcb, cpu);
+    struct svm_asid_data *data = &per_cpu(svm_asid_data, cpu);
 
     if ( *this_hsa )
     {
@@ -1429,6 +1441,8 @@ static void cf_check svm_cpu_dead(unsigned int cpu)
         free_domheap_page(maddr_to_page(*this_vmcb));
         *this_vmcb = 0;
     }
+
+    xfree(data->last_vmcbs);
 }
 
 static int cf_check svm_cpu_up_prepare(unsigned int cpu)
@@ -2526,7 +2540,7 @@ const struct hvm_function_table * __init start_svm(void)
 
     svm_function_table.caps.hap = cpu_has_svm_npt;
     svm_function_table.caps.hap_superpage_2mb = true;
-    svm_function_table.caps.hap_superpage_1gb = cpu_has_page1gb;
+    svm_function_table.caps.hap_superpage_1gb = cpu_has_page1gb; 
 
     return &svm_function_table;
 }

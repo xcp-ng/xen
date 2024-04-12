@@ -21,6 +21,14 @@ bool svm_load_segs(unsigned int ldt_ents, unsigned long ldt_base,
                    unsigned long fs_base, unsigned long gs_base,
                    unsigned long gs_shadow);
 
+struct svm_asid_data {
+    struct hvm_asid_data *hvm;
+    struct vmcb_struct **last_vmcbs;
+    unsigned int nr_asids;
+};
+
+DECLARE_PER_CPU(struct svm_asid_data, svm_asid_data); 
+
 extern u32 svm_feature_flags;
 
 #define SVM_FEATURE_NPT            0 /* Nested page table support */

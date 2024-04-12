@@ -593,6 +593,9 @@ struct svm_vcpu {
     uint64_t guest_sysenter_cs;
     uint64_t guest_sysenter_esp;
     uint64_t guest_sysenter_eip;
+    
+    /*Host CPU that was used in recent VM-entry*/
+    unsigned int last_cpu;
 };
 
 struct vmcb_struct *alloc_vmcb(void);
@@ -610,6 +613,7 @@ void setup_vmcb_dump(void);
 void svm_intercept_msr(struct vcpu *v, uint32_t msr, int flags);
 #define svm_disable_intercept_for_msr(v, msr) svm_intercept_msr((v), (msr), MSR_INTERCEPT_NONE)
 #define svm_enable_intercept_for_msr(v, msr) svm_intercept_msr((v), (msr), MSR_INTERCEPT_RW)
+
 
 /*
  * VMCB accessor functions.
