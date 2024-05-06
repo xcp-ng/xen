@@ -1254,7 +1254,7 @@ static void virtual_vmentry(struct cpu_user_regs *regs)
 
         if ( nvmx->guest_vpid != new_vpid )
         {
-            hvm_asid_flush_vcpu_asid(&vcpu_nestedhvm(v).nv_n2asid);
+//            hvm_asid_flush_vcpu_asid(&vcpu_nestedhvm(v).nv_n2asid);
             nvmx->guest_vpid = new_vpid;
         }
     }
@@ -2055,8 +2055,8 @@ static int nvmx_handle_invvpid(struct cpu_user_regs *regs)
     case INVVPID_INDIVIDUAL_ADDR:
     case INVVPID_SINGLE_CONTEXT:
     case INVVPID_ALL_CONTEXT:
-        hvm_asid_flush_vcpu_asid(&vcpu_nestedhvm(current).nv_n2asid);
-        break;
+  //      hvm_asid_flush_vcpu_asid(&vcpu_nestedhvm(current).nv_n2asid);
+      break;
     default:
         vmfail(regs, VMX_INSN_INVEPT_INVVPID_INVALID_OP);
         return X86EMUL_OKAY;

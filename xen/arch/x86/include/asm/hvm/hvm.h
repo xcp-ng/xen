@@ -464,7 +464,7 @@ static inline void hvm_set_tsc_offset(struct vcpu *v, uint64_t offset,
 static inline void hvm_flush_guest_tlbs(void)
 {
     if ( hvm_enabled )
-        hvm_asid_flush_core();
+        hvm_asid_flush_all();
 }
 
 static inline unsigned int

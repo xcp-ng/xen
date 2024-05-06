@@ -699,7 +699,7 @@ nsvm_vcpu_vmentry(struct vcpu *v, struct cpu_user_regs *regs,
     if ( svm->ns_asid != vmcb_get_asid(ns_vmcb))
     {
         nv->nv_flushp2m = 1;
-        hvm_asid_flush_vcpu_asid(&vcpu_nestedhvm(v).nv_n2asid);
+//        hvm_asid_flush_vcpu_asid(&vcpu_nestedhvm(v).nv_n2asid);
         svm->ns_asid = vmcb_get_asid(ns_vmcb);
     }
 

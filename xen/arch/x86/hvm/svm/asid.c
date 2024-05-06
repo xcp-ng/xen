@@ -7,31 +7,35 @@
 #include <asm/amd.h>
 #include <asm/hvm/nestedhvm.h>
 #include <asm/hvm/svm/svm.h>
-
+#include <asm/processor.h>
 #include "svm.h"
+#include "xen/cpumask.h"
 
-void svm_asid_init(const struct cpuinfo_x86 *c)
+void svm_asid_init(void)
 {
+    unsigned int cpu = smp_processor_id();
+    const struct cpuinfo_x86 *c;
     int nasids = 0;
 
-    /* Check for erratum #170, and leave ASIDs disabled if it's present. */
-    if ( !cpu_has_amd_erratum(c, AMD_ERRATUM_170) )
-        nasids = cpuid_ebx(0x8000000aU);
-
+    for_each_online_cpu( cpu ) {
+        c = &cpu_data[cpu];
+        /* Check for erratum #170, and leave ASIDs disabled if it's present. */
+        if ( !cpu_has_amd_erratum(c, AMD_ERRATUM_170) )
+            nasids += cpuid_ebx(0x8000000aU);
+    }
     hvm_asid_init(nasids);
 }
 
 /*
- * Called directly before VMRUN.  Checks if the VCPU needs a new ASID,
+ * Called directly before first VMRUN.  Checks if the domain needs an ASID,
  * assigns it, and if required, issues required TLB flushes.
  */
 void svm_asid_handle_vmrun(void)
 {
-    struct vcpu *curr = current;
-    struct vmcb_struct *vmcb = curr->arch.hvm.svm.vmcb;
-    struct hvm_vcpu_asid *p_asid =
-        nestedhvm_vcpu_in_guestmode(curr)
-        ? &vcpu_nestedhvm(curr).nv_n2asid : &curr->arch.hvm.n1asid;
+    struct vcpu *v = current;
+    struct domain *d = current->domain;
+    struct vmcb_struct *vmcb = v->arch.hvm.svm.vmcb;
+    struct hvm_domain_asid *p_asid = &d->arch.hvm.n1asid;
     bool need_flush = hvm_asid_handle_vmenter(p_asid);
 
     /* ASID 0 indicates that ASIDs are disabled. */

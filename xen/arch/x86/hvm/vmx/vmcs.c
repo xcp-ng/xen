@@ -1956,7 +1956,7 @@ void cf_check vmx_do_resume(void)
          */
         v->arch.hvm.vmx.hostenv_migrated = 1;
 
-        hvm_asid_flush_vcpu(v);
+        hvm_asid_flush_domain(v->domain);
     }
 
     debug_state = v->domain->debugger_attached

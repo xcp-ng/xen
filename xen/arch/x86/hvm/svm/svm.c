@@ -179,17 +179,15 @@ static void cf_check svm_update_guest_cr(
         break;
     case 3:
         vmcb_set_cr3(vmcb, v->arch.hvm.hw_cr[3]);
-        if ( !nestedhvm_enabled(v->domain) )
+        /*if ( !nestedhvm_enabled(v->domain) )
         {
             if ( !(flags & HVM_UPDATE_GUEST_CR3_NOFLUSH) )
                 hvm_asid_flush_vcpu(v);
-        }
-        else if ( nestedhvm_vmswitch_in_progress(v) )
+        }*/
+        if ( nestedhvm_vmswitch_in_progress(v) )
             ; /* CR3 switches during VMRUN/VMEXIT do not flush the TLB. */
-        else if ( !(flags & HVM_UPDATE_GUEST_CR3_NOFLUSH) )
-            hvm_asid_flush_vcpu_asid(
-                nestedhvm_vcpu_in_guestmode(v)
-                ? &vcpu_nestedhvm(v).nv_n2asid : &v->arch.hvm.n1asid);
+        /*else if ( !(flags & HVM_UPDATE_GUEST_CR3_NOFLUSH) )
+            hvm_asid_flush_vcpu_asid(&v->arch.hvm.n1asid);*/
         break;
     case 4:
         value = HVM_CR4_HOST_MASK;
@@ -988,8 +986,8 @@ static void noreturn cf_check svm_do_resume(void)
         v->arch.hvm.svm.launch_core = smp_processor_id();
         hvm_migrate_timers(v);
         hvm_migrate_pirqs(v);
-        /* Migrating to another ASID domain.  Request a new ASID. */
-        hvm_asid_flush_vcpu(v);
+        /* Migrating to another ASID domain. Request a new ASID. */
+        hvm_asid_flush_domain(v->domain);
     }
 
     if ( !vcpu_guestmode && !vlapic_hw_disabled(vlapic) )
@@ -1569,9 +1567,6 @@ static int _svm_cpu_up(bool bsp)
 
     /* check for erratum 383 */
     svm_init_erratum_383(c);
-
-    /* Initialize core's ASID handling. */
-    svm_asid_init(c);
 
     /* Initialize OSVW bits to be used by guests */
     svm_host_osvw_init();
@@ -2331,13 +2326,11 @@ static void svm_vmexit_do_invalidate_cache(struct cpu_user_regs *regs,
     __update_guest_eip(regs, inst_len);
 }
 
+//TODO(vaishali): Handle for nested virtualization as well
 static void svm_invlpga_intercept(
-    struct vcpu *v, unsigned long linear, uint32_t asid)
+    struct domain *d, unsigned long linear, uint32_t asid)
 {
-    svm_invlpga(linear,
-                (asid == 0)
-                ? v->arch.hvm.n1asid.asid
-                : vcpu_nestedhvm(v).nv_n2asid.asid);
+    svm_invlpga(linear, d->arch.hvm.n1asid.asid);
 }
 
 static void svm_invlpg_intercept(unsigned long linear)
@@ -2358,8 +2351,9 @@ static bool cf_check is_invlpg(
 
 static void cf_check svm_invlpg(struct vcpu *v, unsigned long linear)
 {
+    v = current;
     /* Safe fallback. Take a new ASID. */
-    hvm_asid_flush_vcpu(v);
+    hvm_asid_flush_domain(v->domain);
 }
 
 static bool cf_check svm_get_pending_event(
@@ -2533,6 +2527,7 @@ void asmlinkage svm_vmexit_handler(void)
     struct cpu_user_regs *regs = guest_cpu_user_regs();
     uint64_t exit_reason;
     struct vcpu *v = current;
+    struct domain *d = current->domain;
     struct vmcb_struct *vmcb = v->arch.hvm.svm.vmcb;
     int insn_len, rc;
     vintr_t intr;
@@ -2927,7 +2922,7 @@ void asmlinkage svm_vmexit_handler(void)
         }
         if ( (insn_len = svm_get_insn_len(v, INSTR_INVLPGA)) == 0 )
             break;
-        svm_invlpga_intercept(v, regs->rax, regs->ecx);
+        svm_invlpga_intercept(d, regs->rax, regs->ecx);
         __update_guest_eip(regs, insn_len);
         break;
 

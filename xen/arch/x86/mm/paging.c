@@ -964,7 +964,7 @@ void paging_update_nestedmode(struct vcpu *v)
     else
         /* TODO: shadow-on-shadow */
         v->arch.paging.nestedmode = NULL;
-    hvm_asid_flush_vcpu(v);
+    hvm_asid_flush_domain(v->domain);
 }
 
 int __init paging_set_allocation(struct domain *d, unsigned int pages,

@@ -27,8 +27,8 @@ boolean_param("asid", opt_asid_enabled);
  * the TLB.
  *
  * Sketch of the Implementation:
- *
- * ASIDs are a CPU-local resource.  As preemption of ASIDs is not possible,
+ * TODO(vaishali): Update this comment
+ * ASIDs are Xen-wide resource.  As preemption of ASIDs is not possible,
  * ASIDs are assigned in a round-robin scheme.  To minimize the overhead of
  * ASID invalidation, at the time of a TLB flush,  ASIDs are tagged with a
  * 64-bit generation.  Only on a generation overflow the code needs to
@@ -38,20 +38,21 @@ boolean_param("asid", opt_asid_enabled);
  * ASID useage to retain correctness.
  */
 
-/* Per-CPU ASID management. */
+/* Xen-wide ASID management */
 struct hvm_asid_data {
-   uint64_t core_asid_generation;
+   uint64_t asid_generation;
    uint32_t next_asid;
    uint32_t max_asid;
+   uint32_t min_asid;
    bool disabled;
 };
 
-static DEFINE_PER_CPU(struct hvm_asid_data, hvm_asid_data);
+static struct hvm_asid_data asid_data;
 
 void hvm_asid_init(int nasids)
 {
     static int8_t g_disabled = -1;
-    struct hvm_asid_data *data = &this_cpu(hvm_asid_data);
+    struct hvm_asid_data *data = &asid_data;
 
     data->max_asid = nasids - 1;
     data->disabled = !opt_asid_enabled || (nasids <= 1);
@@ -64,67 +65,73 @@ void hvm_asid_init(int nasids)
     }
 
     /* Zero indicates 'invalid generation', so we start the count at one. */
-    data->core_asid_generation = 1;
+    data->asid_generation = 1;
 
     /* Zero indicates 'ASIDs disabled', so we start the count at one. */
     data->next_asid = 1;
 }
 
-void hvm_asid_flush_vcpu_asid(struct hvm_vcpu_asid *asid)
+void hvm_asid_flush_domain_asid(struct hvm_domain_asid *asid)
 {
     write_atomic(&asid->generation, 0);
 }
 
-void hvm_asid_flush_vcpu(struct vcpu *v)
+void hvm_asid_flush_domain(struct domain *d)
 {
-    hvm_asid_flush_vcpu_asid(&v->arch.hvm.n1asid);
-    hvm_asid_flush_vcpu_asid(&vcpu_nestedhvm(v).nv_n2asid);
+    hvm_asid_flush_domain_asid(&d->arch.hvm.n1asid);
+    //hvm_asid_flush_domain_asid(&vcpu_nestedhvm(v).nv_n2asid);
 }
 
-void hvm_asid_flush_core(void)
+void hvm_asid_flush_all(void)
 {
-    struct hvm_asid_data *data = &this_cpu(hvm_asid_data);
+    struct hvm_asid_data *data = &asid_data;
 
-    if ( data->disabled )
+    if ( data->disabled)
         return;
 
-    if ( likely(++data->core_asid_generation != 0) )
+    if ( likely(++data->asid_generation != 0) )
         return;
 
     /*
-     * ASID generations are 64 bit.  Overflow of generations never happens.
-     * For safety, we simply disable ASIDs, so correctness is established; it
-     * only runs a bit slower.
-     */
+    * ASID generations are 64 bit.  Overflow of generations never happens.
+    * For safety, we simply disable ASIDs, so correctness is established; it
+    * only runs a bit slower.
+    */
     printk("HVM: ASID generation overrun. Disabling ASIDs.\n");
     data->disabled = 1;
 }
 
-bool hvm_asid_handle_vmenter(struct hvm_vcpu_asid *asid)
+/* This function is called only when first vmenter happens after creating a new domain */
+bool hvm_asid_handle_vmenter(struct hvm_domain_asid *asid)
 {
-    struct hvm_asid_data *data = &this_cpu(hvm_asid_data);
+    struct hvm_asid_data *data = &asid_data;
 
     /* On erratum #170 systems we must flush the TLB. 
      * Generation overruns are taken here, too. */
     if ( data->disabled )
         goto disabled;
 
-    /* Test if VCPU has valid ASID. */
-    if ( read_atomic(&asid->generation) == data->core_asid_generation )
+    /* Test if domain has valid ASID. */
+    if ( read_atomic(&asid->generation) == data->asid_generation )
         return 0;
 
     /* If there are no free ASIDs, need to go to a new generation */
     if ( unlikely(data->next_asid > data->max_asid) )
     {
-        hvm_asid_flush_core();
+        // TODO(vaishali): Add a check to pick the asid from the reclaimable asids if any
+        hvm_asid_flush_all();
         data->next_asid = 1;
         if ( data->disabled )
             goto disabled;
     }
 
-    /* Now guaranteed to be a free ASID. */
-    asid->asid = data->next_asid++;
-    write_atomic(&asid->generation, data->core_asid_generation);
+    /* Now guaranteed to be a free ASID. Only assign a new asid if the ASID is 1 */
+    if (asid->asid == 0)
+    {
+        asid->asid = data->next_asid++;
+    }
+
+    write_atomic(&asid->generation, data->asid_generation);
 
     /*
      * When we assign ASID 1, flush all TLB entries as we are starting a new

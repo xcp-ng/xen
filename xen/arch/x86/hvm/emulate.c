@@ -2519,10 +2519,7 @@ static int cf_check hvmemul_tlb_op(
 
     case x86emul_invpcid:
         if ( x86emul_invpcid_type(aux) != X86_INVPCID_INDIV_ADDR )
-        {
-            hvm_asid_flush_vcpu(current);
             break;
-        }
         aux = x86emul_invpcid_pcid(aux);
         /* fall through */
     case x86emul_invlpga:
