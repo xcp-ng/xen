@@ -35,6 +35,8 @@ enum {
 #undef NULL
 #define NULL ((void*)0)
 
+#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
+
 void __assert_failed(const char *assertion, const char *file, int line)
     __attribute__((noreturn));
 #define ASSERT(p) \
