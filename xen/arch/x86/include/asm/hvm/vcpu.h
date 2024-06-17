@@ -17,9 +17,15 @@
 #include <asm/mtrr.h>
 #include <public/hvm/ioreq.h>
 
-struct hvm_vcpu_asid {
-    uint64_t generation;
-    uint32_t asid;
+/*
+ * We may read or write up to m512 as a number of device-model
+ * transactions.
+ */
+struct hvm_mmio_cache {
+    unsigned long gla;
+    unsigned int size;
+    uint8_t dir;
+    uint8_t buffer[64] __aligned(sizeof(long));
 };
 
 struct hvm_vcpu_io {
@@ -78,8 +84,6 @@ struct nestedvcpu {
     struct p2m_domain *nv_p2m; /* used p2m table for this vcpu */
     bool stale_np2m; /* True when p2m_base in VMCx02 is no longer valid */
     uint64_t np2m_generation;
-
-    struct hvm_vcpu_asid nv_n2asid;
 
     bool nv_vmentry_pending;
     bool nv_vmexit_pending;
@@ -140,8 +144,6 @@ struct hvm_vcpu {
 
     /* (MFN) hypervisor page table */
     pagetable_t         monitor_table;
-
-    struct hvm_vcpu_asid n1asid;
 
     u64                 msr_tsc_adjust;
 

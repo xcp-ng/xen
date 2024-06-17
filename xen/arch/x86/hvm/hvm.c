@@ -615,6 +615,7 @@ int hvm_domain_initialise(struct domain *d,
     d->arch.hvm.params = xzalloc_array(uint64_t, HVM_NR_PARAMS);
     d->arch.hvm.io_handler = xzalloc_array(struct hvm_io_handler,
                                            NR_IO_HANDLERS);
+    d->arch.hvm.n1asid = xzalloc(struct hvm_domain_asid);
     d->arch.hvm.irq = xzalloc_flex_struct(struct hvm_irq,
                                           gsi_assert_count, nr_gsis);
 
@@ -692,6 +693,10 @@ int hvm_domain_initialise(struct domain *d,
     if ( rc )
         goto fail2;
 
+    rc = hvm_asid_domain_create(&d->arch.hvm.n1asid);
+    if ( rc )
+        goto fail2;
+
     rc = alternative_call(hvm_funcs.domain_initialise, d);
     if ( rc != 0 )
         goto fail2;
@@ -712,6 +717,7 @@ int hvm_domain_initialise(struct domain *d,
     hvm_domain_relinquish_resources(d);
     XFREE(d->arch.hvm.io_handler);
     XFREE(d->arch.hvm.pl_time);
+    XFREE(d->arch.hvm.n1asid);
     return rc;
 }
 
@@ -772,8 +778,9 @@ void hvm_domain_destroy(struct domain *d)
         list_del(&ioport->list);
         xfree(ioport);
     }
-
+    hvm_domain_asid_destroy(d);
     destroy_vpci_mmcfg(d);
+
 }
 
 static int cf_check hvm_save_tsc_adjust(struct vcpu *v, hvm_domain_context_t *h)
@@ -1592,8 +1599,6 @@ int hvm_vcpu_initialise(struct vcpu *v)
 {
     int rc;
     struct domain *d = v->domain;
-
-    hvm_asid_flush_vcpu(v);
 
     spin_lock_init(&v->arch.hvm.tm_lock);
     INIT_LIST_HEAD(&v->arch.hvm.tm_list);

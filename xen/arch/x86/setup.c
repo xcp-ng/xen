@@ -62,6 +62,7 @@
 #include <asm/prot-key.h>
 #include <asm/pv/domain.h>
 #include <asm/trampoline.h>
+#include <asm/hvm/svm/svm.h>
 
 /* opt_nosmp: If true, secondary processors are ignored. */
 static bool __initdata opt_nosmp;
@@ -2089,6 +2090,16 @@ void asmlinkage __init noreturn __start_xen(void)
     if ( num_parked )
         printk(XENLOG_INFO "Parked %u CPUs\n", num_parked);
     smp_cpus_done();
+
+    /* Initialize xen-wide ASID handling */
+    #ifdef CONFIG_HVM
+    for_each_present_cpu ( i )
+    {
+        if ( cpu_has_svm )
+            /* TODO: This needs to be fixed so that the invocation of the CPUID is done on the same CPU only once */
+            smp_call_function(cpu, svm_asid_init, NULL);
+    }
+    #endif
 
     do_initcalls();
 
