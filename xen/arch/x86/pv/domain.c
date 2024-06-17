@@ -305,6 +305,7 @@ int pv_vcpu_initialise(struct vcpu *v)
     struct domain *d = v->domain;
     int rc;
 
+    printk(XENLOG_INFO "pv_vcpu_initialise called for domain %u", d->domain_id);
     ASSERT(!is_idle_domain(d));
 
     rc = pv_create_gdt_ldt_l1tab(v);

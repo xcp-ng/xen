@@ -777,6 +777,10 @@ void hvm_domain_destroy(struct domain *d)
     }
 
     destroy_vpci_mmcfg(d);
+
+    /* Clear the asid and put it in the reclaimable ASID pool */
+    clear_bit(d->arch.hvm.n1asid.asid, hvm_asid_bitmap);
+    set_bit(d->arch.hvm.n1asid.asid, hvm_reclaim_asid_bitmap);
 }
 
 static int cf_check hvm_save_tsc_adjust(struct vcpu *v, hvm_domain_context_t *h)
@@ -1584,8 +1588,6 @@ int hvm_vcpu_initialise(struct vcpu *v)
 {
     int rc;
     struct domain *d = v->domain;
-
-    hvm_asid_flush_vcpu(v);
 
     spin_lock_init(&v->arch.hvm.tm_lock);
     INIT_LIST_HEAD(&v->arch.hvm.tm_list);

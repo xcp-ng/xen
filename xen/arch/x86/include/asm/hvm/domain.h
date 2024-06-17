@@ -50,6 +50,11 @@ struct hvm_pi_ops {
     void (*vcpu_block)(struct vcpu *v);
 };
 
+struct hvm_domain_asid {
+    uint64_t generation;
+    uint32_t asid;
+};
+
 struct hvm_domain {
     /* Guest page range used for non-default ioreq servers */
     struct {
@@ -141,6 +146,8 @@ struct hvm_domain {
     } write_map;
 
     struct hvm_pi_ops pi_ops;
+    struct hvm_domain_asid n1asid;
+    struct hvm_domain_asid nv_n2asid;
 
     union {
         struct vmx_domain vmx;

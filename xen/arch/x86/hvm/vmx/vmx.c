@@ -1467,7 +1467,7 @@ static void cf_check vmx_handle_cd(struct vcpu *v, unsigned long value)
             vmx_set_msr_intercept(v, MSR_IA32_CR_PAT, VMX_MSR_RW);
 
             wbinvd();               /* flush possibly polluted cache */
-            hvm_asid_flush_vcpu(v); /* invalidate memory type cached in TLB */
+            hvm_asid_flush_domain(v->domain); /* invalidate memory type cached in TLB */
             v->arch.hvm.cache_mode = NO_FILL_CACHE_MODE;
         }
         else
@@ -1476,7 +1476,7 @@ static void cf_check vmx_handle_cd(struct vcpu *v, unsigned long value)
             vmx_set_guest_pat(v, *pat);
             if ( !is_iommu_enabled(v->domain) || iommu_snoop )
                 vmx_clear_msr_intercept(v, MSR_IA32_CR_PAT, VMX_MSR_RW);
-            hvm_asid_flush_vcpu(v); /* no need to flush cache */
+            hvm_asid_flush_domain(v->domain);
         }
     }
 }
@@ -1836,8 +1836,6 @@ static void cf_check vmx_update_guest_cr(
 
         __vmwrite(GUEST_CR3, v->arch.hvm.hw_cr[3]);
 
-        if ( !(flags & HVM_UPDATE_GUEST_CR3_NOFLUSH) )
-            hvm_asid_flush_vcpu(v);
         break;
 
     default:
@@ -4819,9 +4817,8 @@ bool asmlinkage vmx_vmenter_helper(const struct cpu_user_regs *regs)
 {
     struct vcpu *curr = current;
     struct domain *currd = curr->domain;
-    u32 new_asid, old_asid;
-    struct hvm_vcpu_asid *p_asid;
-    bool need_flush;
+    u32 asid;
+    struct hvm_domain_asid *p_asid;
 
     ASSERT(hvmemul_cache_disabled(curr));
 
@@ -4835,35 +4832,21 @@ bool asmlinkage vmx_vmenter_helper(const struct cpu_user_regs *regs)
     if ( !cpu_has_vmx_vpid )
         goto out;
     if ( nestedhvm_vcpu_in_guestmode(curr) )
-        p_asid = &vcpu_nestedhvm(curr).nv_n2asid;
+        p_asid = &currd->arch.hvm.nv_n2asid;
     else
-        p_asid = &curr->arch.hvm.n1asid;
+        p_asid = &currd->arch.hvm.n1asid;
 
-    old_asid = p_asid->asid;
-    need_flush = hvm_asid_handle_vmenter(p_asid);
-    new_asid = p_asid->asid;
-
-    if ( unlikely(new_asid != old_asid) )
+    if ( unlikely(asid = p_asid->asid) )
     {
-        __vmwrite(VIRTUAL_PROCESSOR_ID, new_asid);
-        if ( !old_asid && new_asid )
+        __vmwrite(VIRTUAL_PROCESSOR_ID, asid);
+        if (!asid) 
         {
-            /* VPID was disabled: now enabled. */
+            /* VPID was disabled: now enabled */
             curr->arch.hvm.vmx.secondary_exec_control |=
                 SECONDARY_EXEC_ENABLE_VPID;
             vmx_update_secondary_exec_control(curr);
         }
-        else if ( old_asid && !new_asid )
-        {
-            /* VPID was enabled: now disabled. */
-            curr->arch.hvm.vmx.secondary_exec_control &=
-                ~SECONDARY_EXEC_ENABLE_VPID;
-            vmx_update_secondary_exec_control(curr);
-        }
     }
-
-    if ( unlikely(need_flush) )
-        vpid_sync_all();
 
     if ( paging_mode_hap(curr->domain) )
     {

@@ -525,6 +525,7 @@ void ept_sync_domain(struct p2m_domain *p2m);
 
 static inline void vpid_sync_vcpu_gva(struct vcpu *v, unsigned long gva)
 {
+    struct domain *d = v->domain;
     int type = INVVPID_INDIVIDUAL_ADDR;
 
     /*
@@ -544,7 +545,7 @@ static inline void vpid_sync_vcpu_gva(struct vcpu *v, unsigned long gva)
         type = INVVPID_ALL_CONTEXT;
 
 execute_invvpid:
-    __invvpid(type, v->arch.hvm.n1asid.asid, (u64)gva);
+    __invvpid(type, d->arch.hvm.n1asid.asid, (u64)gva);
 }
 
 static inline void vpid_sync_all(void)
