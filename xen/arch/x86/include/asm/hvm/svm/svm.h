@@ -21,6 +21,8 @@ bool svm_load_segs(unsigned int ldt_ents, unsigned long ldt_base,
                    unsigned long fs_base, unsigned long gs_base,
                    unsigned long gs_shadow);
 
+extern void svm_asid_init(void);
+extern void svm_vcpu_assign_asid(struct vcpu *v);
 extern u32 svm_feature_flags;
 
 #define SVM_FEATURE_NPT            0 /* Nested page table support */

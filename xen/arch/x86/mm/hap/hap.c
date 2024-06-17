@@ -739,12 +739,13 @@ static bool cf_check flush_tlb(const unsigned long *vcpu_bitmap)
         if ( !flush_vcpu(v, vcpu_bitmap) )
             continue;
 
-        hvm_asid_flush_vcpu(v);
-
         cpu = read_atomic(&v->dirty_cpu);
         if ( cpu != this_cpu && is_vcpu_dirty_cpu(cpu) && v->is_running )
             __cpumask_set_cpu(cpu, mask);
     }
+
+    printk(XENLOG_INFO "hvm_asid_flush_vcpu called in HAP code");
+    hvm_asid_flush_vcpu(v);
 
     /*
      * Trigger a vmexit on all pCPUs with dirty vCPU state in order to force an

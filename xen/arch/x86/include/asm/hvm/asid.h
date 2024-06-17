@@ -8,25 +8,25 @@
 #ifndef __ASM_X86_HVM_ASID_H__
 #define __ASM_X86_HVM_ASID_H__
 
+struct hvm_domain_asid;
+extern unsigned long *hvm_asid_bitmap;
+extern unsigned long *hvm_reclaim_asid_bitmap;
 
-struct vcpu;
-struct hvm_vcpu_asid;
 
-/* Initialise ASID management for the current physical CPU. */
-void hvm_asid_init(int nasids);
+/* Initialise ASID management distributed across all CPUs. */
+int hvm_asid_init(int nasids);
 
 /* Invalidate a particular ASID allocation: forces re-allocation. */
-void hvm_asid_flush_vcpu_asid(struct hvm_vcpu_asid *asid);
+void hvm_asid_flush_domain_asid(struct hvm_domain_asid *asid);
 
-/* Invalidate all ASID allocations for specified VCPU: forces re-allocation. */
+/* Invalidate all ASID allocations for specified domain */
+void hvm_asid_flush_domain(struct domain *d);
+
+/* Invalidate ASID allocation for the specified vcpu */
 void hvm_asid_flush_vcpu(struct vcpu *v);
 
-/* Flush all ASIDs on this processor core. */
-void hvm_asid_flush_core(void);
-
-/* Called before entry to guest context. Checks ASID allocation, returns a
- * boolean indicating whether all ASIDs must be flushed. */
-bool hvm_asid_handle_vmenter(struct hvm_vcpu_asid *asid);
+/* Called while creating a domain to assign an ASID */
+bool hvm_asid_domain_create(struct hvm_domain_asid *asid);
 
 #endif /* __ASM_X86_HVM_ASID_H__ */
 
