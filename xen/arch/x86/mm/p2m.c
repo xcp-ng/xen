@@ -1393,7 +1393,8 @@ p2m_flush(struct vcpu *v, struct p2m_domain *p2m)
     ASSERT(v->domain == p2m->domain);
     vcpu_nestedhvm(v).nv_p2m = NULL;
     p2m_flush_table(p2m);
-    hvm_asid_flush_vcpu(v);
+    printk(XENLOG_INFO "hvm_asid_flush_domain called in p2m_flush");
+    hvm_asid_flush_domain(v->domain);
 }
 
 void
@@ -1571,8 +1572,7 @@ void np2m_schedule(int dir)
         {
             if ( !np2m_valid )
             {
-                /* This vCPU's np2m was flushed while it was not runnable */
-                hvm_asid_flush_core();
+                /* This vCPU's np2m was flushed while it was not runnable */ 
                 vcpu_nestedhvm(curr).nv_p2m = NULL;
             }
             else

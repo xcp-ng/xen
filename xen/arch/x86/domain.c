@@ -52,6 +52,7 @@
 #include <asm/ldt.h>
 #include <asm/hvm/hvm.h>
 #include <asm/hvm/nestedhvm.h>
+#include <asm/hvm/asid.h>
 #include <asm/hvm/svm/svm.h>
 #include <asm/hvm/viridian.h>
 #include <asm/debugreg.h>
@@ -784,6 +785,7 @@ int arch_domain_create(struct domain *d,
                        unsigned int flags)
 {
     bool paging_initialised = false;
+    struct hvm_domain_asid *p_asid;
     uint32_t emflags;
     int rc;
 
@@ -897,6 +899,11 @@ int arch_domain_create(struct domain *d,
     d->arch.msr_relaxed = config->arch.misc_flags & XEN_X86_MSR_RELAXED;
 
     spec_ctrl_init_domain(d);
+
+    if ( is_hvm_domain(d) ) {
+        p_asid = &d->arch.hvm.n1asid;
+        hvm_asid_domain_create(p_asid);
+    }
 
     return 0;
 

@@ -486,7 +486,7 @@ static int nsvm_vmcb_prepare4vmrun(struct vcpu *v, struct cpu_user_regs *regs)
     if ( rc )
         return rc;
 
-    /* ASID - Emulation handled in hvm_asid_handle_vmenter() */
+    /* ASID - Emulation handled in hvm_asid_domain_create */
 
     /* TLB control */
     n2vmcb->tlb_control = ns_vmcb->tlb_control;
@@ -681,6 +681,7 @@ nsvm_vcpu_vmentry(struct vcpu *v, struct cpu_user_regs *regs,
     struct nestedvcpu *nv = &vcpu_nestedhvm(v);
     struct nestedsvm *svm = &vcpu_nestedsvm(v);
     struct vmcb_struct *ns_vmcb;
+    struct domain *d = v->domain;
 
     ns_vmcb = nv->nv_vvmcx;
     ASSERT(ns_vmcb != NULL);
@@ -699,7 +700,7 @@ nsvm_vcpu_vmentry(struct vcpu *v, struct cpu_user_regs *regs,
     if ( svm->ns_asid != vmcb_get_asid(ns_vmcb))
     {
         nv->nv_flushp2m = 1;
-        hvm_asid_flush_vcpu_asid(&vcpu_nestedhvm(v).nv_n2asid);
+        hvm_asid_flush_domain_asid(&d->arch.hvm.nv_n2asid);
         svm->ns_asid = vmcb_get_asid(ns_vmcb);
     }
 
