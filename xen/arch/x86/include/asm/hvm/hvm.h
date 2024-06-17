@@ -466,17 +466,6 @@ static inline void hvm_set_tsc_offset(struct vcpu *v, uint64_t offset,
     alternative_vcall(hvm_funcs.set_tsc_offset, v, offset, at_tsc);
 }
 
-/*
- * Called to ensure than all guest-specific mappings in a tagged TLB are 
- * flushed; does *not* flush Xen's TLB entries, and on processors without a 
- * tagged TLB it will be a noop.
- */
-static inline void hvm_flush_guest_tlbs(void)
-{
-    if ( hvm_enabled )
-        hvm_asid_flush_core();
-}
-
 static inline unsigned int
 hvm_get_cpl(struct vcpu *v)
 {

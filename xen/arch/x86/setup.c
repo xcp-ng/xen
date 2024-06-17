@@ -59,6 +59,7 @@
 #include <asm/microcode.h>
 #include <asm/prot-key.h>
 #include <asm/pv/domain.h>
+#include <asm/hvm/svm/svm.h>
 
 /* opt_nosmp: If true, secondary processors are ignored. */
 static bool __initdata opt_nosmp;
@@ -2014,6 +2015,15 @@ void asmlinkage __init noreturn __start_xen(unsigned long mbi_p)
     if ( num_parked )
         printk(XENLOG_INFO "Parked %u CPUs\n", num_parked);
     smp_cpus_done();
+
+    /* Initialize xen-wide ASID handling */
+    #ifdef CONFIG_HVM
+    for_each_present_cpu ( i )
+    {
+        if ( cpu_has_svm )
+            svm_asid_init();
+    }
+    #endif
 
     do_initcalls();
 
