@@ -571,7 +571,7 @@ static bool sendmsg_exact(int fd, struct iovec *iov, unsigned int nr)
 	};
 
 	while (hdr.msg_iovlen) {
-		ssize_t res = sendmsg(fd, &hdr, 0);
+		ssize_t res = sendmsg(fd, &hdr, MSG_NOSIGNAL);
 
 		if (res < 0 && errno == EINTR)
 			continue;
@@ -631,7 +631,6 @@ static void *xs_talkv(struct xs_handle *h,
 	void *ret = NULL;
 	int saved_errno;
 	unsigned int i, msg_len;
-	struct sigaction ignorepipe, oldact;
 
 	/* Element 0 must be xsd_sockmsg */
 	assert(num_vecs >= 1);
@@ -648,11 +647,6 @@ static void *xs_talkv(struct xs_handle *h,
 
 	msg->len = msg_len;
 
-	ignorepipe.sa_handler = SIG_IGN;
-	sigemptyset(&ignorepipe.sa_mask);
-	ignorepipe.sa_flags = 0;
-	sigaction(SIGPIPE, &ignorepipe, &oldact);
-
 	mutex_lock(&h->request_mutex);
 
 	if (!write_request(h, iovec, num_vecs))
@@ -664,7 +658,6 @@ static void *xs_talkv(struct xs_handle *h,
 
 	mutex_unlock(&h->request_mutex);
 
-	sigaction(SIGPIPE, &oldact, NULL);
 	if (reply_type == XS_ERROR) {
 		saved_errno = get_error(ret);
 		free(ret);
@@ -683,7 +676,6 @@ fail:
 	/* We're in a bad state, so close fd. */
 	saved_errno = errno;
 	mutex_unlock(&h->request_mutex);
-	sigaction(SIGPIPE, &oldact, NULL);
 close_fd:
 	close(h->fd);
 	h->fd = -1;
