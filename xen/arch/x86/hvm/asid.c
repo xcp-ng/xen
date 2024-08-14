@@ -44,6 +44,7 @@ static DEFINE_SPINLOCK(hvm_asid_lock);
 
 /* Xen-wide ASID management */
 struct hvm_asid_data {
+   uint32_t min_asid;
    uint32_t next_asid;
    uint32_t max_asid;
    bool disabled;
@@ -56,7 +57,10 @@ int hvm_asid_init(int nasids)
     struct hvm_asid_data *data = &asid_data;
     static int8_t g_disabled = -1;
 
-    data->max_asid = nasids - 1;
+    /* TODO(vaishali): Once we have SEV Operations, min_asid need to be
+    adjusted in SEV specific functions */
+    data->min_asid = 1;
+    data->max_asid = nasids - data->min_asid;
     data->disabled = !opt_asid_enabled || (nasids <= 1);
 
     hvm_asid_bitmap = xzalloc_array(unsigned long,
@@ -79,7 +83,8 @@ int hvm_asid_init(int nasids)
     }
 
     /* ASID 0 is reserved, so we start the counting from 1 */
-    data->next_asid = find_first_zero_bit(hvm_asid_bitmap, data->max_asid ) + 1;
+    data->next_asid = find_next_zero_bit(hvm_asid_bitmap, data->min_asid,
+                                         data->max_asid );
 
     return 0;
 }
