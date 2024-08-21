@@ -6,3 +6,4 @@ obj-y += nestedsvm.o
 obj-y += svm.o
 obj-y += svmdebug.o
 obj-y += vmcb.o
+obj-y += sev.o

@@ -228,6 +228,9 @@ static inline bool boot_cpu_has(unsigned int feat)
 
 #define cpu_has_msr_tsc_aux     (cpu_has_rdtscp || cpu_has_rdpid)
 
+#define cpu_has_sme             boot_cpu_has(X86_FEATURE_SME)
+#define cpu_has_sev             boot_cpu_has(X86_FEATURE_SEV)
+
 /* Bugs. */
 #define cpu_bug_fpu_ptrs        boot_cpu_has(X86_BUG_FPU_PTRS)
 #define cpu_bug_null_seg        boot_cpu_has(X86_BUG_NULL_SEG)
