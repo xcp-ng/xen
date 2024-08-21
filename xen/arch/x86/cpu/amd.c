@@ -16,6 +16,7 @@
 #include <asm/acpi.h>
 #include <asm/apic.h>
 #include <asm/microcode.h>
+#include <asm/sev.h>
 
 #include "cpu.h"
 
@@ -1030,6 +1031,54 @@ static void amd_check_erratum_1485(void)
 	wrmsrl(MSR_AMD64_BP_CFG, val | chickenbit);
 }
 
+#ifdef CONFIG_HVM
+static void amd_enable_mem_encrypt(const struct cpuinfo_x86 *c)
+{
+	unsigned int  eax, ebx, ecx, edx;
+	uint64_t syscfg;
+
+	if (!smp_processor_id()) {
+
+		cpuid_count(0x80000000,0,&eax, &ebx, &ecx, &edx);
+
+		if (eax <  0x8000001f)
+			return;
+
+		cpuid_count(0x8000001f,0,&eax, &ebx, &ecx, &edx);
+
+		if (eax & 0x1)
+			setup_force_cpu_cap(X86_FEATURE_SME);
+
+		if (eax & 0x2) {
+			setup_force_cpu_cap(X86_FEATURE_SEV);
+			max_sev_asid = ecx;
+			min_sev_asid = edx;
+		}
+
+		if (eax & 0x3)
+			pte_c_bit_mask = 1UL << (ebx & 0x3f);
+	}
+
+	if (!(cpu_has_sme || cpu_has_sev))
+		return;
+
+	if (!smp_processor_id()) {
+		if (cpu_has_sev)
+			printk(XENLOG_INFO "SEV: ASID range [0x%x - 0x%x]\n",
+			min_sev_asid, max_sev_asid);
+	}
+
+	rdmsrl(MSR_K8_SYSCFG, syscfg);
+
+	if (syscfg & SYSCFG_MEM_ENCRYPT) {
+		return;
+	}
+
+	syscfg |= SYSCFG_MEM_ENCRYPT;
+	wrmsrl(MSR_K8_SYSCFG, syscfg);
+}
+#endif
+
 static void cf_check init_amd(struct cpuinfo_x86 *c)
 {
 	u32 l, h;
@@ -1305,6 +1354,10 @@ static void cf_check init_amd(struct cpuinfo_x86 *c)
 	check_syscfg_dram_mod_en();
 
 	amd_log_freq(c);
+
+#ifdef CONFIG_HVM
+	amd_enable_mem_encrypt(c);
+#endif
 }
 
 const struct cpu_dev __initconst_cf_clobber amd_cpu_dev = {
