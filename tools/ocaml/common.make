@@ -17,5 +17,3 @@ OCAMLCFLAGS += -g $(OCAMLINCLUDE) -w F -warn-error F
 VERSION := $(shell $(XEN_ROOT)/version.sh $(XEN_ROOT)/xen/Makefile)
 
 OCAMLDESTDIR ?= $(DESTDIR)$(shell $(OCAMLFIND) printconf destdir)
-
-o= >$@.new && mv -f $@.new $@
