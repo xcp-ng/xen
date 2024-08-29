@@ -120,7 +120,7 @@ bool hvm_asid_domain_create(struct hvm_domain_asid *asid)
     spin_lock(&hvm_asid_lock);
 
     /* We assume that next_asid > max_asid is unlikely at this point*/
-    arch__test_and_set_bit(data->next_asid, hvm_asid_bitmap);
+    __test_and_set_bit(data->next_asid, hvm_asid_bitmap);
 
     /* Find the next available asid to assign to the domain*/
     data->next_asid = find_next_zero_bit(hvm_asid_bitmap, data->next_asid,
