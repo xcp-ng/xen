@@ -2,6 +2,7 @@
 #define __ASM_DOMAIN_H__
 
 #include <xen/mm.h>
+#include <xen/errno.h>
 #include <xen/radix-tree.h>
 #include <asm/hvm/vcpu.h>
 #include <asm/hvm/domain.h>
@@ -778,6 +779,20 @@ struct arch_vcpu_io {
 
 /* Maxphysaddr supportable by the paging infrastructure. */
 unsigned int domain_max_paddr_bits(const struct domain *d);
+
+#ifdef CONFIG_HVM
+static inline long arch_dom_coco_op(unsigned int cmd, domid_t domid, uint64_t arg1,
+                                    uint64_t arg2)
+{
+    return hvm_dom_coco_op(cmd, domid, arg1, arg2);
+}
+#else
+static inline long arch_dom_coco_op(unsigned int cmd, domid_t domid, uint64_t arg1,
+                                uint64_t arg2)
+{
+    return -ENOSYS;
+}
+#endif
 
 #endif /* __ASM_DOMAIN_H__ */
 

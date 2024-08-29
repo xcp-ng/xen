@@ -56,8 +56,11 @@ struct xen_domctl_createdomain {
 /* Should we expose the vPMU to the guest? */
 #define XEN_DOMCTL_CDF_vpmu           (1U << 7)
 
+#define _XEN_DOMCTL_CDF_coco         8
+#define XEN_DOMCTL_CDF_coco          (1U << _XEN_DOMCTL_CDF_coco)
+
 /* Max XEN_DOMCTL_CDF_* constant.  Used for ABI checking. */
-#define XEN_DOMCTL_CDF_MAX XEN_DOMCTL_CDF_vpmu
+#define XEN_DOMCTL_CDF_MAX XEN_DOMCTL_CDF_coco
 
     uint32_t flags;
 

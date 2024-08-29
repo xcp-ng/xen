@@ -118,6 +118,7 @@ DEFINE_XEN_GUEST_HANDLE(xen_ulong_t);
 #define __HYPERVISOR_xenpmu_op            40
 #define __HYPERVISOR_dm_op                41
 #define __HYPERVISOR_hypfs_op             42
+#define __HYPERVISOR_dom_coco_op          43
 
 /* Architecture-specific hypercall definitions. */
 #define __HYPERVISOR_arch_0               48
@@ -561,6 +562,11 @@ DEFINE_XEN_GUEST_HANDLE(mmuext_op_t);
 #if __XEN_INTERFACE_VERSION__ < 0x00040600
 #define MAX_VMASST_TYPE                  3
 #endif
+
+#define COCO_DOM_INIT                       0
+#define COCO_DOM_ADD_MEM                    1
+#define COCO_DOM_RUN                        2
+#define COCO_DOM_FINI                       3
 
 /* Domain ids >= DOMID_FIRST_RESERVED cannot be used for ordinary domains. */
 #define DOMID_FIRST_RESERVED xen_mk_uint(0x7FF0)

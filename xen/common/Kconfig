@@ -513,4 +513,9 @@ config TRACEBUFFER
 	  to be collected at run time for debugging or performance analysis.
 	  Memory and execution overhead when not active is minimal.
 
+config COCO
+	bool "Enable COnfidential COmputing for guests" if EXPERT
+	default y
+	help
+	  Allows to run guests in private encrypted memory space.
 endmenu

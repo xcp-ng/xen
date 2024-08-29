@@ -1,7 +1,7 @@
 config AMD_SP
         bool "AMD Secure Processor" if EXPERT
         depends on X86
-        default n
+        default y
         help
           Enables AMD Secure Processor.
 

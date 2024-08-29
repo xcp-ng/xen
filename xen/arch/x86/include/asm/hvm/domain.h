@@ -16,6 +16,7 @@
 #include <asm/hvm/io.h>
 #include <asm/hvm/vmx/vmcs.h>
 #include <asm/hvm/svm/vmcb.h>
+#include <asm/hvm/svm/svm.h>
 
 #ifdef CONFIG_MEM_SHARING
 struct mem_sharing_domain
@@ -158,6 +159,26 @@ struct hvm_domain {
     struct mem_sharing_domain mem_sharing;
 #endif
 };
+
+#ifdef CONFIG_AMD_SVM
+static inline long hvm_dom_coco_op(unsigned int cmd, domid_t domid,
+                                   uint64_t arg1,  uint64_t arg2)
+{
+    /*
+       Need to check on the top on which arch (Intel/AMD) Xen is actually
+       running. For instance Intel TDX is not in in the scope. So just
+       passthrough this to AMD SEV ops (it checks the CPU arch).
+    */
+    return svm_dom_coco_op(cmd, domid, arg1, arg2);
+}
+#else
+static inline long hvm_dom_coco_op(unsigned int cmd, domid_t domid,
+                                   uint64_t arg1, uint64_t arg2)
+{
+    return -ENOSYS;
+}
+#endif
+
 
 #endif /* __ASM_X86_HVM_DOMAIN_H__ */
 

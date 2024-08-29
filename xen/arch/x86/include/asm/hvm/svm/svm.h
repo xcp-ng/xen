@@ -24,6 +24,8 @@ bool svm_load_segs(unsigned int ldt_ents, unsigned long ldt_base,
 extern void svm_asid_init(void);
 extern void svm_vcpu_assign_asid(struct vcpu *v);
 extern u32 svm_feature_flags;
+extern long svm_dom_coco_op(unsigned int cmd, domid_t domid, uint64_t arg1,
+			    uint64_t arg2);
 
 #define SVM_FEATURE_NPT            0 /* Nested page table support */
 #define SVM_FEATURE_LBRV           1 /* LBR virtualization support */

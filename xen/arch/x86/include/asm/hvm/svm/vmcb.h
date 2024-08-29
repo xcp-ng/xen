@@ -143,6 +143,17 @@ enum DRInterceptBits
     DR_INTERCEPT_DR15_WRITE = 1u << 31,
 };
 
+/* Miscellanious controls in _np_ctrl*/
+enum NpCtrlBits
+{
+    NPCTRL_NP_ENABLE    = 1 << 0,
+    NPCTRL_SEV_ENABLE   = 1 << 1,
+    NPCTRL_SEVES_ENABLE = 1 << 2,
+    NPCTRL_GMET_ENABLE  = 1 << 3,
+    NPCTRL_NPSSS_ENABL  = 1 << 4,
+    NPCTRL_VTE_ENABLE   = 1 << 5,
+};
+
 enum VMEXIT_EXITCODE
 {
     /* control register read exitcodes */
@@ -557,6 +568,12 @@ struct svm_domain {
             uint64_t status;
         };
     } osvw;
+
+    uint32_t asp_handle;
+    uint32_t asp_policy;
+    u8       measure[32];
+    uint32_t measure_len;  /*32 bytes*/
+    u8      state;
 };
 
 /*
