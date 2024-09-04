@@ -7,10 +7,9 @@
 #include <asm/cache.h>
 #include <asm/nospec.h>
 
-
-extern uint64_t __read_mostly pte_c_bit_mask;
-extern unsigned int __read_mostly min_sev_asid;
-extern unsigned int __read_mostly max_sev_asid;
+extern uint64_t pte_c_bit_mask;
+extern unsigned int min_sev_asid;
+extern unsigned int max_sev_asid;
 
 static always_inline bool is_sev_domain(const struct domain *d)
 {
