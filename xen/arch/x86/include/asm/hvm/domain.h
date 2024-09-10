@@ -160,7 +160,6 @@ struct hvm_domain {
 #endif
 };
 
-#ifdef CONFIG_AMD_SVM
 static inline long hvm_dom_coco_op(unsigned int cmd, domid_t domid,
                                    uint64_t arg1,  uint64_t arg2)
 {
@@ -171,14 +170,6 @@ static inline long hvm_dom_coco_op(unsigned int cmd, domid_t domid,
     */
     return svm_dom_coco_op(cmd, domid, arg1, arg2);
 }
-#else
-static inline long hvm_dom_coco_op(unsigned int cmd, domid_t domid,
-                                   uint64_t arg1, uint64_t arg2)
-{
-    return -ENOSYS;
-}
-#endif
-
 
 #endif /* __ASM_X86_HVM_DOMAIN_H__ */
 
