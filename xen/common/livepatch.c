@@ -524,7 +524,6 @@ static int check_special_sections(const struct livepatch_elf *elf)
     unsigned int i;
     static const char *const names[] = { ELF_LIVEPATCH_DEPENDS,
                                          ELF_BUILD_ID_NOTE};
-    DECLARE_BITMAP(found, ARRAY_SIZE(names)) = { 0 };
 
     for ( i = 0; i < ARRAY_SIZE(names); i++ )
     {
@@ -541,13 +540,6 @@ static int check_special_sections(const struct livepatch_elf *elf)
         if ( !sec->sec->sh_size )
         {
             printk(XENLOG_ERR LIVEPATCH "%s: %s is empty\n",
-                   elf->name, names[i]);
-            return -EINVAL;
-        }
-
-        if ( test_and_set_bit(i, found) )
-        {
-            printk(XENLOG_ERR LIVEPATCH "%s: %s was seen more than once\n",
                    elf->name, names[i]);
             return -EINVAL;
         }
@@ -568,7 +560,7 @@ static int check_patching_sections(const struct livepatch_elf *elf)
                                          ELF_LIVEPATCH_PREREVERT_HOOK,
                                          ELF_LIVEPATCH_REVERT_HOOK,
                                          ELF_LIVEPATCH_POSTREVERT_HOOK};
-    DECLARE_BITMAP(found, ARRAY_SIZE(names)) = { 0 };
+    bool found = false;
 
     /*
      * The patching sections are optional, but at least one
@@ -595,16 +587,11 @@ static int check_patching_sections(const struct livepatch_elf *elf)
             return -EINVAL;
         }
 
-        if ( test_and_set_bit(i, found) )
-        {
-            printk(XENLOG_ERR LIVEPATCH "%s: %s was seen more than once\n",
-                   elf->name, names[i]);
-            return -EINVAL;
-        }
+        found = true;
     }
 
     /* Checking if at least one section is present. */
-    if ( bitmap_empty(found, ARRAY_SIZE(names)) )
+    if ( !found )
     {
         printk(XENLOG_ERR LIVEPATCH "%s: Nothing to patch. Aborting...\n",
                elf->name);
