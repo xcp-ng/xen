@@ -26,6 +26,7 @@
 #include <asm/hvm/nestedhvm.h>
 #include <asm/hvm/support.h>
 #include <asm/hvm/asid.h>
+#include <asm/hvm/svm/sev.h>
 #include <asm/hvm/svm/svm.h>
 #include <asm/hvm/svm/svmdebug.h>
 #include <asm/hvm/svm/vmcb.h>
@@ -179,7 +180,11 @@ static void cf_check svm_update_guest_cr(
         vmcb_set_cr2(vmcb, v->arch.hvm.guest_cr[2]);
         break;
     case 3:
-        vmcb_set_cr3(vmcb, v->arch.hvm.hw_cr[3]);
+        value = v->arch.hvm.hw_cr[3];
+        if ( is_sev_domain(v->domain) &&
+             v->arch.hvm.svm.sev_flags & SEV_FLAGS_CR3_ENC )
+            value |= PAGE_MEM_ENCRYPT_MASK;
+        vmcb_set_cr3(vmcb, value);
         /* Do not flush during the CR3 switch */
         break;
     case 4:
@@ -577,8 +582,9 @@ static void cf_check svm_cpuid_policy_changed(struct vcpu *v)
     const struct cpu_policy *cp = v->domain->arch.cpu_policy;
     u32 bitmap = vmcb_get_exception_intercepts(vmcb);
 
-    if ( opt_hvm_fep ||
-         (v->domain->arch.cpuid->x86_vendor != boot_cpu_data.x86_vendor) )
+    if ( (opt_hvm_fep ||
+          (v->domain->arch.cpuid->x86_vendor != boot_cpu_data.x86_vendor)) &&
+         (!is_sev_domain(v->domain)) )
         bitmap |= (1U << X86_EXC_UD);
     else
         bitmap &= ~(1U << X86_EXC_UD);
@@ -1115,7 +1121,23 @@ static int cf_check svm_domain_initialise(struct domain *d)
     if ( is_hardware_domain(d) && amd_acpi_c1e_quirk )
         register_portio_handler(d, acpi_smi_cmd, 1, acpi_c1e_quirk);
 
+    if ( is_sev_domain(d) )
+        return sev_domain_initialize(d);
+
     return 0;
+}
+
+static void cf_check svm_domain_creation_finished(struct domain *d)
+{
+    if ( is_sev_domain(d) )
+        if ( !sev_domain_creation_finished(d) )
+            domain_crash(d);
+}
+
+static void cf_check svm_domain_destroy(struct domain *d)
+{
+    if ( is_sev_domain(d) )
+        sev_domain_destroy(d);
 }
 
 static int cf_check svm_vcpu_initialise(struct vcpu *v)
@@ -1132,11 +1154,17 @@ static int cf_check svm_vcpu_initialise(struct vcpu *v)
         return rc;
     }
 
+    if ( is_sev_domain(v->domain) )
+        return sev_vcpu_initialize(v);
+
     return 0;
 }
 
 static void cf_check svm_vcpu_destroy(struct vcpu *v)
 {
+    if ( is_sev_domain(v->domain) )
+        sev_vcpu_destroy(v);
+
     svm_destroy_vmcb(v);
     passive_domain_destroy(v);
 }
@@ -2412,6 +2440,8 @@ static struct hvm_function_table __initdata_cf_clobber svm_function_table = {
     .cpu_up               = svm_cpu_up,
     .cpu_down             = svm_cpu_down,
     .domain_initialise    = svm_domain_initialise,
+    .domain_creation_finished = svm_domain_creation_finished,
+    .domain_destroy       = svm_domain_destroy,
     .vcpu_initialise      = svm_vcpu_initialise,
     .vcpu_destroy         = svm_vcpu_destroy,
     .save_cpu_ctxt        = svm_save_vmcb_ctxt,
@@ -2534,7 +2564,19 @@ void asmlinkage svm_vmexit_handler(void)
         regs, !(vmcb_get_efer(vmcb) & EFER_LMA) || !(vmcb->cs.l));
 
     if ( paging_mode_hap(v->domain) )
-        v->arch.hvm.guest_cr[3] = v->arch.hvm.hw_cr[3] = vmcb_get_cr3(vmcb);
+    {
+        uint32_t value = vmcb_get_cr3(vmcb);
+        if ( is_sev_domain(v->domain) )
+        {
+            if  ( value | PAGE_MEM_ENCRYPT_MASK )
+                v->arch.hvm.svm.sev_flags |= SEV_FLAGS_CR3_ENC;
+            else
+                v->arch.hvm.svm.sev_flags &= ~SEV_FLAGS_CR3_ENC;
+
+            value &= ~PAGE_MEM_ENCRYPT_MASK;
+        }
+        v->arch.hvm.guest_cr[3] = v->arch.hvm.hw_cr[3] = value;
+    }
 
     if ( nestedhvm_enabled(v->domain) && nestedhvm_vcpu_in_guestmode(v) )
         vcpu_guestmode = 1;

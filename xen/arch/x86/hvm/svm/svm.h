@@ -41,6 +41,12 @@ static inline void svm_invlpga(unsigned long linear, uint32_t asid)
         "a" (linear), "c" (asid) );
 }
 
+static inline void svm_avic_disable(struct domain *d)
+{
+    /* Nothing to do here for instance */
+    return;
+}
+
 /*
  * Encoding for svm_get_insn_len().  We take X86EMUL_OPC() for the main
  * opcode, shifted left to make room for the ModRM byte.

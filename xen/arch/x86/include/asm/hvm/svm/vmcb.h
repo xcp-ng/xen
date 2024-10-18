@@ -591,6 +591,8 @@ enum vmcb_sync_state {
     vmcb_needs_vmload     /* VMCB dirty (VMLOAD needed)? */
 };
 
+#define SEV_FLAGS_CR3_ENC (1 << 0)
+
 struct svm_vcpu {
     struct vmcb_struct *vmcb;
     u64    vmcb_pa;
@@ -610,6 +612,8 @@ struct svm_vcpu {
     uint64_t guest_sysenter_cs;
     uint64_t guest_sysenter_esp;
     uint64_t guest_sysenter_eip;
+
+    uint32_t sev_flags;
 };
 
 struct vmcb_struct *alloc_vmcb(void);

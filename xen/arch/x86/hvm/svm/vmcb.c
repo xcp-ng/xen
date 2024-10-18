@@ -15,6 +15,7 @@
 #include <asm/hvm/svm/vmcb.h>
 #include <asm/msr-index.h>
 #include <asm/p2m.h>
+#include <asm/hvm/svm/sev.h>
 #include <asm/hvm/svm/svm.h>
 #include <asm/hvm/svm/svmdebug.h>
 #include <asm/spec_ctrl.h>
@@ -192,21 +193,32 @@ int svm_create_vmcb(struct vcpu *v)
     svm->vmcb = nv->nv_n1vmcx;
     rc = construct_vmcb(v);
     if ( rc != 0 )
+        goto err;
+
+    if ( is_sev_domain(v->domain) )
     {
-        free_vmcb(nv->nv_n1vmcx);
-        nv->nv_n1vmcx = NULL;
-        svm->vmcb = NULL;
-        return rc;
+        rc = sev_create_vmcb(v);
+        if ( rc != 0 )
+            goto err;
     }
 
     svm->vmcb_pa = nv->nv_n1vmcx_pa = virt_to_maddr(svm->vmcb);
     return 0;
+
+err:
+    free_vmcb(nv->nv_n1vmcx);
+    nv->nv_n1vmcx = NULL;
+    svm->vmcb = NULL;
+    return rc;
 }
 
 void svm_destroy_vmcb(struct vcpu *v)
 {
     struct nestedvcpu *nv = &vcpu_nestedhvm(v);
     struct svm_vcpu *svm = &v->arch.hvm.svm;
+
+    if ( is_sev_domain(v->domain) )
+        sev_destroy_vmcb(v);
 
     if ( nv->nv_n1vmcx != NULL )
         free_vmcb(nv->nv_n1vmcx);

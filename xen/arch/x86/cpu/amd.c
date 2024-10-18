@@ -16,7 +16,7 @@
 #include <asm/acpi.h>
 #include <asm/apic.h>
 #include <asm/microcode.h>
-#include <asm/sev.h>
+#include <asm/hvm/svm/sev.h>
 
 #include "cpu.h"
 
