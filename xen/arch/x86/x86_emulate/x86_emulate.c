@@ -626,7 +626,7 @@ static const struct ext0f3a_table {
     [0xcc] = { .simd_size = simd_other },
     [0xce ... 0xcf] = { .simd_size = simd_packed_int, .d8s = d8s_vl },
     [0xdf] = { .simd_size = simd_packed_int, .two_op = 1 },
-    [0xf0] = {},
+    [0xf0] = { .two_op = 1 /* Mov */ },
 };
 
 static const opcode_desc_t xop_table[] = {
@@ -11170,11 +11170,6 @@ x86_emulate(
     case X86EMUL_OPC_VEX_F2(0x0f3a, 0xf0): /* rorx imm,r/m,r */
         vcpu_must_have(bmi2);
         generate_exception_if(vex.l || vex.reg != 0xf, EXC_UD);
-        if ( ea.type == OP_REG )
-            src.val = *ea.reg;
-        else if ( (rc = read_ulong(ea.mem.seg, ea.mem.off, &src.val, op_bytes,
-                                   ctxt, ops)) != X86EMUL_OKAY )
-            goto done;
         if ( mode_64bit() && vex.w )
             asm ( "rorq %b1,%0" : "=g" (dst.val) : "c" (imm1), "0" (src.val) );
         else
