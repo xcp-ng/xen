@@ -2064,6 +2064,10 @@ void __init init_speculation_mitigations(void)
     {
         setup_force_cpu_cap(X86_FEATURE_SC_RSB_HVM);
 
+        if ( (boot_cpu_data.x86_vendor & X86_VENDOR_AMD) &&
+             boot_cpu_data.x86 >= 0x1a )
+            setup_force_cpu_cap(X86_SPEC_RSB64_HVM);
+
         /*
          * For SVM, Xen's RSB safety actions are performed before STGI, so
          * behave atomically with respect to IST sources.

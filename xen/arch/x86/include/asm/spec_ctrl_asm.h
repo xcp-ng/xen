@@ -104,7 +104,7 @@
 .L\@_skip:
 .endm
 
-.macro DO_OVERWRITE_RSB tmp=rax xu
+.macro DO_OVERWRITE_RSB tmp=rax, slots=32, xu
 /*
  * Requires nothing
  * Clobbers \tmp (%rax by default), %rcx
@@ -125,7 +125,7 @@
  * b) the two movs are shorter to encode than `add $32*8, %rsp`, and c) can be
  * optimised with mov-elimination in modern cores.
  */
-    mov $16, %ecx                   /* 16 iterations, two calls per loop */
+    mov $\slots / 2, %ecx           /* two calls per loop */
     mov %rsp, %\tmp                 /* Store the current %rsp */
 
 .L\@_fill_rsb_loop\xu:
@@ -146,7 +146,7 @@
     rdsspd %ecx
     cmp $1, %ecx
     je .L\@_shstk_done\xu
-    mov $64, %ecx                   /* 64 * 4 bytes, given incsspd */
+    mov $\slots * 2, %ecx           /* double, given incsspd */
     incsspd %ecx                    /* Restore old SSP */
 .L\@_shstk_done\xu:
 #endif

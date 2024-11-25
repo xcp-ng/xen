@@ -123,7 +123,8 @@ __UNLIKELY_END(nsvm_hap)
          * entries.  This is not needed on Zen4 and later, when AutoIBRS is in
          * use.
          */
-        ALTERNATIVE "", DO_OVERWRITE_RSB, X86_FEATURE_SC_RSB_HVM
+        ALTERNATIVE_2 "", DO_OVERWRITE_RSB, X86_FEATURE_SC_RSB_HVM, \
+                          STR(DO_OVERWRITE_RSB slots=64), X86_SPEC_RSB64_HVM
 
         /*
          * Restore Xen's MSR_SPEC_CTRL setting, making indirect CALLs/JMPs
