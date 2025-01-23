@@ -10,17 +10,87 @@ uint64_t __read_mostly pte_c_bit_mask;
 unsigned int __read_mostly min_sev_asid;
 unsigned int __read_mostly max_sev_asid;
 
+static int svm_dom_coco_add_mem(struct domain *d, gfn_t gfn, size_t page_count)
+{
+    struct page_info *page;
+    int rc, psp_ret;
+    struct sev_data_launch_update_data sd_lud;
+    
+    mfn_t mfn, mfn_base = INVALID_MFN;
+    size_t segment_size = 0;
+
+    do {
+        page = get_page_from_gfn(d, gfn_x(gfn), NULL, P2M_ALLOC);
+        if ( unlikely(!page) )
+            return rc;
+
+        mfn = page_to_mfn(page);
+        put_page(page);
+
+        if ( !mfn_valid(mfn_base) )
+            mfn_base = mfn;
+        else
+        {
+            // Check for a break.
+            if (mfn_x(mfn_base) + segment_size != mfn_x(mfn))
+            {
+                // Make launch update data.
+                printk("LAUNCH_UPDATE_DATA d%d: base=%"PRI_xen_pfn", size=%zx\n",
+                       d->domain_id, mfn_x(mfn_base), segment_size);
+                
+                sd_lud.reserved = 0;
+                sd_lud.handle = d->arch.hvm.svm.asp_handle;
+                sd_lud.address = mfn_x(mfn_base) << PAGE_SHIFT;
+                sd_lud.len = segment_size * PAGE_SIZE;
+                rc = sev_do_cmd(SEV_CMD_LAUNCH_UPDATE_DATA, (void *)(&sd_lud),
+                                &psp_ret, true);
+                if (rc)
+                {
+                    printk("%s: failed to LAUNCH_UPDATE_DATA dom(%d): err %d\n",
+                        __FUNCTION__, d->domain_id, psp_ret);
+                    return rc;
+                }
+
+                mfn_base = mfn_x(mfn);
+                segment_size = 0;
+            }
+        }  
+
+        gfn = gfn_add(gfn, 1);
+        segment_size++;
+        page_count--;
+    } while ( page_count );
+
+    // Last launch update data.
+    if ( segment_size )
+    {
+        sd_lud.reserved = 0;
+        sd_lud.handle = d->arch.hvm.svm.asp_handle;
+        sd_lud.address = mfn_x(mfn_base) << PAGE_SHIFT;
+        sd_lud.len = segment_size * PAGE_SIZE;
+        rc = sev_do_cmd(SEV_CMD_LAUNCH_UPDATE_DATA, (void *)(&sd_lud),
+                        &psp_ret, true);
+
+        if ( rc )
+            printk("%s: failed to LAUNCH_UPDATE_DATA dom(%d): err %d\n",
+                __FUNCTION__, d->domain_id, psp_ret);
+    }
+
+    return rc;
+}
+
 long svm_dom_coco_op(unsigned int cmd, domid_t domid, uint64_t arg1,
                      uint64_t arg2)
 {
     struct domain *d;
-    int psp_ret;
     long rc = 0;
 
     if (!is_control_domain(current->domain))
         return -EINVAL;
 
     d = get_domain_by_id(domid);
+    // TODO: I am not completely sure we have enough lock to not have
+    // 	     the guest's memory disappears under our feets.
     if (!d){
         printk(XENLOG_INFO "Domain lookup failed for domid: %u\n", domid);
         return -EINVAL;
@@ -36,49 +106,18 @@ long svm_dom_coco_op(unsigned int cmd, domid_t domid, uint64_t arg1,
     printk(XENLOG_INFO "Handling command: %u\n", cmd);
     switch (cmd) {
         case COCO_DOM_ADD_MEM: {
-	    mfn_t mfn;
-	    unsigned long gmfn = arg1 >> PAGE_SHIFT;
-	    struct page_info *page;
-	    int i;
-
-	     /* Force the alignement on page boundary (address and size) */
-	    if  ( (arg1 & ~PAGE_MASK) || (arg2 & ~PAGE_MASK) )
-	    {
-		printk("%s: address and size must be aligned on page boundary\n",
-		       __FUNCTION__);
-                rc = -EINVAL;
-                goto out;
-	    }
-
-	    for (i = 0; i < (arg2 >> PAGE_SHIFT); i++, gmfn++)
-	    {
-		struct sev_data_launch_update_data sd_lud;
-
-		page = get_page_from_gfn(d, gmfn, NULL, P2M_ALLOC);
-		if ( unlikely (!page) )
-                {
+            /* Force the alignement on page boundary (address and size) */
+            if  ( (arg1 & ~PAGE_MASK) || (arg2 & ~PAGE_MASK) )
+            {
+            printk("%s: address and size must be aligned on page boundary\n",
+                __FUNCTION__);
                     rc = -EINVAL;
                     goto out;
-                }
+            }
 
-		mfn = page_to_mfn(page);
-		put_page(page);
-
-		sd_lud.reserved = 0;
-		sd_lud.handle = d->arch.hvm.svm.asp_handle;
-		sd_lud.address = mfn_x(mfn) << PAGE_SHIFT;
-		sd_lud.len = PAGE_SIZE;
-		rc = sev_do_cmd(SEV_CMD_LAUNCH_UPDATE_DATA, (void *)(&sd_lud),
-				&psp_ret, true);
-		if (rc)
-		{
-		    printk("%s: failed to LAUNCH_UPDATE_DATA dom(%d): err %d\n",
-			   __FUNCTION__, domid, psp_ret);
-		    goto out;
-		}
-	    }
-	    break;
-	}
+            rc = svm_dom_coco_add_mem(d, _gfn(arg1 >> PAGE_SHIFT), arg2 >> PAGE_SHIFT);
+            break;
+        }
         default:
             printk ("%s: deprecated command called (%u)\n", __FUNCTION__, cmd);
             rc = -EINVAL;
