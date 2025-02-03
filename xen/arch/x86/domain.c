@@ -854,9 +854,6 @@ int arch_domain_create(struct domain *d,
     if ( (rc = init_domain_irq_mapping(d)) != 0 )
         goto fail;
 
-    if ( (rc = iommu_domain_init(d, config->iommu_opts)) != 0 )
-        goto fail;
-
     psr_domain_init(d);
 
     if ( is_hvm_domain(d) )
@@ -874,6 +871,9 @@ int arch_domain_create(struct domain *d,
     }
     else
         ASSERT_UNREACHABLE(); /* Not HVM and not PV? */
+
+    if ( (rc = iommu_domain_init(d, config->iommu_opts)) != 0 )
+        goto fail;
 
     if ( (rc = tsc_set_info(d, XEN_CPUID_TSC_MODE_DEFAULT, 0, 0, 0)) != 0 )
     {
