@@ -26,6 +26,7 @@
 #include <xen/tasklet.h>
 #include <xen/sched.h>
 #include <xen/domain_page.h>
+#include <xen/iommu.h>
 
 #include <asm/msi.h>
 #include <asm/apicdef.h>
@@ -199,10 +200,10 @@ int __must_check cf_check amd_iommu_unmap_page(
     struct domain *d, dfn_t dfn, unsigned int order,
     unsigned int *flush_flags);
 int __must_check amd_iommu_alloc_root(struct domain *d);
-int amd_iommu_reserve_domain_unity_map(struct domain *d,
+int amd_iommu_reserve_domain_unity_map(struct domain *d, struct iommu_context *ctx,
                                        const struct ivrs_unity_map *map,
                                        unsigned int flag);
-int amd_iommu_reserve_domain_unity_unmap(struct domain *d,
+int amd_iommu_reserve_domain_unity_unmap(struct domain *d, struct iommu_context *ctx,
                                          const struct ivrs_unity_map *map);
 int cf_check amd_iommu_get_reserved_device_memory(
     iommu_grdm_t *func, void *ctxt);

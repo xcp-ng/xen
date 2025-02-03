@@ -395,9 +395,18 @@ extern int iommu_get_extra_reserved_device_memory(iommu_grdm_t *func,
 # define iommu_vcall iommu_call
 #endif
 
+struct iommu_context {
+    #ifdef CONFIG_HAS_PASSTHROUGH
+    u16 id; /* Context id (0 means default context) */
+
+    struct arch_iommu_context arch;
+    #endif
+};
+
 struct domain_iommu {
 #ifdef CONFIG_HAS_PASSTHROUGH
     struct arch_iommu arch;
+    struct iommu_context default_ctx;
 #endif
 
     /* iommu_ops */
@@ -432,6 +441,7 @@ struct domain_iommu {
 #define dom_iommu(d)              (&(d)->iommu)
 #define iommu_set_feature(d, f)   set_bit(f, dom_iommu(d)->features)
 #define iommu_clear_feature(d, f) clear_bit(f, dom_iommu(d)->features)
+#define iommu_default_context(d) (&dom_iommu(d)->default_ctx) /* does not lock ! */
 
 #ifdef CONFIG_HAS_PASSTHROUGH
 /* Are we using the domain P2M table as its IOMMU pagetable? */

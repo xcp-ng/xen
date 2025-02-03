@@ -403,11 +403,14 @@ long iommu_unmap(struct domain *d, dfn_t dfn0, unsigned long page_count,
     unsigned long i;
     unsigned int order, j = 0;
     int rc = 0;
+    struct iommu_context *ctx;
 
     if ( !is_iommu_enabled(d) )
         return 0;
 
     ASSERT(!(flags & ~IOMMUF_preempt));
+
+    ctx = iommu_default_context(d);
 
     for ( i = 0; i < page_count; i += 1UL << order )
     {
@@ -468,9 +471,12 @@ int iommu_lookup_page(struct domain *d, dfn_t dfn, mfn_t *mfn,
                       unsigned int *flags)
 {
     const struct domain_iommu *hd = dom_iommu(d);
+    struct iommu_context *ctx;
 
     if ( !is_iommu_enabled(d) || !hd->platform_ops->lookup_page )
         return -EOPNOTSUPP;
+
+    ctx = iommu_default_context(d);
 
     return iommu_call(hd->platform_ops, lookup_page, d, dfn, mfn, flags);
 }
