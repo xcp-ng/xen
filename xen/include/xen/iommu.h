@@ -156,18 +156,20 @@ enum
 #define IOMMU_FLUSHF_modified (1u << _IOMMU_FLUSHF_modified)
 #define IOMMU_FLUSHF_all (1u << _IOMMU_FLUSHF_all)
 
+struct iommu_context;
+
 /*
  * For both of these: Negative return values are error indicators. Zero
  * indicates full successful completion of the request, while positive
  * values indicate partial completion, which is possible only with
  * IOMMUF_preempt passed in.
  */
-long __must_check iommu_map(struct domain *d, dfn_t dfn0, mfn_t mfn0,
-                            unsigned long page_count, unsigned int flags,
-                            unsigned int *flush_flags);
-long __must_check iommu_unmap(struct domain *d, dfn_t dfn0,
-                              unsigned long page_count, unsigned int flags,
-                              unsigned int *flush_flags);
+long __must_check iommu_map(struct domain *d, struct iommu_context *ctx,
+                            dfn_t dfn0, mfn_t mfn0, unsigned long page_count,
+                            unsigned int flags, unsigned int *flush_flags);
+long __must_check iommu_unmap(struct domain *d, struct iommu_context *ctx,
+                              dfn_t dfn0, unsigned long page_count,
+                              unsigned int flags, unsigned int *flush_flags);
 
 int __must_check iommu_legacy_map(struct domain *d, dfn_t dfn, mfn_t mfn,
                                   unsigned long page_count,
@@ -175,13 +177,14 @@ int __must_check iommu_legacy_map(struct domain *d, dfn_t dfn, mfn_t mfn,
 int __must_check iommu_legacy_unmap(struct domain *d, dfn_t dfn,
                                     unsigned long page_count);
 
-int __must_check iommu_lookup_page(struct domain *d, dfn_t dfn, mfn_t *mfn,
-                                   unsigned int *flags);
+int __must_check iommu_lookup_page(struct domain *d, struct iommu_context *ctx,
+                                   dfn_t dfn, mfn_t *mfn, unsigned int *flags);
 
-int __must_check iommu_iotlb_flush(struct domain *d, dfn_t dfn,
-                                   unsigned long page_count,
+int __must_check iommu_iotlb_flush(struct domain *d, struct iommu_context *ctx,
+                                   dfn_t dfn, unsigned long page_count,
                                    unsigned int flush_flags);
 int __must_check iommu_iotlb_flush_all(struct domain *d,
+                                       struct iommu_context *ctx,
                                        unsigned int flush_flags);
 
 enum iommu_feature
@@ -276,14 +279,14 @@ struct iommu_ops {
      * This block of operations must be appropriately locked against each
      * other by the caller in order to have meaningful results.
      */
-    int __must_check (*map_page)(struct domain *d, dfn_t dfn, mfn_t mfn,
-                                 unsigned int flags,
+    int __must_check (*map_page)(struct domain *d, struct iommu_context *ctx,
+                                 dfn_t dfn, mfn_t mfn, unsigned int flags,
                                  unsigned int *flush_flags);
-    int __must_check (*unmap_page)(struct domain *d, dfn_t dfn,
-                                   unsigned int order,
+    int __must_check (*unmap_page)(struct domain *d, struct iommu_context *ctx,
+                                   dfn_t dfn, unsigned int order,
                                    unsigned int *flush_flags);
-    int __must_check (*lookup_page)(struct domain *d, dfn_t dfn, mfn_t *mfn,
-                                    unsigned int *flags);
+    int __must_check (*lookup_page)(struct domain *d, struct iommu_context *ctx,
+                                    dfn_t dfn, mfn_t *mfn, unsigned int *flags);
 
 #ifdef CONFIG_X86
     int (*enable_x2apic)(void);
@@ -303,7 +306,8 @@ struct iommu_ops {
     int __must_check (*suspend)(void);
     void (*resume)(void);
     void (*crash_shutdown)(void);
-    int __must_check (*iotlb_flush)(struct domain *d, dfn_t dfn,
+    int __must_check (*iotlb_flush)(struct domain *d,
+                                    const struct iommu_context *ctx, dfn_t dfn,
                                     unsigned long page_count,
                                     unsigned int flush_flags);
     int (*get_reserved_device_memory)(iommu_grdm_t *func, void *ctxt);
@@ -352,9 +356,18 @@ extern int iommu_get_extra_reserved_device_memory(iommu_grdm_t *func,
 # define iommu_vcall iommu_call
 #endif
 
+struct iommu_context {
+    #ifdef CONFIG_HAS_PASSTHROUGH
+    u16 id; /* Context id (0 means default context) */
+
+    struct arch_iommu_context arch;
+    #endif
+};
+
 struct domain_iommu {
 #ifdef CONFIG_HAS_PASSTHROUGH
     struct arch_iommu arch;
+    struct iommu_context default_ctx;
 #endif
 
     /* iommu_ops */
@@ -389,6 +402,7 @@ struct domain_iommu {
 #define dom_iommu(d)              (&(d)->iommu)
 #define iommu_set_feature(d, f)   set_bit(f, dom_iommu(d)->features)
 #define iommu_clear_feature(d, f) clear_bit(f, dom_iommu(d)->features)
+#define iommu_default_context(d) (&dom_iommu(d)->default_ctx) /* does not lock ! */
 
 /* Are we using the domain P2M table as its IOMMU pagetable? */
 #define iommu_use_hap_pt(d)       (IS_ENABLED(CONFIG_HVM) && \

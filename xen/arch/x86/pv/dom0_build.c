@@ -7,6 +7,7 @@
 #include <xen/domain.h>
 #include <xen/domain_page.h>
 #include <xen/init.h>
+#include <xen/iommu.h>
 #include <xen/libelf.h>
 #include <xen/multiboot.h>
 #include <xen/pfn.h>
@@ -77,7 +78,8 @@ static __init void mark_pv_pt_pages_rdonly(struct domain *d,
          * iommu_memory_setup() ended up mapping them.
          */
         if ( need_iommu_pt_sync(d) &&
-             iommu_unmap(d, _dfn(mfn_x(page_to_mfn(page))), 1, 0, flush_flags) )
+             iommu_unmap(d, iommu_default_context(d),
+                         _dfn(mfn_x(page_to_mfn(page))), 1, 0, flush_flags) )
             BUG();
 
         /* Read-only mapping + PGC_allocated + page-table page. */
@@ -122,11 +124,14 @@ static void __init iommu_memory_setup(struct domain *d, const char *what,
 {
     long rc;
     mfn_t mfn = page_to_mfn(page);
+    struct iommu_context *ctx;
 
     if ( !need_iommu_pt_sync(d) )
         return;
 
-    while ( (rc = iommu_map(d, _dfn(mfn_x(mfn)), mfn, nr,
+    ctx = iommu_default_context(d);
+
+    while ( (rc = iommu_map(d, ctx, _dfn(mfn_x(mfn)), mfn, nr,
                             IOMMUF_readable | IOMMUF_writable | IOMMUF_preempt,
                             flush_flags)) > 0 )
     {
@@ -964,7 +969,7 @@ static int __init dom0_construct(struct boot_info *bi, struct domain *d)
     }
 
     /* Use while() to avoid compiler warning. */
-    while ( iommu_iotlb_flush_all(d, flush_flags) )
+    while ( iommu_iotlb_flush_all(d, iommu_default_context(d), flush_flags) )
         break;
 
     if ( initrd_len != 0 )

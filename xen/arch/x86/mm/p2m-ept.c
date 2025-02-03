@@ -975,7 +975,8 @@ out:
          need_modify_vtd_table )
     {
         if ( iommu_use_hap_pt(d) && !this_cpu(iommu_dont_flush_iotlb) )
-            rc = iommu_iotlb_flush(d, _dfn(gfn), 1ul << order,
+            rc = iommu_iotlb_flush(d, iommu_default_context(d),
+                                   _dfn(gfn), 1ul << order,
                                    (iommu_flags ? IOMMU_FLUSHF_added : 0) |
                                    (vtd_pte_present ? IOMMU_FLUSHF_modified
                                                     : 0));

@@ -132,7 +132,7 @@ static void increase_reservation(struct memop_args *a)
         }
 
         page = alloc_domheap_pages(d, a->extent_order, a->memflags);
-        if ( unlikely(page == NULL) ) 
+        if ( unlikely(page == NULL) )
         {
             gdprintk(XENLOG_INFO, "Could not allocate order=%d extent: "
                     "id=%d memflags=%x (%ld of %d)\n",
@@ -141,7 +141,7 @@ static void increase_reservation(struct memop_args *a)
             goto out;
         }
 
-        /* Inform the domain of the new page's machine address. */ 
+        /* Inform the domain of the new page's machine address. */
         if ( !paging_mode_translate(d) &&
              !guest_handle_is_null(a->extent_list) )
         {
@@ -477,7 +477,7 @@ int guest_remove_page(struct domain *d, unsigned long gmfn)
 
         return -EINVAL;
     }
-            
+
 #ifdef CONFIG_X86
     if ( p2m_is_shared(p2mt) )
     {
@@ -586,7 +586,7 @@ static void decrease_reservation(struct memop_args *a)
             t.gfn = gmfn;
             t.d = a->domain->domain_id;
             t.order = a->extent_order;
-        
+
             trace(TRC_MEM_DECREASE_RESERVATION, sizeof(t), &t);
         }
 
@@ -788,7 +788,7 @@ static long memory_exchange(XEN_GUEST_HANDLE_PARAM(xen_memory_exchange_t) arg)
                 {
                     put_gfn(d, gmfn + k);
                     rc = -ENOMEM;
-                    goto fail; 
+                    goto fail;
                 }
 #else /* !CONFIG_X86 */
                 mfn = gfn_to_mfn(d, _gfn(gmfn + k));
@@ -1075,10 +1075,11 @@ int xenmem_add_to_physmap(struct domain *d, struct xen_add_to_physmap *xatp,
     {
         int ret;
         unsigned int i;
+        struct iommu_context *ctx = iommu_default_context(d);
 
         this_cpu(iommu_dont_flush_iotlb) = 0;
 
-        ret = iommu_iotlb_flush(d, _dfn(xatp->idx - done), done,
+        ret = iommu_iotlb_flush(d, ctx, _dfn(xatp->idx - adjust), done,
                                 IOMMU_FLUSHF_modified);
         if ( unlikely(ret) && rc >= 0 )
             rc = ret;
@@ -1092,7 +1093,7 @@ int xenmem_add_to_physmap(struct domain *d, struct xen_add_to_physmap *xatp,
         for ( i = 0; i < done; ++i )
             put_page(pages[i]);
 
-        ret = iommu_iotlb_flush(d, _dfn(xatp->gpfn - done), done,
+        ret = iommu_iotlb_flush(d, ctx, _dfn(xatp->gpfn - adjust), done,
                                 IOMMU_FLUSHF_added | IOMMU_FLUSHF_modified);
         if ( unlikely(ret) && rc >= 0 )
             rc = ret;

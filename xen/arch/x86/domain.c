@@ -678,7 +678,7 @@ int arch_sanitise_domain_config(struct xen_domctl_createdomain *config)
     if ( nested_virt && !hvm_nested_virt_supported() )
     {
         dprintk(XENLOG_INFO, "Nested virt requested but not available\n");
-        return -EINVAL;        
+        return -EINVAL;
     }
 
     if ( nested_virt && !hap )
@@ -2373,7 +2373,7 @@ int domain_relinquish_resources(struct domain *d)
 
     PROGRESS(iommu_pagetables):
 
-        ret = iommu_free_pgtables(d);
+        ret = iommu_free_pgtables(d, iommu_default_context(d));
         if ( ret )
             return ret;
 
