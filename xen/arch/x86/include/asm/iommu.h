@@ -12,6 +12,8 @@
 #include <asm/cache.h>
 #include <asm/processor.h>
 
+#include "arena.h"
+
 #define DEFAULT_DOMAIN_ADDRESS_WIDTH 48
 
 struct g2m_ioport {
@@ -66,6 +68,7 @@ struct arch_iommu
 {
     /* Queue for freeing pages */
     struct page_list_head free_queue;
+    struct iommu_arena pt_arena; /* allocator for non-default contexts */
 
     union {
         /* Intel VT-d */
