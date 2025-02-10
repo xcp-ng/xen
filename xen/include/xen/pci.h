@@ -97,12 +97,15 @@ struct pci_dev_info {
 struct pci_dev {
     struct list_head alldevs_list;
     struct list_head domain_list;
+    struct list_head context_list;
 
     struct list_head msi_list;
 
     struct arch_msix *msix;
 
     struct domain *domain;
+
+    uint16_t context; /* IOMMU context number of domain */
 
     const union {
         struct {

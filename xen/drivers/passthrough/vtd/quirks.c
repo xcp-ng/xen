@@ -408,9 +408,9 @@ void __init platform_quirks_init(void)
 
 static int __must_check map_me_phantom_function(struct domain *domain,
                                                 unsigned int dev,
-                                                domid_t domid,
-                                                paddr_t pgd_maddr,
-                                                unsigned int mode)
+                                                unsigned int mode,
+                                                struct iommu_context *ctx,
+                                                struct iommu_context *prev_ctx)
 {
     struct acpi_drhd_unit *drhd;
     struct pci_dev *pdev;
@@ -422,19 +422,17 @@ static int __must_check map_me_phantom_function(struct domain *domain,
 
     /* map or unmap ME phantom function */
     if ( !(mode & UNMAP_ME_PHANTOM_FUNC) )
-        rc = domain_context_mapping_one(domain, iommu_default_context(domain),
-                                        drhd->iommu, 0,
-                                        PCI_DEVFN(dev, 7), NULL,
-                                        domid, pgd_maddr, mode);
+        rc = apply_context_single(domain, ctx, drhd->iommu, 0,
+                                  PCI_DEVFN(dev, 7), prev_ctx);
     else
-        rc = domain_context_unmap_one(domain, drhd->iommu, 0,
-                                      PCI_DEVFN(dev, 7));
+        rc = unapply_context_single(domain, drhd->iommu, prev_ctx, 0, PCI_DEVFN(dev, 7));
 
     return rc;
 }
 
 int me_wifi_quirk(struct domain *domain, uint8_t bus, uint8_t devfn,
-                  domid_t domid, paddr_t pgd_maddr, unsigned int mode)
+                  domid_t domid, unsigned int mode,
+                  struct iommu_context *ctx, struct iommu_context *prev_ctx)
 {
     u32 id;
     int rc = 0;
@@ -458,7 +456,7 @@ int me_wifi_quirk(struct domain *domain, uint8_t bus, uint8_t devfn,
             case 0x423b8086:
             case 0x423c8086:
             case 0x423d8086:
-                rc = map_me_phantom_function(domain, 3, domid, pgd_maddr, mode);
+                rc = map_me_phantom_function(domain, 3, mode, ctx, prev_ctx);
                 break;
             default:
                 break;
@@ -484,7 +482,7 @@ int me_wifi_quirk(struct domain *domain, uint8_t bus, uint8_t devfn,
             case 0x42388086:        /* Puma Peak */
             case 0x422b8086:
             case 0x422c8086:
-                rc = map_me_phantom_function(domain, 22, domid, pgd_maddr, mode);
+                rc = map_me_phantom_function(domain, 22, mode, ctx, prev_ctx);
                 break;
             default:
                 break;

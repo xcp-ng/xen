@@ -1536,7 +1536,7 @@ static void invalidate_all_domain_pages(void)
 
     for_each_domain( d )
         if ( is_iommu_enabled(d) )
-            amd_iommu_flush_all_pages(d);
+            amd_iommu_flush_all_pages(d, iommu_default_context(d));
 }
 
 static int cf_check _invalidate_all_devices(

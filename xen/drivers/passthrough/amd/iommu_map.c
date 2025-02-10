@@ -276,7 +276,7 @@ static int iommu_pde_from_dfn(struct domain *d, struct iommu_context *ctx,
     struct domain_iommu *hd = dom_iommu(d);
 
     table = ctx->arch.amd.root_table;
-    level = ctx->arch.amd.paging_mode;
+    level = hd->arch.amd.paging_mode;
 
     if ( !table || target < 1 || level < target || level > 6 )
     {
@@ -400,20 +400,16 @@ static void queue_free_pt(struct domain *d, struct iommu_context *ctx, mfn_t mfn
 
 int cf_check amd_iommu_map_page(
     struct domain *d, dfn_t dfn, mfn_t mfn, unsigned int flags,
-    unsigned int *flush_flags)
+    unsigned int *flush_flags, struct iommu_context *ctx)
 {
     struct domain_iommu *hd = dom_iommu(d);
-    struct iommu_context *ctx = iommu_default_context(d);
     unsigned int level = (IOMMUF_order(flags) / PTE_PER_TABLE_SHIFT) + 1;
     bool contig;
-    int rc;
     unsigned long pt_mfn = 0;
     union amd_iommu_pte old;
 
     ASSERT((hd->platform_ops->page_sizes >> IOMMUF_order(flags)) &
            PAGE_SIZE_4K);
-
-    spin_lock(&ctx->arch.mapping_lock);
 
     /*
      * IOMMU mapping request can be safely ignored when the domain is dying.
@@ -422,25 +418,11 @@ int cf_check amd_iommu_map_page(
      * before any page tables are freed (see iommu_free_pgtables()).
      */
     if ( d->is_dying )
-    {
-        spin_unlock(&ctx->arch.mapping_lock);
         return 0;
-    }
-
-    rc = amd_iommu_alloc_root(d);
-    if ( rc )
-    {
-        spin_unlock(&ctx->arch.mapping_lock);
-        AMD_IOMMU_ERROR("root table alloc failed, dfn = %"PRI_dfn"\n",
-                        dfn_x(dfn));
-        domain_crash(d);
-        return rc;
-    }
 
     if ( iommu_pde_from_dfn(d, ctx, dfn_x(dfn), level, &pt_mfn, flush_flags, true) ||
          !pt_mfn )
     {
-        spin_unlock(&ctx->arch.mapping_lock);
         AMD_IOMMU_ERROR("invalid IO pagetable entry dfn = %"PRI_dfn"\n",
                         dfn_x(dfn));
         domain_crash(d);
@@ -452,7 +434,7 @@ int cf_check amd_iommu_map_page(
                                 flags & IOMMUF_writable,
                                 flags & IOMMUF_readable, &contig);
 
-    while ( unlikely(contig) && ++level < ctx->arch.amd.paging_mode )
+    while ( unlikely(contig) && ++level < hd->arch.amd.paging_mode )
     {
         struct page_info *pg = mfn_to_page(_mfn(pt_mfn));
         unsigned long next_mfn;
@@ -471,8 +453,6 @@ int cf_check amd_iommu_map_page(
         perfc_incr(iommu_pt_coalesces);
     }
 
-    spin_unlock(&ctx->arch.mapping_lock);
-
     *flush_flags |= IOMMU_FLUSHF_added;
     if ( old.pr )
     {
@@ -486,11 +466,11 @@ int cf_check amd_iommu_map_page(
 }
 
 int cf_check amd_iommu_unmap_page(
-    struct domain *d, dfn_t dfn, unsigned int order, unsigned int *flush_flags)
+    struct domain *d, dfn_t dfn, unsigned int order, unsigned int *flush_flags,
+    struct iommu_context *ctx)
 {
     unsigned long pt_mfn = 0;
     struct domain_iommu *hd = dom_iommu(d);
-    struct iommu_context *ctx = iommu_default_context(d);
     unsigned int level = (order / PTE_PER_TABLE_SHIFT) + 1;
     union amd_iommu_pte old = {};
 
@@ -500,17 +480,11 @@ int cf_check amd_iommu_unmap_page(
      */
     ASSERT((hd->platform_ops->page_sizes >> order) & PAGE_SIZE_4K);
 
-    spin_lock(&ctx->arch.mapping_lock);
-
     if ( !ctx->arch.amd.root_table )
-    {
-        spin_unlock(&ctx->arch.mapping_lock);
         return 0;
-    }
 
     if ( iommu_pde_from_dfn(d, ctx, dfn_x(dfn), level, &pt_mfn, flush_flags, false) )
     {
-        spin_unlock(&ctx->arch.mapping_lock);
         AMD_IOMMU_ERROR("invalid IO pagetable entry dfn = %"PRI_dfn"\n",
                         dfn_x(dfn));
         domain_crash(d);
@@ -524,7 +498,7 @@ int cf_check amd_iommu_unmap_page(
         /* Mark PTE as 'page not present'. */
         old = clear_iommu_pte_present(pt_mfn, dfn_x(dfn), level, &free);
 
-        while ( unlikely(free) && ++level < ctx->arch.amd.paging_mode )
+        while ( unlikely(free) && ++level < hd->arch.amd.paging_mode )
         {
             struct page_info *pg = mfn_to_page(_mfn(pt_mfn));
 
@@ -539,8 +513,6 @@ int cf_check amd_iommu_unmap_page(
             perfc_incr(iommu_pt_coalesces);
         }
     }
-
-    spin_unlock(&ctx->arch.mapping_lock);
 
     if ( old.pr )
     {
@@ -608,7 +580,7 @@ static unsigned long flush_count(unsigned long dfn, unsigned long page_count,
 }
 
 int cf_check amd_iommu_flush_iotlb_pages(
-    struct domain *d, dfn_t dfn, unsigned long page_count,
+    struct domain *d, struct iommu_context *ctx, dfn_t dfn, unsigned long page_count,
     unsigned int flush_flags)
 {
     unsigned long dfn_l = dfn_x(dfn);
@@ -626,7 +598,7 @@ int cf_check amd_iommu_flush_iotlb_pages(
     /* If so requested or if the range wraps then just flush everything. */
     if ( (flush_flags & IOMMU_FLUSHF_all) || dfn_l + page_count < dfn_l )
     {
-        amd_iommu_flush_all_pages(d);
+        amd_iommu_flush_all_pages(d, ctx);
         return 0;
     }
 
@@ -639,13 +611,13 @@ int cf_check amd_iommu_flush_iotlb_pages(
      *       flush code.
      */
     if ( page_count == 1 ) /* order 0 flush count */
-        amd_iommu_flush_pages(d, dfn_l, 0);
+        amd_iommu_flush_pages(d, ctx, dfn_l, 0);
     else if ( flush_count(dfn_l, page_count, 9) == 1 )
-        amd_iommu_flush_pages(d, dfn_l, 9);
+        amd_iommu_flush_pages(d, ctx, dfn_l, 9);
     else if ( flush_count(dfn_l, page_count, 18) == 1 )
-        amd_iommu_flush_pages(d, dfn_l, 18);
+        amd_iommu_flush_pages(d, ctx, dfn_l, 18);
     else
-        amd_iommu_flush_all_pages(d);
+        amd_iommu_flush_all_pages(d, ctx);
 
     return 0;
 }

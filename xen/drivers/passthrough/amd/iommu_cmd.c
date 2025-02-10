@@ -327,19 +327,21 @@ static void amd_iommu_flush_all_iotlbs(const struct domain *d, daddr_t daddr,
 }
 
 /* Flush iommu cache after p2m changes. */
-static void _amd_iommu_flush_pages(struct domain *d,
+static void _amd_iommu_flush_pages(struct domain *d, struct iommu_context *ctx,
                                    daddr_t daddr, unsigned int order)
 {
     struct amd_iommu *iommu;
-    struct iommu_context *ctx = iommu_default_context(d);
 
     /* send INVALIDATE_IOMMU_PAGES command */
     for_each_amd_iommu ( iommu )
     {
-        domid_t dom_id = ctx->arch.amd.didmap[iommu->index];
+        if ( ctx->arch.amd.iommu_dev_cnt[iommu->index] )
+        {
+            domid_t dom_id = ctx->arch.amd.didmap[iommu->index];
 
-        invalidate_iommu_pages(iommu, daddr, dom_id, order);
-        flush_command_buffer(iommu, 0);
+            invalidate_iommu_pages(iommu, daddr, dom_id, order);
+            flush_command_buffer(iommu, 0);
+        }
     }
 
     if ( ats_enabled )
@@ -355,15 +357,15 @@ static void _amd_iommu_flush_pages(struct domain *d,
     }
 }
 
-void amd_iommu_flush_all_pages(struct domain *d)
+void amd_iommu_flush_all_pages(struct domain *d, struct iommu_context *ctx)
 {
-    _amd_iommu_flush_pages(d, INV_IOMMU_ALL_PAGES_ADDRESS, 0);
+    _amd_iommu_flush_pages(d, ctx, INV_IOMMU_ALL_PAGES_ADDRESS, 0);
 }
 
-void amd_iommu_flush_pages(struct domain *d,
+void amd_iommu_flush_pages(struct domain *d, struct iommu_context *ctx,
                            unsigned long dfn, unsigned int order)
 {
-    _amd_iommu_flush_pages(d, __dfn_to_daddr(dfn), order);
+    _amd_iommu_flush_pages(d, ctx, __dfn_to_daddr(dfn), order);
 }
 
 void amd_iommu_flush_device(struct amd_iommu *iommu, uint16_t bdf,

@@ -2,10 +2,12 @@
 #ifndef __ARCH_X86_IOMMU_H__
 #define __ARCH_X86_IOMMU_H__
 
+#include <xen/bitmap.h>
 #include <xen/errno.h>
 #include <xen/list.h>
 #include <xen/mem_access.h>
 #include <xen/spinlock.h>
+#include <xen/stdbool.h>
 #include <asm/apicdef.h>
 #include <asm/cache.h>
 #include <asm/processor.h>
@@ -39,18 +41,16 @@ struct arch_iommu_context
     struct list_head identity_maps;
 
 
-    spinlock_t mapping_lock; /* io page table lock */
-
     union {
         /* Intel VT-d */
         struct {
             uint64_t pgd_maddr; /* io page directory machine address */
             domid_t *didmap; /* per-iommu DID (valid only if related iommu_dev_cnt > 0) */
             unsigned long *iommu_dev_cnt; /* counter of devices per iommu */
+            uint32_t superpage_progress; /* superpage progress during teardown */
         } vtd;
         /* AMD IOMMU */
         struct {
-            unsigned int paging_mode;
             struct page_info *root_table;
             domid_t *didmap; /* per-iommu DID (valid only if related iommu_dev_cnt > 0) */
             unsigned long *iommu_dev_cnt; /* counter of devices per iommu */
@@ -72,7 +72,7 @@ struct arch_iommu
         struct {
             unsigned int paging_mode;
             struct guest_iommu *g_iommu;
-        };
+        } amd;
     };
 };
 
