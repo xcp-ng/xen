@@ -56,6 +56,7 @@ static bool __hwdom_initdata iommu_hwdom_none;
 bool __hwdom_initdata iommu_hwdom_strict;
 bool __read_mostly iommu_hwdom_passthrough;
 bool __hwdom_initdata iommu_hwdom_inclusive;
+bool __read_mostly iommu_hwdom_no_dma = false;
 int8_t __hwdom_initdata iommu_hwdom_reserved = -1;
 
 #ifndef iommu_hap_pt_share
@@ -173,6 +174,8 @@ static int __init cf_check parse_dom0_iommu_param(const char *s)
             iommu_hwdom_reserved = val;
         else if ( !cmdline_strcmp(s, "none") )
             iommu_hwdom_none = true;
+        else if ( (val = parse_boolean("dma", s, ss)) >= 0 )
+            iommu_hwdom_no_dma = !val;
         else
             rc = -EINVAL;
 
@@ -185,6 +188,8 @@ custom_param("dom0-iommu", parse_dom0_iommu_param);
 
 static void __hwdom_init check_hwdom_reqs(struct domain *d)
 {
+    d->iommu.no_dma = iommu_hwdom_no_dma;
+
     if ( iommu_hwdom_none || !is_hvm_domain(d) )
         return;
 
@@ -330,6 +335,13 @@ int iommu_domain_init(struct domain *d, unsigned int opts)
      */
     if ( !is_hardware_domain(d) || iommu_hwdom_strict )
         hd->need_sync = !iommu_use_hap_pt(d);
+
+    if ( hd->no_dma )
+    {
+        /* No-DMA mode is exclusive with HAP and sync_pt. */
+        hd->hap_pt_share = false;
+        hd->need_sync = false;
+    }
 
     ASSERT(!(hd->need_sync && hd->hap_pt_share));
 

@@ -108,6 +108,9 @@ static long capabilities_op(struct pv_iommu_capabilities *cap, struct domain *d)
     cap->max_pasid = 0; /* TODO */
     cap->cap_flags = 0;
 
+    if ( !dom_iommu(d)->no_dma )
+        cap->cap_flags |= IOMMUCAP_default_identity;
+
     cap->pgsize_mask = PAGE_SIZE_4K;
 
     return 0;

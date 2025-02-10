@@ -1313,7 +1313,8 @@ int memory_add(unsigned long spfn, unsigned long epfn, unsigned int pxm)
      */
     if ( is_iommu_enabled(hardware_domain) &&
          !iommu_use_hap_pt(hardware_domain) &&
-         !need_iommu_pt_sync(hardware_domain) )
+         !need_iommu_pt_sync(hardware_domain) &&
+         !iommu_hwdom_no_dma )
     {
         for ( i = spfn; i < epfn; i++ )
             if ( iommu_legacy_map(hardware_domain, _dfn(i), _mfn(i),

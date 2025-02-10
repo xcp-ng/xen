@@ -484,6 +484,10 @@ void __hwdom_init arch_iommu_hwdom_init(struct domain *d)
     if ( iommu_hwdom_reserved == -1 )
         iommu_hwdom_reserved = 1;
 
+    if ( iommu_hwdom_no_dma )
+        /* Skip special mappings with no-dma mode */
+        return;
+
     if ( iommu_hwdom_inclusive )
     {
         printk(XENLOG_WARNING
