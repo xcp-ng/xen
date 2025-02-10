@@ -215,6 +215,32 @@ int arch_iommu_context_teardown(struct domain *d, struct iommu_context *ctx, u32
     return 0;
 }
 
+int arch_iommu_pviommu_init(struct domain *d, uint16_t nb_ctx, uint32_t arena_order)
+{
+    struct domain_iommu *hd = dom_iommu(d);
+
+    if ( arena_order == 0 )
+        return 0;
+
+    return iommu_arena_initialize(&hd->arch.pt_arena, NULL, arena_order, 0);
+}
+
+int arch_iommu_pviommu_teardown(struct domain *d)
+{
+    struct domain_iommu *hd = dom_iommu(d);
+
+    if ( iommu_arena_teardown(&hd->arch.pt_arena, true) )
+    {
+        printk(XENLOG_WARNING "IOMMU Arena used while being destroyed\n");
+        WARN();
+
+        /* Teardown anyway */
+        iommu_arena_teardown(&hd->arch.pt_arena, false);
+    }
+
+    return 0;
+}
+
 void arch_iommu_domain_destroy(struct domain *d)
 {
 }
@@ -392,6 +418,19 @@ void iommu_identity_map_teardown(struct domain *d, struct iommu_context *ctx)
         list_del(&map->list);
         xfree(map);
     }
+}
+
+bool iommu_identity_map_check(struct domain *d, struct iommu_context *ctx,
+                              mfn_t mfn)
+{
+    struct identity_map *map;
+    uint64_t addr = pfn_to_paddr(mfn_x(mfn));
+
+    list_for_each_entry ( map, &ctx->arch.identity_maps, list )
+        if (addr >= map->base && addr < map->end)
+            return true;
+
+    return false;
 }
 
 static int __hwdom_init cf_check map_subtract(unsigned long s, unsigned long e,
@@ -656,7 +695,7 @@ void iommu_free_domid(domid_t domid, unsigned long *map)
         BUG();
 }
 
-int iommu_free_pgtables(struct domain *d, struct iommu_context *ctx)
+int cf_check iommu_free_pgtables(struct domain *d, struct iommu_context *ctx)
 {
     struct domain_iommu *hd = dom_iommu(d);
     struct page_info *pg;
@@ -673,7 +712,10 @@ int iommu_free_pgtables(struct domain *d, struct iommu_context *ctx)
 
     while ( (pg = page_list_remove_head(&ctx->arch.pgtables)) )
     {
-        free_domheap_page(pg);
+        if (ctx->id == 0)
+            free_domheap_page(pg);
+        else
+            iommu_arena_free_page(&hd->arch.pt_arena, pg);
 
         if ( !(++done & 0xff) && general_preempt_check() )
             return -ERESTART;
@@ -695,7 +737,11 @@ struct page_info *iommu_alloc_pgtable(struct domain_iommu *hd,
         memflags = MEMF_node(hd->node);
 #endif
 
-    pg = alloc_domheap_page(NULL, memflags);
+    if (ctx->id == 0)
+        pg = alloc_domheap_page(NULL, memflags);
+    else
+        pg = iommu_arena_allocate_page(&hd->arch.pt_arena);
+
     if ( !pg )
         return NULL;
 
@@ -774,9 +820,14 @@ void iommu_queue_free_pgtable(struct domain *d, struct iommu_context *ctx,
 
     page_list_del(pg, &ctx->arch.pgtables);
 
-    page_list_add_tail(pg, &per_cpu(free_pgt_list, cpu));
+    if ( !ctx->id )
+    {
+        page_list_add_tail(pg, &per_cpu(free_pgt_list, cpu));
 
-    tasklet_schedule(&per_cpu(free_pgt_tasklet, cpu));
+        tasklet_schedule(&per_cpu(free_pgt_tasklet, cpu));
+    }
+    else
+        iommu_arena_free_page(&dom_iommu(d)->arch.pt_arena, pg);
 }
 
 static int cf_check cpu_callback(

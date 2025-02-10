@@ -136,6 +136,9 @@ int iommu_identity_mapping(struct domain *d, struct iommu_context *ctx,
                            p2m_access_t p2ma, paddr_t base, paddr_t end,
                            unsigned int flag);
 void iommu_identity_map_teardown(struct domain *d, struct iommu_context *ctx);
+bool iommu_identity_map_check(struct domain *d, struct iommu_context *ctx,
+                              mfn_t mfn);
+
 
 extern bool untrusted_msi;
 

@@ -2662,6 +2662,7 @@ static const struct iommu_ops __initconst_cf_clobber vtd_ops = {
     .get_reserved_device_memory = intel_iommu_get_reserved_device_memory,
     .dump_page_tables = vtd_dump_page_tables,
     .quiesce = vtd_quiesce,
+    .get_max_iova = intel_iommu_get_max_iova,
 };
 
 const struct iommu_init_ops __initconstrel intel_iommu_init_ops = {

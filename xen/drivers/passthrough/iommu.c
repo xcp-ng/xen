@@ -193,6 +193,99 @@ static void __hwdom_init check_hwdom_reqs(struct domain *d)
     arch_iommu_check_autotranslated_hwdom(d);
 }
 
+
+int iommu_domain_pviommu_init(struct domain *d, uint16_t nb_ctx, uint32_t arena_order)
+{
+    struct domain_iommu *hd = dom_iommu(d);
+    int rc;
+
+    BUG_ON(nb_ctx == 0); /* sanity check (prevent underflow) */
+
+    /*
+     * hd->other_contexts.count is always reported as 0 during initialization
+     * preventing misuse of partially initialized IOMMU contexts.
+     */
+
+    if ( atomic_cmpxchg(&hd->other_contexts.initialized, 0, 1) == 1 )
+        return -EACCES;
+
+    if ( (nb_ctx - 1) > 0 ) {
+        /* Initialize context bitmap */
+        size_t i;
+
+        hd->other_contexts.bitmap = xzalloc_array(unsigned long,
+                                                  BITS_TO_LONGS(nb_ctx - 1));
+
+        if (!hd->other_contexts.bitmap)
+        {
+            rc = -ENOMEM;
+            goto cleanup;
+        }
+
+        hd->other_contexts.map = xzalloc_array(struct iommu_context, nb_ctx - 1);
+
+        if (!hd->other_contexts.map)
+        {
+            rc = -ENOMEM;
+            goto cleanup;
+        }
+
+        for (i = 0; i < (nb_ctx - 1); i++)
+            rspin_lock_init(&hd->other_contexts.map[i].lock);
+    }
+
+    rc = arch_iommu_pviommu_init(d, nb_ctx, arena_order);
+
+    if ( rc )
+        goto cleanup;
+
+    /* Make sure initialization is complete before making it visible to other CPUs. */
+    smp_wmb();
+
+    hd->other_contexts.count = nb_ctx - 1;
+
+    printk(XENLOG_INFO "Dom%d uses %lu IOMMU contexts (%llu pages arena)\n",
+           d->domain_id, (unsigned long)nb_ctx, 1llu << arena_order);
+
+    return 0;
+
+cleanup:
+    /* TODO: Reset hd->other_contexts.initialized */
+    if ( hd->other_contexts.bitmap )
+    {
+        xfree(hd->other_contexts.bitmap);
+        hd->other_contexts.bitmap = NULL;
+    }
+
+    if ( hd->other_contexts.map )
+    {
+        xfree(hd->other_contexts.map);
+        hd->other_contexts.bitmap = NULL;
+    }
+
+    return rc;
+}
+
+int iommu_domain_pviommu_teardown(struct domain *d)
+{
+    struct domain_iommu *hd = dom_iommu(d);
+    int i;
+    /* FIXME: Potential race condition with remote_op ? */
+
+    for (i = 0; i < hd->other_contexts.count; i++)
+        WARN_ON(iommu_context_free(d, i, IOMMU_TEARDOWN_REATTACH_DEFAULT) != ENOENT);
+
+    hd->other_contexts.count = 0;
+
+    if ( hd->other_contexts.bitmap )
+        xfree(hd->other_contexts.bitmap);
+
+    if ( hd->other_contexts.map )
+        xfree(hd->other_contexts.map);
+
+    return 0;
+}
+
 int iommu_domain_init(struct domain *d, unsigned int opts)
 {
     struct domain_iommu *hd = dom_iommu(d);
@@ -237,6 +330,8 @@ int iommu_domain_init(struct domain *d, unsigned int opts)
         hd->need_sync = !iommu_use_hap_pt(d);
 
     ASSERT(!(hd->need_sync && hd->hap_pt_share));
+
+    hd->allow_pv_iommu = true;
 
     rspin_lock(&hd->default_ctx.lock);
     ret = iommu_context_init(d, &hd->default_ctx, 0, IOMMU_CONTEXT_INIT_default);
@@ -1214,6 +1309,16 @@ int iommu_get_reserved_device_memory(iommu_grdm_t *func, void *ctxt)
 bool iommu_has_feature(struct domain *d, enum iommu_feature feature)
 {
     return is_iommu_enabled(d) && test_bit(feature, dom_iommu(d)->features);
+}
+
+uint64_t iommu_get_max_iova(struct domain *d)
+{
+    struct domain_iommu *hd = dom_iommu(d);
+
+    if ( !hd->platform_ops->get_max_iova )
+        return 0;
+
+    return iommu_call(hd->platform_ops, get_max_iova, d);
 }
 
 #define MAX_EXTRA_RESERVED_RANGES 20
