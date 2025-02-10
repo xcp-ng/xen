@@ -276,7 +276,7 @@ static int iommu_pde_from_dfn(struct domain *d, struct iommu_context *ctx,
     struct domain_iommu *hd = dom_iommu(d);
 
     table = ctx->arch.amd.root_table;
-    level = ctx->arch.amd.paging_mode;
+    level = hd->arch.amd.paging_mode;
 
     if ( !table || target < 1 || level < target || level > 6 )
     {
@@ -405,14 +405,11 @@ int cf_check amd_iommu_map_page(
     struct domain_iommu *hd = dom_iommu(d);
     unsigned int level = (IOMMUF_order(flags) / PTE_PER_TABLE_SHIFT) + 1;
     bool contig;
-    int rc;
     unsigned long pt_mfn = 0;
     union amd_iommu_pte old;
 
     ASSERT((hd->platform_ops->page_sizes >> IOMMUF_order(flags)) &
            PAGE_SIZE_4K);
-
-    spin_lock(&ctx->arch.mapping_lock);
 
     /*
      * IOMMU mapping request can be safely ignored when the domain is dying.
@@ -421,25 +418,11 @@ int cf_check amd_iommu_map_page(
      * before any page tables are freed (see iommu_free_pgtables()).
      */
     if ( d->is_dying )
-    {
-        spin_unlock(&ctx->arch.mapping_lock);
         return 0;
-    }
-
-    rc = amd_iommu_alloc_root(d);
-    if ( rc )
-    {
-        spin_unlock(&ctx->arch.mapping_lock);
-        AMD_IOMMU_ERROR("root table alloc failed, dfn = %"PRI_dfn"\n",
-                        dfn_x(dfn));
-        domain_crash(d);
-        return rc;
-    }
 
     if ( iommu_pde_from_dfn(d, ctx, dfn_x(dfn), level, &pt_mfn, flush_flags, true) ||
          !pt_mfn )
     {
-        spin_unlock(&ctx->arch.mapping_lock);
         AMD_IOMMU_ERROR("invalid IO pagetable entry dfn = %"PRI_dfn"\n",
                         dfn_x(dfn));
         domain_crash(d);
@@ -470,8 +453,6 @@ int cf_check amd_iommu_map_page(
         perfc_incr(iommu_pt_coalesces);
     }
 
-    spin_unlock(&ctx->arch.mapping_lock);
-
     *flush_flags |= IOMMU_FLUSHF_added;
     if ( old.pr )
     {
@@ -499,17 +480,11 @@ int cf_check amd_iommu_unmap_page(
      */
     ASSERT((hd->platform_ops->page_sizes >> order) & PAGE_SIZE_4K);
 
-    spin_lock(&ctx->arch.mapping_lock);
-
     if ( !ctx->arch.amd.root_table )
-    {
-        spin_unlock(&ctx->arch.mapping_lock);
         return 0;
-    }
 
     if ( iommu_pde_from_dfn(d, ctx, dfn_x(dfn), level, &pt_mfn, flush_flags, false) )
     {
-        spin_unlock(&ctx->arch.mapping_lock);
         AMD_IOMMU_ERROR("invalid IO pagetable entry dfn = %"PRI_dfn"\n",
                         dfn_x(dfn));
         domain_crash(d);
@@ -538,8 +513,6 @@ int cf_check amd_iommu_unmap_page(
             perfc_incr(iommu_pt_coalesces);
         }
     }
-
-    spin_unlock(&ctx->arch.mapping_lock);
 
     if ( old.pr )
     {

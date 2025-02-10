@@ -177,11 +177,11 @@ static void ept_p2m_type_to_flags(const struct p2m_domain *p2m,
             break;
         case p2m_access_rw:
             entry->x = 0;
-            break;           
+            break;
         case p2m_access_rwx:
             break;
     }
-    
+
     /*
      * Don't create executable superpages if we need to shatter them to
      * protect against CVE-2018-12207.
@@ -298,7 +298,7 @@ static bool ept_split_super_page(
 
 /* Take the currently mapped table, find the corresponding gfn entry,
  * and map the next table, if available.  If the entry is empty
- * and read_only is set, 
+ * and read_only is set,
  * Return values:
  *  GUEST_TABLE_MAP_FAILED: Failed to map.  Either read_only was set and the
  *   entry was empty, or allocating a new page failed.
@@ -854,7 +854,7 @@ ept_set_entry(struct p2m_domain *p2m, gfn_t gfn_, mfn_t mfn,
 
     ept_entry = table + (gfn_remainder >> (i * EPT_TABLE_ORDER));
 
-    /* In case VT-d uses same page table, this flag is needed by VT-d */ 
+    /* In case VT-d uses same page table, this flag is needed by VT-d */
     vtd_pte_present = is_epte_present(ept_entry);
 
     /*
@@ -975,11 +975,14 @@ out:
          need_modify_vtd_table )
     {
         if ( iommu_use_hap_pt(d) && !this_cpu(iommu_dont_flush_iotlb) )
-            rc = iommu_iotlb_flush(d, iommu_default_context(d),
-                                   _dfn(gfn), 1ul << order,
+        {
+            struct iommu_context *ctx = iommu_get_context(d, 0);
+            rc = iommu_iotlb_flush(d, ctx, _dfn(gfn), 1ul << order,
                                    (iommu_flags ? IOMMU_FLUSHF_added : 0) |
                                    (vtd_pte_present ? IOMMU_FLUSHF_modified
                                                     : 0));
+            iommu_put_context(ctx);
+        }
         else if ( need_iommu_pt_sync(d) )
             rc = iommu_flags ?
                 iommu_legacy_map(d, _dfn(gfn), mfn, 1ul << order, iommu_flags) :
@@ -1082,7 +1085,7 @@ static mfn_t cf_check ept_get_entry(
         }
 
         ASSERT(i == 0);
-        
+
         if ( !p2m_pod_demand_populate(p2m, gfn_, PAGE_ORDER_4K) )
             goto out;
     }
@@ -1098,7 +1101,7 @@ static mfn_t cf_check ept_get_entry(
         mfn = _mfn(ept_entry->mfn);
         if ( i )
         {
-            /* 
+            /*
              * We may meet super pages, and to split into 4k pages
              * to emulate p2m table
              */

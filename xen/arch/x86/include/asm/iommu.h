@@ -2,10 +2,12 @@
 #ifndef __ARCH_X86_IOMMU_H__
 #define __ARCH_X86_IOMMU_H__
 
+#include <xen/bitmap.h>
 #include <xen/errno.h>
 #include <xen/list.h>
 #include <xen/mem_access.h>
 #include <xen/spinlock.h>
+#include <xen/stdbool.h>
 #include <asm/apicdef.h>
 #include <asm/cache.h>
 #include <asm/processor.h>
@@ -48,6 +50,7 @@ struct arch_iommu_context
             uint64_t pgd_maddr; /* io page directory machine address */
             domid_t *didmap; /* per-iommu DID (valid only if related iommu_dev_cnt > 0) */
             unsigned long *iommu_dev_cnt; /* counter of devices per iommu */
+            uint32_t superpage_progress; /* superpage progress during teardown */
         } vtd;
         /* AMD IOMMU */
         struct {
@@ -159,8 +162,8 @@ void iommu_queue_free_pgtable(struct domain *d, struct iommu_context *ctx,
 
 /* Check [start, end] unity map range for correctness. */
 bool iommu_unity_region_ok(const char *prefix, mfn_t start, mfn_t end);
-int arch_iommu_context_init(struct domain *d, struct iommu_context *ctx);
-int arch_iommu_context_teardown(struct domain *d, struct iommu_context *ctx);
+int arch_iommu_context_init(struct domain *d, struct iommu_context *ctx, uint32_t flags);
+int arch_iommu_context_teardown(struct domain *d, struct iommu_context *ctx, uint32_t flags);
 
 #endif /* !__ARCH_X86_IOMMU_H__ */
 /*

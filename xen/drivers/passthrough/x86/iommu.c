@@ -187,10 +187,10 @@ void __hwdom_init arch_iommu_check_autotranslated_hwdom(struct domain *d)
 int arch_iommu_domain_init(struct domain *d)
 {
     INIT_PAGE_LIST_HEAD(&dom_iommu(d)->arch.free_queue);
-    return arch_iommu_context_init(d, iommu_default_context(d));
+    return 0;
 }
 
-int arch_iommu_context_init(struct domain *d, struct iommu_context *ctx)
+int arch_iommu_context_init(struct domain *d, struct iommu_context *ctx, uint32_t flags)
 {
     spin_lock_init(&ctx->arch.mapping_lock);
     INIT_PAGE_LIST_HEAD(&ctx->arch.pgtables.list);
@@ -200,7 +200,8 @@ int arch_iommu_context_init(struct domain *d, struct iommu_context *ctx)
     return 0;
 }
 
-int arch_iommu_context_teardown(struct domain *d, struct iommu_context *ctx)
+int arch_iommu_context_teardown(struct domain *d, struct iommu_context *ctx,
+                                uint32_t flags)
 {
     /* Cleanup all page tables */
     while ( iommu_free_pgtables(d, ctx) == -ERESTART )
@@ -215,13 +216,6 @@ void arch_iommu_domain_destroy(struct domain *d)
 
     ASSERT(!dom_iommu(d)->platform_ops ||
            page_list_empty(&ctx->arch.pgtables.list));
-
-    /*
-     * There should be not page-tables left allocated by the time the
-     * domain is destroyed. Note that arch_iommu_domain_destroy() is
-     * called unconditionally, so pgtables may be uninitialized.
-     */
-    arch_iommu_context_teardown(d, ctx);
 }
 
 struct identity_map {
@@ -367,7 +361,6 @@ static int __hwdom_init cf_check identity_map(unsigned long s, unsigned long e,
 {
     struct map_data *info = data;
     struct domain *d = info->d;
-    struct iommu_context *ctx = iommu_default_context(d);
     long rc;
 
     if ( iommu_verbose )
@@ -392,6 +385,7 @@ static int __hwdom_init cf_check identity_map(unsigned long s, unsigned long e,
     {
         const unsigned int perms = IOMMUF_readable | IOMMUF_preempt |
                                    (info->mmio_ro ? 0 : IOMMUF_writable);
+        struct iommu_context *ctx = iommu_get_context(d, 0);
 
         /*
          * Read-only ranges are strictly MMIO and need an additional iomem
@@ -422,6 +416,8 @@ static int __hwdom_init cf_check identity_map(unsigned long s, unsigned long e,
             s += rc;
             process_pending_softirqs();
         }
+
+        iommu_put_context(ctx);
     }
     ASSERT(rc <= 0);
     if ( rc )
@@ -634,7 +630,7 @@ int iommu_free_pgtables(struct domain *d, struct iommu_context *ctx)
      * Pages will be moved to the free list below. So we want to
      * clear the root page-table to avoid any potential use after-free.
      */
-    iommu_vcall(hd->platform_ops, clear_root_pgtable, d);
+    iommu_vcall(hd->platform_ops, clear_root_pgtable, d, ctx);
 
     while ( (pg = page_list_remove_head(&ctx->arch.pgtables.list)) )
     {
