@@ -23,7 +23,7 @@
 
 #include "iommu.h"
 
-static int __initdata nr_amd_iommus;
+unsigned int nr_amd_iommus = 0;
 static bool __initdata pci_init;
 
 static struct tasklet amd_iommu_irq_tasklet;
@@ -922,6 +922,7 @@ static void enable_iommu(struct amd_iommu *iommu)
     set_iommu_translation_control(iommu, IOMMU_CONTROL_ENABLED);
 
     iommu->enabled = 1;
+    iommu->index = nr_amd_iommus;
 
     spin_unlock_irqrestore(&iommu->lock, flags);
 

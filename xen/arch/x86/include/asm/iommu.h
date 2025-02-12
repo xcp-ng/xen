@@ -46,12 +46,15 @@ struct arch_iommu_context
         /* Intel VT-d */
         struct {
             uint64_t pgd_maddr; /* io page directory machine address */
-            unsigned long *iommu_bitmap; /* bitmap of iommu(s) that the context uses */
+            domid_t *didmap; /* per-iommu DID (valid only if related iommu_dev_cnt > 0) */
+            unsigned long *iommu_dev_cnt; /* counter of devices per iommu */
         } vtd;
         /* AMD IOMMU */
         struct {
             unsigned int paging_mode;
             struct page_info *root_table;
+            domid_t *didmap; /* per-iommu DID (valid only if related iommu_dev_cnt > 0) */
+            unsigned long *iommu_dev_cnt; /* counter of devices per iommu */
         } amd;
     };
 };

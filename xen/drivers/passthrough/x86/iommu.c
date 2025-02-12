@@ -582,9 +582,6 @@ unsigned long *__init iommu_init_domid(domid_t reserve)
 {
     unsigned long *map;
 
-    if ( !iommu_quarantine )
-        return ZERO_BLOCK_PTR;
-
     BUILD_BUG_ON(DOMID_MASK * 2U >= UINT16_MAX);
 
     map = xzalloc_array(unsigned long, BITS_TO_LONGS(UINT16_MAX - DOMID_MASK));
@@ -599,35 +596,23 @@ unsigned long *__init iommu_init_domid(domid_t reserve)
 
 domid_t iommu_alloc_domid(unsigned long *map)
 {
-    /*
-     * This is used uniformly across all IOMMUs, such that on typical
-     * systems we wouldn't re-use the same ID very quickly (perhaps never).
-     */
-    static unsigned int start;
-    unsigned int idx = find_next_zero_bit(map, UINT16_MAX - DOMID_MASK, start);
+    /* TODO: Consider nr_doms ? */
+    unsigned int idx = find_next_zero_bit(map, UINT16_MAX, 0);
 
-    ASSERT(pcidevs_locked());
-
-    if ( idx >= UINT16_MAX - DOMID_MASK )
-        idx = find_first_zero_bit(map, UINT16_MAX - DOMID_MASK);
-    if ( idx >= UINT16_MAX - DOMID_MASK )
-        return DOMID_INVALID;
+    if ( idx >= UINT16_MAX )
+        return UINT16_MAX;
 
     __set_bit(idx, map);
 
-    start = idx + 1;
-
-    return idx | (DOMID_MASK + 1);
+    return idx;
 }
 
 void iommu_free_domid(domid_t domid, unsigned long *map)
 {
     ASSERT(pcidevs_locked());
 
-    if ( domid == DOMID_INVALID )
+    if ( domid == UINT16_MAX )
         return;
-
-    ASSERT(domid > DOMID_MASK);
 
     if ( !__test_and_clear_bit(domid & DOMID_MASK, map) )
         BUG();

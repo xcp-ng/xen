@@ -35,6 +35,7 @@
 
 #define iommu_found()           (!list_empty(&amd_iommu_head))
 
+extern unsigned int nr_amd_iommus;
 extern struct list_head amd_iommu_head;
 
 typedef struct event_entry
@@ -105,6 +106,8 @@ struct amd_iommu {
     uint64_t exclusion_limit;
 
     int enabled;
+
+    unsigned int index;
 
     struct list_head ats_devices;
 };

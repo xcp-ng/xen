@@ -332,11 +332,13 @@ static void _amd_iommu_flush_pages(struct domain *d,
                                    daddr_t daddr, unsigned int order)
 {
     struct amd_iommu *iommu;
-    unsigned int dom_id = d->domain_id;
+    struct iommu_context *ctx = iommu_default_context(d);
 
     /* send INVALIDATE_IOMMU_PAGES command */
     for_each_amd_iommu ( iommu )
     {
+        domid_t dom_id = ctx->arch.amd.didmap[iommu->index];
+
         invalidate_iommu_pages(iommu, daddr, dom_id, order);
         flush_command_buffer(iommu, 0);
     }
