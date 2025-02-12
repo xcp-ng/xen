@@ -15,23 +15,6 @@
 
 struct arch_pci_dev {
     vmask_t used_vectors;
-    /*
-     * These fields are (de)initialized under pcidevs-lock. Other uses of
-     * them don't race (de)initialization and hence don't strictly need any
-     * locking.
-     */
-    union {
-        /* Subset of struct arch_iommu's fields, to be used in dom_io. */
-        struct {
-            uint64_t pgd_maddr;
-        } vtd;
-        struct {
-            struct page_info *root_table;
-        } amd;
-    };
-    domid_t pseudo_domid;
-    mfn_t leaf_mfn;
-    struct page_list_head pgtables_list;
 };
 
 int pci_conf_write_intercept(unsigned int seg, unsigned int bdf,

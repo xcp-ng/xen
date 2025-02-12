@@ -655,9 +655,6 @@ int amd_iommu_reserve_domain_unity_map(struct domain *d, struct iommu_context *c
 {
     int rc;
 
-    if ( d == dom_io )
-        return 0;
-
     for ( rc = 0; !rc && map; map = map->next )
     {
         p2m_access_t p2ma = p2m_access_n;
@@ -678,9 +675,6 @@ int amd_iommu_reserve_domain_unity_unmap(struct domain *d, struct iommu_context 
                                          const struct ivrs_unity_map *map)
 {
     int rc;
-
-    if ( d == dom_io )
-        return 0;
 
     for ( rc = 0; map; map = map->next )
     {
@@ -770,134 +764,15 @@ int cf_check amd_iommu_get_reserved_device_memory(
     return 0;
 }
 
-static int fill_qpt(union amd_iommu_pte *this, unsigned int level,
-                    struct page_info *pgs[IOMMU_MAX_PT_LEVELS])
-{
-    struct domain_iommu *hd = dom_iommu(dom_io);
-    struct iommu_context *ctx = iommu_default_context(dom_io);
-    unsigned int i;
-    int rc = 0;
-
-    for ( i = 0; !rc && i < PTE_PER_TABLE_SIZE; ++i )
-    {
-        union amd_iommu_pte *pte = &this[i], *next;
-
-        if ( !pte->pr )
-        {
-            if ( !pgs[level] )
-            {
-                /*
-                 * The pgtable allocator is fine for the leaf page, as well as
-                 * page table pages, and the resulting allocations are always
-                 * zeroed.
-                 */
-                pgs[level] = iommu_alloc_pgtable(hd, ctx, 0);
-                if ( !pgs[level] )
-                {
-                    rc = -ENOMEM;
-                    break;
-                }
-
-                if ( level )
-                {
-                    next = __map_domain_page(pgs[level]);
-                    rc = fill_qpt(next, level - 1, pgs);
-                    unmap_domain_page(next);
-                }
-            }
-
-            /*
-             * PDEs are essentially a subset of PTEs, so this function
-             * is fine to use even at the leaf.
-             */
-            set_iommu_pde_present(pte, mfn_x(page_to_mfn(pgs[level])), level,
-                                  true, true);
-        }
-        else if ( level && pte->next_level )
-        {
-            next = map_domain_page(_mfn(pte->mfn));
-            rc = fill_qpt(next, level - 1, pgs);
-            unmap_domain_page(next);
-        }
-    }
-
-    return rc;
-}
-
 int cf_check amd_iommu_quarantine_init(struct pci_dev *pdev, bool scratch_page)
 {
-    struct domain_iommu *hd = dom_iommu(dom_io);
-    struct iommu_context *ctx = iommu_default_context(dom_io);
-    unsigned int level = ctx->arch.amd.paging_mode;
-    unsigned int req_id = get_dma_requestor_id(pdev->seg, pdev->sbdf.bdf);
-    const struct ivrs_mappings *ivrs_mappings = get_ivrs_mappings(pdev->seg);
-    int rc;
+    amd_iommu_quarantine_teardown(pdev);
 
-    ASSERT(pcidevs_locked());
-    ASSERT(!ctx->arch.amd.root_table);
-    ASSERT(page_list_empty(&ctx->arch.pgtables.list));
-
-    if ( !scratch_page && !ivrs_mappings[req_id].unity_map )
-        return 0;
-
-    ASSERT(pdev->arch.pseudo_domid != DOMID_INVALID);
-
-    if ( pdev->arch.amd.root_table )
-    {
-        clear_domain_page(pdev->arch.leaf_mfn);
-        return 0;
-    }
-
-    pdev->arch.amd.root_table = iommu_alloc_pgtable(hd, ctx, 0);
-    if ( !pdev->arch.amd.root_table )
-        return -ENOMEM;
-
-    /* Transiently install the root into DomIO, for iommu_identity_mapping(). */
-    ctx->arch.amd.root_table = pdev->arch.amd.root_table;
-
-    rc = amd_iommu_reserve_domain_unity_map(dom_io, ctx,
-                                            ivrs_mappings[req_id].unity_map,
-                                            0);
-
-    iommu_identity_map_teardown(dom_io, ctx);
-    ctx->arch.amd.root_table = NULL;
-
-    if ( rc )
-        AMD_IOMMU_WARN("%pp: quarantine unity mapping failed\n", &pdev->sbdf);
-    else if ( scratch_page )
-    {
-        union amd_iommu_pte *root;
-        struct page_info *pgs[IOMMU_MAX_PT_LEVELS] = {};
-
-        root = __map_domain_page(pdev->arch.amd.root_table);
-        rc = fill_qpt(root, level - 1, pgs);
-        unmap_domain_page(root);
-
-        pdev->arch.leaf_mfn = page_to_mfn(pgs[0]);
-    }
-
-    page_list_move(&pdev->arch.pgtables_list, &ctx->arch.pgtables.list);
-
-    if ( rc )
-        amd_iommu_quarantine_teardown(pdev);
-
-    return rc;
+    return 0;
 }
 
 void amd_iommu_quarantine_teardown(struct pci_dev *pdev)
 {
-    struct iommu_context *ctx = iommu_default_context(dom_io);
-
-    ASSERT(pcidevs_locked());
-
-    if ( !pdev->arch.amd.root_table )
-        return;
-
-    ASSERT(page_list_empty(&ctx->arch.pgtables.list));
-    page_list_move(&ctx->arch.pgtables.list, &pdev->arch.pgtables_list);
-    while ( iommu_free_pgtables(dom_io, ctx) == -ERESTART )
-        /* nothing */;
-    pdev->arch.amd.root_table = NULL;
 }
 
 /*

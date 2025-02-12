@@ -138,9 +138,6 @@ static int __must_check amd_iommu_setup_domain_device(
     const struct page_info *root_pg;
     domid_t domid;
 
-    if ( QUARANTINE_SKIP(domain, pdev) )
-        return 0;
-
     BUG_ON(!ctx->arch.amd.paging_mode || !iommu->dev_table.buffer);
 
     rc = allocate_domain_resources(domain);
@@ -159,16 +156,8 @@ static int __must_check amd_iommu_setup_domain_device(
     dte = &table[req_id];
     ivrs_dev = &get_ivrs_mappings(iommu->seg)[req_id];
 
-    if ( domain != dom_io )
-    {
-        root_pg = ctx->arch.amd.root_table;
-        domid = domain->domain_id;
-    }
-    else
-    {
-        root_pg = pdev->arch.amd.root_table;
-        domid = pdev->arch.pseudo_domid;
-    }
+    root_pg = ctx->arch.amd.root_table;
+    domid = domain->domain_id;
 
     spin_lock_irqsave(&iommu->lock, flags);
 
@@ -414,9 +403,6 @@ static void amd_iommu_disable_domain_device(const struct domain *domain,
     int req_id;
     u8 bus = pdev->bus;
 
-    if ( QUARANTINE_SKIP(domain, pdev) )
-        return;
-
     ASSERT(pcidevs_locked());
 
     if ( pci_ats_device(iommu->seg, bus, pdev->devfn) &&
@@ -479,14 +465,9 @@ static int cf_check reassign_device(
         return -ENODEV;
     }
 
-    if ( !QUARANTINE_SKIP(target, pdev) )
-    {
-        rc = amd_iommu_setup_domain_device(target, target_ctx, iommu, devfn, pdev);
-        if ( rc )
-            return rc;
-    }
-    else
-        amd_iommu_disable_domain_device(source, iommu, devfn, pdev);
+    rc = amd_iommu_setup_domain_device(target, target_ctx, iommu, devfn, pdev);
+    if ( rc )
+        return rc;
 
     if ( devfn == pdev->devfn && pdev->domain != target )
     {
@@ -579,8 +560,6 @@ static int cf_check amd_iommu_add_device(u8 devfn, struct pci_dev *pdev)
     struct iommu_context *ctx;
     u16 bdf;
     struct ivrs_mappings *ivrs_mappings;
-    bool fresh_domid = false;
-    int ret;
 
     if ( !pdev->domain )
         return -EINVAL;
@@ -649,22 +628,7 @@ static int cf_check amd_iommu_add_device(u8 devfn, struct pci_dev *pdev)
         AMD_IOMMU_WARN("%pd: unity mapping failed for %pp\n",
                        pdev->domain, &PCI_SBDF(pdev->seg, bdf));
 
-    if ( iommu_quarantine && pdev->arch.pseudo_domid == DOMID_INVALID )
-    {
-        pdev->arch.pseudo_domid = iommu_alloc_domid(iommu->domid_map);
-        if ( pdev->arch.pseudo_domid == DOMID_INVALID )
-            return -ENOSPC;
-        fresh_domid = true;
-    }
-
-    ret = amd_iommu_setup_domain_device(pdev->domain, ctx, iommu, devfn, pdev);
-    if ( ret && fresh_domid )
-    {
-        iommu_free_domid(pdev->arch.pseudo_domid, iommu->domid_map);
-        pdev->arch.pseudo_domid = DOMID_INVALID;
-    }
-
-    return ret;
+    return amd_iommu_setup_domain_device(pdev->domain, ctx, iommu, devfn, pdev);
 }
 
 static int cf_check amd_iommu_remove_device(u8 devfn, struct pci_dev *pdev)
@@ -699,9 +663,6 @@ static int cf_check amd_iommu_remove_device(u8 devfn, struct pci_dev *pdev)
                        pdev->domain, &PCI_SBDF(pdev->seg, bdf));
 
     amd_iommu_quarantine_teardown(pdev);
-
-    iommu_free_domid(pdev->arch.pseudo_domid, iommu->domid_map);
-    pdev->arch.pseudo_domid = DOMID_INVALID;
 
     if ( amd_iommu_perdev_intremap &&
          ivrs_mappings[bdf].dte_requestor_id == bdf &&

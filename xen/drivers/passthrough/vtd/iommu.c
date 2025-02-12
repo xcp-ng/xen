@@ -49,14 +49,6 @@
 #define CONTIG_MASK DMA_PTE_CONTIG_MASK
 #include <asm/pt-contig-markers.h>
 
-/* dom_io is used as a sentinel for quarantined devices */
-#define QUARANTINE_SKIP(d, pgd_maddr) ((d) == dom_io && !(pgd_maddr))
-#define DEVICE_DOMID(d, pdev) ((d) != dom_io ? (d)->domain_id \
-                                             : (pdev)->arch.pseudo_domid)
-#define DEVICE_PGTABLE(d, pdev) ((d) != dom_io \
-                                 ? iommu_default_context(d)->arch.vtd.pgd_maddr \
-                                 : (pdev)->arch.vtd.pgd_maddr)
-
 bool __read_mostly iommu_igfx = true;
 bool __read_mostly iommu_qinval = true;
 #ifndef iommu_snoop
@@ -1495,8 +1487,6 @@ int domain_context_mapping_one(
     int rc, ret;
     bool flush_dev_iotlb;
 
-    if ( QUARANTINE_SKIP(domain, pgd_maddr) )
-        return 0;
 
     ASSERT(pcidevs_locked());
     spin_lock(&iommu->lock);
@@ -1518,8 +1508,6 @@ int domain_context_mapping_one(
         domid = did_to_domain_id(iommu, prev_did);
         if ( domid < DOMID_FIRST_RESERVED )
             prev_dom = rcu_lock_domain_by_id(domid);
-        else if ( pdev ? domid == pdev->arch.pseudo_domid : domid > DOMID_MASK )
-            prev_dom = rcu_lock_domain(dom_io);
         if ( !prev_dom )
         {
             spin_unlock(&iommu->lock);
@@ -1651,8 +1639,8 @@ int domain_context_mapping_one(
             ret = domain_context_unmap_one(domain, iommu, bus, devfn);
         else
             ret = domain_context_mapping_one(prev_dom, ctx, iommu, bus, devfn, pdev,
-                                             DEVICE_DOMID(prev_dom, pdev),
-                                             DEVICE_PGTABLE(prev_dom, pdev),
+                                             prev_dom->domain_id,
+                                             iommu_default_context(prev_dom)->arch.vtd.pgd_maddr,
                                              (mode & MAP_WITH_RMRR) |
                                              MAP_ERROR_RECOVERY) < 0;
 
@@ -1674,8 +1662,8 @@ static int domain_context_mapping(struct domain *domain, struct iommu_context *c
 {
     const struct acpi_drhd_unit *drhd = acpi_find_matched_drhd_unit(pdev);
     const struct acpi_rmrr_unit *rmrr;
-    paddr_t pgd_maddr = DEVICE_PGTABLE(domain, pdev);
-    domid_t orig_domid = pdev->arch.pseudo_domid;
+    paddr_t pgd_maddr = ctx->arch.vtd.pgd_maddr;
+    domid_t did = domain->domain_id;
     int ret = 0;
     unsigned int i, mode = 0;
     uint16_t seg = pdev->seg, bdf;
@@ -1728,20 +1716,11 @@ static int domain_context_mapping(struct domain *domain, struct iommu_context *c
         if ( !drhd )
             return -ENODEV;
 
-        if ( iommu_quarantine && orig_domid == DOMID_INVALID )
-        {
-            pdev->arch.pseudo_domid =
-                iommu_alloc_domid(drhd->iommu->pseudo_domid_map);
-            if ( pdev->arch.pseudo_domid == DOMID_INVALID )
-                return -ENOSPC;
-        }
-
         if ( iommu_debug )
             printk(VTDPREFIX "%pd:PCIe: map %pp\n",
                    domain, &PCI_SBDF(seg, bus, devfn));
         ret = domain_context_mapping_one(domain, ctx, drhd->iommu, bus, devfn, pdev,
-                                         DEVICE_DOMID(domain, pdev), pgd_maddr,
-                                         mode);
+                                         did, pgd_maddr, mode);
         if ( ret > 0 )
             ret = 0;
         if ( !ret && devfn == pdev->devfn && ats_device(pdev, drhd) > 0 )
@@ -1753,21 +1732,12 @@ static int domain_context_mapping(struct domain *domain, struct iommu_context *c
         if ( !drhd )
             return -ENODEV;
 
-        if ( iommu_quarantine && orig_domid == DOMID_INVALID )
-        {
-            pdev->arch.pseudo_domid =
-                iommu_alloc_domid(drhd->iommu->pseudo_domid_map);
-            if ( pdev->arch.pseudo_domid == DOMID_INVALID )
-                return -ENOSPC;
-        }
-
         if ( iommu_debug )
             printk(VTDPREFIX "%pd:PCI: map %pp\n",
                    domain, &PCI_SBDF(seg, bus, devfn));
 
         ret = domain_context_mapping_one(domain, ctx, drhd->iommu, bus, devfn,
-                                         pdev, DEVICE_DOMID(domain, pdev),
-                                         pgd_maddr, mode);
+                                         pdev, did, pgd_maddr, mode);
         if ( ret < 0 )
             break;
         prev_present = ret;
@@ -1797,8 +1767,7 @@ static int domain_context_mapping(struct domain *domain, struct iommu_context *c
          */
         if ( ret >= 0 )
             ret = domain_context_mapping_one(domain, ctx, drhd->iommu, bus, devfn,
-                                             NULL, DEVICE_DOMID(domain, pdev),
-                                             pgd_maddr, mode);
+                                             NULL, did, pgd_maddr, mode);
 
         /*
          * Devices behind PCIe-to-PCI/PCIx bridge may generate different
@@ -1813,8 +1782,7 @@ static int domain_context_mapping(struct domain *domain, struct iommu_context *c
         if ( !ret && pdev_type(seg, bus, devfn) == DEV_TYPE_PCIe2PCI_BRIDGE &&
              (secbus != pdev->bus || pdev->devfn != 0) )
             ret = domain_context_mapping_one(domain, ctx, drhd->iommu, secbus, 0,
-                                             NULL, DEVICE_DOMID(domain, pdev),
-                                             pgd_maddr, mode);
+                                             NULL, did, pgd_maddr, mode);
 
         if ( ret )
         {
@@ -1835,13 +1803,6 @@ static int domain_context_mapping(struct domain *domain, struct iommu_context *c
 
     if ( !ret && devfn == pdev->devfn )
         pci_vtd_quirk(pdev);
-
-    if ( ret && drhd && orig_domid == DOMID_INVALID )
-    {
-        iommu_free_domid(pdev->arch.pseudo_domid,
-                         drhd->iommu->pseudo_domid_map);
-        pdev->arch.pseudo_domid = DOMID_INVALID;
-    }
 
     return ret;
 }
@@ -2006,10 +1967,6 @@ static const struct acpi_drhd_unit *domain_context_unmap(
         return ERR_PTR(-EINVAL);
     }
 
-    if ( !ret && pdev->devfn == devfn &&
-         !QUARANTINE_SKIP(domain, pdev->arch.vtd.pgd_maddr) )
-        check_cleanup_domid_map(domain, pdev, iommu);
-
     return drhd;
 }
 
@@ -2043,21 +2000,6 @@ static void cf_check iommu_domain_teardown(struct domain *d)
 static void quarantine_teardown(struct pci_dev *pdev,
                                 const struct acpi_drhd_unit *drhd)
 {
-    struct iommu_context *ctx = iommu_default_context(dom_io);
-
-    ASSERT(pcidevs_locked());
-
-    if ( !pdev->arch.vtd.pgd_maddr )
-        return;
-
-    ASSERT(page_list_empty(&ctx->arch.pgtables.list));
-    page_list_move(&ctx->arch.pgtables.list, &pdev->arch.pgtables_list);
-    while ( iommu_free_pgtables(dom_io, ctx) == -ERESTART )
-        /* nothing */;
-    pdev->arch.vtd.pgd_maddr = 0;
-
-    if ( drhd )
-        cleanup_domid_map(pdev->arch.pseudo_domid, drhd->iommu);
 }
 
 static int __must_check cf_check intel_iommu_map_page(
@@ -2396,13 +2338,6 @@ static int cf_check intel_iommu_remove_device(u8 devfn, struct pci_dev *pdev)
     }
 
     quarantine_teardown(pdev, drhd);
-
-    if ( drhd )
-    {
-        iommu_free_domid(pdev->arch.pseudo_domid,
-                         drhd->iommu->pseudo_domid_map);
-        pdev->arch.pseudo_domid = DOMID_INVALID;
-    }
 
     return 0;
 }
@@ -2761,42 +2696,22 @@ static int cf_check reassign_device_ownership(
 {
     int ret;
 
-    if ( !QUARANTINE_SKIP(target, pdev->arch.vtd.pgd_maddr) )
-    {
-        struct iommu_context *target_ctx = iommu_default_context(target);
-
-        if ( !has_arch_pdevs(target) )
-            vmx_pi_hooks_assign(target);
+    if ( !has_arch_pdevs(target) )
+        vmx_pi_hooks_assign(target);
 
 #ifdef CONFIG_PV
-        /*
-         * Devices assigned to untrusted domains (here assumed to be any domU)
-         * can attempt to send arbitrary LAPIC/MSI messages. We are unprotected
-         * by the root complex unless interrupt remapping is enabled.
-         */
-        if ( !iommu_intremap && !is_hardware_domain(target) &&
-             !is_system_domain(target) )
-            untrusted_msi = true;
+    /*
+     * Devices assigned to untrusted domains (here assumed to be any domU)
+     * can attempt to send arbitrary LAPIC/MSI messages. We are unprotected
+     * by the root complex unless interrupt remapping is enabled.
+     */
+    if ( !iommu_intremap && !is_hardware_domain(target) &&
+            !is_system_domain(target) )
+        untrusted_msi = true;
 #endif
 
-        ret = domain_context_mapping(target, target_ctx, devfn, pdev);
+    ret = domain_context_mapping(target, iommu_default_context(target), devfn, pdev);
 
-        if ( !ret && pdev->devfn == devfn &&
-             !QUARANTINE_SKIP(source, pdev->arch.vtd.pgd_maddr) )
-        {
-            const struct acpi_drhd_unit *drhd = acpi_find_matched_drhd_unit(pdev);
-
-            if ( drhd )
-                check_cleanup_domid_map(source, pdev, drhd->iommu);
-        }
-    }
-    else
-    {
-        const struct acpi_drhd_unit *drhd;
-
-        drhd = domain_context_unmap(source, devfn, pdev);
-        ret = IS_ERR(drhd) ? PTR_ERR(drhd) : 0;
-    }
     if ( ret )
     {
         if ( !has_arch_pdevs(target) )
@@ -2894,9 +2809,6 @@ static int cf_check intel_iommu_assign_device(
                 return -EPERM;
         }
     }
-
-    if ( d == dom_io )
-        return reassign_device_ownership(s, d, devfn, pdev);
 
     /* Setup rmrr identity mapping */
     for_each_rmrr_device( rmrr, bdf, i )
@@ -3107,135 +3019,10 @@ static void cf_check vtd_dump_page_tables(struct domain *d)
                               agaw_to_level(hd->arch.vtd.agaw), 0, 0);
 }
 
-static int fill_qpt(struct dma_pte *this, unsigned int level,
-                    struct page_info *pgs[6])
-{
-    struct domain_iommu *hd = dom_iommu(dom_io);
-    struct iommu_context *ctx = iommu_default_context(dom_io);
-    unsigned int i;
-    int rc = 0;
-
-    for ( i = 0; !rc && i < PTE_NUM; ++i )
-    {
-        struct dma_pte *pte = &this[i], *next;
-
-        if ( !dma_pte_present(*pte) )
-        {
-            if ( !pgs[level] )
-            {
-                /*
-                 * The pgtable allocator is fine for the leaf page, as well as
-                 * page table pages, and the resulting allocations are always
-                 * zeroed.
-                 */
-                pgs[level] = iommu_alloc_pgtable(hd, ctx, 0);
-                if ( !pgs[level] )
-                {
-                    rc = -ENOMEM;
-                    break;
-                }
-
-                if ( level )
-                {
-                    next = map_vtd_domain_page(page_to_maddr(pgs[level]));
-                    rc = fill_qpt(next, level - 1, pgs);
-                    unmap_vtd_domain_page(next);
-                }
-            }
-
-            dma_set_pte_addr(*pte, page_to_maddr(pgs[level]));
-            dma_set_pte_readable(*pte);
-            dma_set_pte_writable(*pte);
-        }
-        else if ( level && !dma_pte_superpage(*pte) )
-        {
-            next = map_vtd_domain_page(dma_pte_addr(*pte));
-            rc = fill_qpt(next, level - 1, pgs);
-            unmap_vtd_domain_page(next);
-        }
-    }
-
-    return rc;
-}
-
 static int cf_check intel_iommu_quarantine_init(struct pci_dev *pdev,
                                                 bool scratch_page)
 {
-    struct domain_iommu *hd = dom_iommu(dom_io);
-    struct iommu_context *ctx = iommu_default_context(dom_io);
-    struct page_info *pg;
-    unsigned int agaw = hd->arch.vtd.agaw;
-    unsigned int level = agaw_to_level(agaw);
-    const struct acpi_drhd_unit *drhd;
-    const struct acpi_rmrr_unit *rmrr;
-    unsigned int i, bdf;
-    bool rmrr_found = false;
-    int rc;
-
-    ASSERT(pcidevs_locked());
-    ASSERT(!ctx->arch.vtd.pgd_maddr);
-    ASSERT(page_list_empty(&ctx->arch.pgtables.list));
-
-    if ( pdev->arch.vtd.pgd_maddr )
-    {
-        clear_domain_page(pdev->arch.leaf_mfn);
-        return 0;
-    }
-
-    drhd = acpi_find_matched_drhd_unit(pdev);
-    if ( !drhd )
-        return -ENODEV;
-
-    pg = iommu_alloc_pgtable(hd, ctx, 0);
-    if ( !pg )
-        return -ENOMEM;
-
-    rc = context_set_domain_id(NULL, pdev->arch.pseudo_domid, drhd->iommu);
-
-    /* Transiently install the root into DomIO, for iommu_identity_mapping(). */
-    ctx->arch.vtd.pgd_maddr = page_to_maddr(pg);
-
-    for_each_rmrr_device ( rmrr, bdf, i )
-    {
-        if ( rc )
-            break;
-
-        if ( rmrr->segment == pdev->seg && bdf == pdev->sbdf.bdf )
-        {
-            rmrr_found = true;
-
-            rc = iommu_identity_mapping(dom_io, ctx, p2m_access_rw,
-                                        rmrr->base_address, rmrr->end_address,
-                                        0);
-            if ( rc )
-                printk(XENLOG_ERR VTDPREFIX
-                       "%pp: RMRR quarantine mapping failed\n",
-                       &pdev->sbdf);
-        }
-    }
-
-    iommu_identity_map_teardown(dom_io, ctx);
-    ctx->arch.vtd.pgd_maddr = 0;
-    pdev->arch.vtd.pgd_maddr = page_to_maddr(pg);
-
-    if ( !rc && scratch_page )
-    {
-        struct dma_pte *root;
-        struct page_info *pgs[6] = {};
-
-        root = map_vtd_domain_page(pdev->arch.vtd.pgd_maddr);
-        rc = fill_qpt(root, level - 1, pgs);
-        unmap_vtd_domain_page(root);
-
-        pdev->arch.leaf_mfn = page_to_mfn(pgs[0]);
-    }
-
-    page_list_move(&pdev->arch.pgtables_list, &ctx->arch.pgtables.list);
-
-    if ( rc || (!scratch_page && !rmrr_found) )
-        quarantine_teardown(pdev, drhd);
-
-    return rc;
+    return 0;
 }
 
 static uint64_t cf_check intel_iommu_get_max_iova(struct domain *d)
