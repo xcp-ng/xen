@@ -76,6 +76,14 @@ __UNLIKELY_END(nsvm_hap)
         ALTERNATIVE "", svm_vmentry_spec_ctrl, X86_FEATURE_SC_MSR_HVM
         ALTERNATIVE "", DO_SPEC_CTRL_DIV, X86_FEATURE_SC_DIV
 
+        /*
+         * Set EFLAGS.IF after CLGI covers us from real interrupts, but not
+         * immediately prior to VMRUN.  The VMRUN instruction leaks it's
+         * INTR_SHADOW into guest state if a VMExit occurs before VMRUN
+         * completes (e.g. taking #NPF during event injecting.)
+         */
+        sti
+
         pop  %r15
         pop  %r14
         pop  %r13
@@ -93,7 +101,6 @@ __UNLIKELY_END(nsvm_hap)
         pop  %rsi
         pop  %rdi
 
-        sti
         vmrun
 
         SAVE_ALL
