@@ -651,7 +651,7 @@ struct domain
     struct page_info *pending_scrub;
     unsigned int pending_scrub_order;
     unsigned int pending_scrub_index;
-};
+} __aligned(PAGE_SIZE);
 
 static inline struct page_list_head *page_to_list(
     struct domain *d, const struct page_info *pg)
