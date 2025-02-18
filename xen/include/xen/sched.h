@@ -602,7 +602,7 @@ struct domain
 
     /* Holding CDF_* constant. Internal flags for domain creation. */
     unsigned int cdf;
-};
+} __aligned(PAGE_SIZE);
 
 static inline struct page_list_head *page_to_list(
     struct domain *d, const struct page_info *pg)
