@@ -1874,6 +1874,11 @@ static int cf_check svm_msr_read_intercept(
         break;
 
     case MSR_K8_SYSCFG:
+        if ( cpu_has_sme || cpu_has_sev )
+        {
+            *msr_content = SYSCFG_MEM_ENCRYPT;
+            break;
+        }
     case MSR_K8_TOP_MEM1:
     case MSR_K8_TOP_MEM2:
     case MSR_K8_VM_CR:

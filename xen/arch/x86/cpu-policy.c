@@ -9,6 +9,7 @@
 #include <asm/amd.h>
 #include <asm/cpu-policy.h>
 #include <asm/hvm/nestedhvm.h>
+#include <asm/hvm/svm/sev.h>
 #include <asm/hvm/svm/svm.h>
 #include <asm/intel-family.h>
 #include <asm/msr-index.h>
@@ -323,7 +324,15 @@ static void recalculate_misc(struct cpu_policy *p)
         p->extd.raw[0x1c] = EMPTY_LEAF; /* LWP - not supported. */
         p->extd.raw[0x1d] = EMPTY_LEAF; /* TopoExt Cache */
         p->extd.raw[0x1e] = EMPTY_LEAF; /* TopoExt APIC ID/Core/Node */
-        p->extd.raw[0x1f] = EMPTY_LEAF; /* SEV */
+
+	p->extd.raw[0x1f] = EMPTY_LEAF;  /* SEV */
+        if ( cpu_has_sme )
+	    p->extd.raw[0x1f].a |= 0x1;
+	if ( cpu_has_sev )
+	    p->extd.raw[0x1f].a |= 0x2;
+	if ( p->extd.raw[0x1f].a )
+	    p->extd.raw[0x1f].b = arch_ffsl(pte_c_bit_mask) - 1;
+
         p->extd.raw[0x20] = EMPTY_LEAF; /* Platform QoS */
         break;
     }
