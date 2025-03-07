@@ -36,6 +36,9 @@
 #include <xen/hvm/params.h>
 #include <xen/grant_table.h>
 
+#define round_pgup(_p)    (((_p)+(PAGE_SIZE_X86-1))&PAGE_MASK_X86)
+#define round_pgdown(_p)  ((_p)&PAGE_MASK_X86)
+
 /* ------------------------------------------------------------------------ */
 
 static int setup_hypercall_page(struct xc_dom_image *dom)
@@ -209,6 +212,19 @@ int xc_dom_boot_image(struct xc_dom_image *dom)
             return rc;
         if ( (rc = xg_dom_coco_encrypt_seg(dom->xch, dom, dom->start_info_seg, "start_info") != 0) )
             return rc;
+        
+        for ( int i = 0; i < MAX_ACPI_MODULES; i++ )
+        {
+            struct xc_dom_seg seg;
+            seg.pfn = dom->acpi_modules[i].guest_addr_out >> XC_DOM_PAGE_SHIFT(dom);
+            seg.pages = round_pgup(dom->acpi_modules[i].length) >> XC_DOM_PAGE_SHIFT(dom);
+
+            if ( !seg.pfn || !seg.pages )
+                continue;
+
+            if ( (rc = xg_dom_coco_encrypt_seg(dom->xch, dom, seg, "acpi module")) != 0 )
+                return rc;
+        }
     }
 
     /* let the vm run */
