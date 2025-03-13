@@ -326,12 +326,14 @@ static void recalculate_misc(struct cpu_policy *p)
         p->extd.raw[0x1e] = EMPTY_LEAF; /* TopoExt APIC ID/Core/Node */
 
 	p->extd.raw[0x1f] = EMPTY_LEAF;  /* SEV */
+#ifdef CONFIG_HVM
         if ( cpu_has_sme )
 	    p->extd.raw[0x1f].a |= 0x1;
 	if ( cpu_has_sev )
 	    p->extd.raw[0x1f].a |= 0x2;
 	if ( p->extd.raw[0x1f].a )
 	    p->extd.raw[0x1f].b = arch_ffsl(pte_c_bit_mask) - 1;
+#endif
 
         p->extd.raw[0x20] = EMPTY_LEAF; /* Platform QoS */
         break;
