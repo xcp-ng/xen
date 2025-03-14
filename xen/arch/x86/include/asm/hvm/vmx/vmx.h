@@ -452,6 +452,19 @@ static inline void ept_sync_all(void)
 
 void ept_sync_domain(struct p2m_domain *p2m);
 
+static inline void vpid_sync_vcpu_context(struct vcpu *v)
+{
+    unsigned long type;
+
+    /* Use the most precise invalidation type available. */
+    if ( likely(cpu_has_vmx_vpid_invvpid_single_context) )
+        type = INVVPID_SINGLE_CONTEXT;
+    else
+        type = INVVPID_ALL_CONTEXT;
+
+    __invvpid(type, v->arch.hvm.n1asid.asid, 0);
+}
+
 static inline void vpid_sync_vcpu_gva(struct vcpu *v, unsigned long gva)
 {
     unsigned long type;
