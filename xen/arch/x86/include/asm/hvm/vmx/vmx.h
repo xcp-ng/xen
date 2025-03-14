@@ -452,6 +452,20 @@ static inline void ept_sync_all(void)
 
 void ept_sync_domain(struct p2m_domain *p2m);
 
+static inline void vpid_sync_vcpu_context(const struct vcpu *v)
+{
+    int type = INVVPID_SINGLE_CONTEXT;
+
+    /*
+     * If single context invalidation is not supported, we escalate to
+     * use all context invalidation.
+     */
+    if ( unlikely(!cpu_has_vmx_vpid_invvpid_single_context) )
+        type = INVVPID_ALL_CONTEXT;
+
+    __invvpid(type, v->arch.hvm.n1asid.asid, 0);
+}
+
 static inline void vpid_sync_vcpu_gva(struct vcpu *v, unsigned long gva)
 {
     int type = INVVPID_INDIVIDUAL_ADDR;
