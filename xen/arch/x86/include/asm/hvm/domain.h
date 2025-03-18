@@ -140,6 +140,7 @@ struct hvm_domain {
     } write_map;
 
     struct hvm_pi_ops pi_ops;
+    struct hvm_asid asid;
 
     union {
         struct vmx_domain vmx;

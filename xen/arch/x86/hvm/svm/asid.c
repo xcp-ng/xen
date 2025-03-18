@@ -1,54 +1,75 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * asid.c: handling ASIDs in SVM.
+ * asid.c: handling ASIDs/VPIDs.
  * Copyright (c) 2007, Advanced Micro Devices, Inc.
  */
+
+#include <xen/cpumask.h>
 
 #include <asm/amd.h>
 #include <asm/hvm/nestedhvm.h>
 #include <asm/hvm/svm/svm.h>
+#include <asm/hvm/svm/vmcb.h>
+#include <asm/processor.h>
 
 #include "svm.h"
 
-void svm_asid_init(const struct cpuinfo_x86 *c)
+void __init svm_asid_init(void)
 {
-    int nasids = 0;
+    unsigned int cpu;
+    int nasids = cpuid_ebx(0x8000000aU);
 
-    /* Check for erratum #170, and leave ASIDs disabled if it's present. */
-    if ( !cpu_has_amd_erratum(c, AMD_ERRATUM_170) )
-        nasids = cpuid_ebx(0x8000000aU);
+    if ( !nasids )
+        nasids = 1;
 
-    hvm_asid_init(nasids);
+    for_each_present_cpu(cpu)
+    {
+        /* Check for erratum #170, and leave ASIDs disabled if it's present. */
+        if ( cpu_has_amd_erratum(&cpu_data[cpu], AMD_ERRATUM_170) )
+        {
+            printk(XENLOG_WARNING "Disabling ASID due to errata 170 on CPU%u\n", cpu);
+            nasids = 1;
+        }
+    }
+
+    BUG_ON(hvm_asid_init(nasids));
 }
 
 /*
- * Called directly before VMRUN.  Checks if the VCPU needs a new ASID,
- * assigns it, and if required, issues required TLB flushes.
+ * Called directly at the first VMRUN/VMENTER of a vcpu to assign the ASID/VPID.
  */
-void svm_asid_handle_vmrun(void)
+void svm_vcpu_assign_asid(struct vcpu *v)
 {
-    struct vcpu *curr = current;
-    struct vmcb_struct *vmcb = curr->arch.hvm.svm.vmcb;
-    struct hvm_vcpu_asid *p_asid =
-        nestedhvm_vcpu_in_guestmode(curr)
-        ? &vcpu_nestedhvm(curr).nv_n2asid : &curr->arch.hvm.n1asid;
-    bool need_flush = hvm_asid_handle_vmenter(p_asid);
+    struct vmcb_struct *vmcb = v->arch.hvm.svm.vmcb;
+    struct hvm_asid *p_asid = &v->domain->arch.hvm.asid;
 
-    /* ASID 0 indicates that ASIDs are disabled. */
-    if ( p_asid->asid == 0 )
-    {
-        vmcb_set_asid(vmcb, true);
-        vmcb->tlb_control =
-            cpu_has_svm_flushbyasid ? TLB_CTRL_FLUSH_ASID : TLB_CTRL_FLUSH_ALL;
-        return;
-    }
+    ASSERT(p_asid->asid);
 
-    if ( vmcb_get_asid(vmcb) != p_asid->asid )
-        vmcb_set_asid(vmcb, p_asid->asid);
+    /* In case ASIDs are disabled, as ASID = 0 is reserved, guest can use 1 instead. */
+    vmcb_set_asid(vmcb, asid_enabled ? p_asid->asid : 1);
+}
+
+/* Call to make a TLB flush at the next VMRUN. */
+void svm_vcpu_set_tlb_control(struct vcpu *v)
+{
+    struct vmcb_struct *vmcb = v->arch.hvm.svm.vmcb;
+    
+    /*
+     * If the vcpu is already running, the tlb control flag may not be
+     * processed and will be cleared at the next VMEXIT, which will undo
+     * what we are trying to do.
+     */
+    WARN_ON(v != current && v->is_running);
 
     vmcb->tlb_control =
-        !need_flush ? TLB_CTRL_NO_FLUSH :
         cpu_has_svm_flushbyasid ? TLB_CTRL_FLUSH_ASID : TLB_CTRL_FLUSH_ALL;
+}
+
+void svm_vcpu_clear_tlb_control(struct vcpu *v)
+{
+    struct vmcb_struct *vmcb = v->arch.hvm.svm.vmcb;
+
+    vmcb->tlb_control = TLB_CTRL_NO_FLUSH;
 }
 
 /*
