@@ -9,6 +9,7 @@
 #define __ASM_X86_HVM_VCPU_H__
 
 #include <xen/tasklet.h>
+#include <asm/hvm/asid.h>
 #include <asm/hvm/vlapic.h>
 #include <asm/hvm/vmx/vmcs.h>
 #include <asm/hvm/vmx/vvmx.h>
@@ -16,11 +17,6 @@
 #include <asm/hvm/svm/nestedsvm.h>
 #include <asm/mtrr.h>
 #include <public/hvm/ioreq.h>
-
-struct hvm_vcpu_asid {
-    uint64_t generation;
-    uint32_t asid;
-};
 
 struct hvm_vcpu_io {
     /*
@@ -79,7 +75,7 @@ struct nestedvcpu {
     bool stale_np2m; /* True when p2m_base in VMCx02 is no longer valid */
     uint64_t np2m_generation;
 
-    struct hvm_vcpu_asid nv_n2asid;
+    struct hvm_asid nv_n2asid;
 
     bool nv_vmentry_pending;
     bool nv_vmexit_pending;
@@ -140,8 +136,6 @@ struct hvm_vcpu {
 
     /* (MFN) hypervisor page table */
     pagetable_t         monitor_table;
-
-    struct hvm_vcpu_asid n1asid;
 
     u64                 msr_tsc_adjust;
 
