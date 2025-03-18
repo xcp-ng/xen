@@ -228,6 +228,8 @@ struct vcpu
     bool             defer_shutdown;
     /* VCPU is paused following shutdown request (d->is_shutting_down)? */
     bool             paused_for_shutdown;
+    /* VCPU needs its TLB flushed before waking. */
+    bool             needs_tlb_flush;
     /* VCPU need affinity restored */
     uint8_t          affinity_broken;
 #define VCPU_AFFINITY_OVERRIDE    0x01
@@ -554,6 +556,9 @@ struct domain
 
     /* Bitmask of CPUs which are holding onto this domain's state. */
     cpumask_var_t    dirty_cpumask;
+
+    /* Mapping of the latest vCPU that ran on a specific CPU */
+    unsigned int *latest_vcpu;
 
     struct arch_domain arch;
 

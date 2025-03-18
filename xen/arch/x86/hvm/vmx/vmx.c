@@ -36,6 +36,7 @@
 #include <asm/x86_emulate.h>
 #include <asm/hvm/vpt.h>
 #include <public/hvm/save.h>
+#include <asm/hvm/asid.h>
 #include <asm/hvm/monitor.h>
 #include <asm/xenoprof.h>
 #include <asm/gdbsx.h>
@@ -824,6 +825,18 @@ static void cf_check vmx_cpuid_policy_changed(struct vcpu *v)
         vmx_update_secondary_exec_control(v);
     }
 
+    if ( asid_enabled )
+    {
+        v->arch.hvm.vmx.secondary_exec_control |= SECONDARY_EXEC_ENABLE_VPID;
+        vmx_update_secondary_exec_control(v);
+    }
+    else
+    {
+        v->arch.hvm.vmx.secondary_exec_control &= ~SECONDARY_EXEC_ENABLE_VPID;
+        vmx_update_secondary_exec_control(v);
+    }
+
+
     /*
      * We can safely pass MSR_SPEC_CTRL through to the guest, even if STIBP
      * isn't enumerated in hardware, as SPEC_CTRL_STIBP is ignored.
@@ -1477,7 +1490,7 @@ static void cf_check vmx_handle_cd(struct vcpu *v, unsigned long value)
             vmx_set_msr_intercept(v, MSR_IA32_CR_PAT, VMX_MSR_RW);
 
             wbinvd();               /* flush possibly polluted cache */
-            hvm_asid_flush_vcpu(v); /* invalidate memory type cached in TLB */
+            v->needs_tlb_flush = true; /* invalidate memory type cached in TLB */
             v->arch.hvm.cache_mode = NO_FILL_CACHE_MODE;
         }
         else
@@ -1486,7 +1499,7 @@ static void cf_check vmx_handle_cd(struct vcpu *v, unsigned long value)
             vmx_set_guest_pat(v, *pat);
             if ( !is_iommu_enabled(v->domain) || iommu_snoop )
                 vmx_clear_msr_intercept(v, MSR_IA32_CR_PAT, VMX_MSR_RW);
-            hvm_asid_flush_vcpu(v); /* no need to flush cache */
+            v->needs_tlb_flush = true;
         }
     }
 }
@@ -1847,7 +1860,7 @@ static void cf_check vmx_update_guest_cr(
         __vmwrite(GUEST_CR3, v->arch.hvm.hw_cr[3]);
 
         if ( !(flags & HVM_UPDATE_GUEST_CR3_NOFLUSH) )
-            hvm_asid_flush_vcpu(v);
+            v->needs_tlb_flush = true;
         break;
 
     default:
@@ -3127,6 +3140,8 @@ const struct hvm_function_table * __init start_vmx(void)
     model_specific_lbr = get_model_specific_lbr();
     lbr_tsx_fixup_check();
     ler_to_fixup_check();
+
+    BUG_ON(hvm_asid_init(cpu_has_vmx_vpid ? (1u << VMCS_VPID_WIDTH) : 1));
 
     return &vmx_function_table;
 }
@@ -4901,9 +4916,8 @@ bool asmlinkage vmx_vmenter_helper(const struct cpu_user_regs *regs)
 {
     struct vcpu *curr = current;
     struct domain *currd = curr->domain;
-    u32 new_asid, old_asid;
-    struct hvm_vcpu_asid *p_asid;
-    bool need_flush;
+    struct hvm_asid *p_asid;
+    unsigned int cpu = smp_processor_id();
 
     ASSERT(hvmemul_cache_disabled(curr));
 
@@ -4914,52 +4928,44 @@ bool asmlinkage vmx_vmenter_helper(const struct cpu_user_regs *regs)
     if ( curr->domain->arch.hvm.pi_ops.vcpu_block )
         vmx_pi_do_resume(curr);
 
-    if ( !cpu_has_vmx_vpid )
+    if ( !asid_enabled )
         goto out;
     if ( nestedhvm_vcpu_in_guestmode(curr) )
         p_asid = &vcpu_nestedhvm(curr).nv_n2asid;
     else
-        p_asid = &curr->arch.hvm.n1asid;
+        p_asid = &currd->arch.hvm.asid;
 
-    old_asid = p_asid->asid;
-    need_flush = hvm_asid_handle_vmenter(p_asid);
-    new_asid = p_asid->asid;
+    __vmwrite(VIRTUAL_PROCESSOR_ID, p_asid->asid);
 
-    if ( unlikely(new_asid != old_asid) )
-    {
-        __vmwrite(VIRTUAL_PROCESSOR_ID, new_asid);
-        if ( !old_asid && new_asid )
-        {
-            /* VPID was disabled: now enabled. */
-            curr->arch.hvm.vmx.secondary_exec_control |=
-                SECONDARY_EXEC_ENABLE_VPID;
-            vmx_update_secondary_exec_control(curr);
-        }
-        else if ( old_asid && !new_asid )
-        {
-            /* VPID was enabled: now disabled. */
-            curr->arch.hvm.vmx.secondary_exec_control &=
-                ~SECONDARY_EXEC_ENABLE_VPID;
-            vmx_update_secondary_exec_control(curr);
-        }
-    }
-
-    if ( unlikely(need_flush) )
-        vpid_sync_all();
+    /**
+     * Check if we were the latest vCPU of this domain that ran on this pCPU.
+     * Flush the TLB if it is not, as the TLB entries are the ones from the previous
+     * vCPU. vCPU migration from a CPU to another always imply a TLB flush.
+     * Note that when a vCPU is introduced first, needs_tlb_flush is already true.
+     */
+    if ( currd->latest_vcpu[cpu] != curr->vcpu_id )
+        curr->needs_tlb_flush = true;
+    
+    currd->latest_vcpu[cpu] = curr->vcpu_id;
 
     if ( paging_mode_hap(curr->domain) )
     {
         struct ept_data *ept = &p2m_get_hostp2m(currd)->ept;
-        unsigned int cpu = smp_processor_id();
         unsigned int inv = 0; /* None => Single => All */
         struct ept_data *single = NULL; /* Single eptp, iff inv == 1 */
+
+        if ( test_and_clear_bool(curr->needs_tlb_flush)  )
+        {
+            inv = 1;
+            single = ept;
+        }
 
         if ( cpumask_test_cpu(cpu, ept->invalidate) )
         {
             cpumask_clear_cpu(cpu, ept->invalidate);
 
             /* Automatically invalidate all contexts if nested. */
-            inv += 1 + nestedhvm_enabled(currd);
+            inv = 1 + nestedhvm_enabled(currd);
             single = ept;
         }
 
@@ -4985,6 +4991,11 @@ bool asmlinkage vmx_vmenter_helper(const struct cpu_user_regs *regs)
         if ( inv )
             __invept(inv == 1 ? INVEPT_SINGLE_CONTEXT : INVEPT_ALL_CONTEXT,
                      inv == 1 ? single->eptp          : 0);
+    }
+    else /* Shadow paging */
+    {
+        if ( test_and_clear_bool(curr->needs_tlb_flush) )
+            vpid_sync_vcpu_context(curr);
     }
 
  out:

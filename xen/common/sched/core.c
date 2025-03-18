@@ -1187,7 +1187,12 @@ static void sched_unit_migrate_finish(struct sched_unit *unit)
 
     /* Wake on new CPU. */
     for_each_sched_unit_vcpu ( unit, v )
+    {
+        if ( old_cpu != new_cpu )
+            /* Migrating to another CPU needs TLB flush */
+            v->needs_tlb_flush = true;
         vcpu_wake(v);
+    }
 }
 
 static bool sched_check_affinity_broken(const struct sched_unit *unit)

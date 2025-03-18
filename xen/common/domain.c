@@ -677,6 +677,7 @@ static void _domain_destroy(struct domain *d)
     rangeset_domain_destroy(d);
 
     free_cpumask_var(d->dirty_cpumask);
+    xfree(d->latest_vcpu);
 
     xsm_free_security_domain(d);
 
@@ -897,6 +898,11 @@ struct domain *domain_create(domid_t domid,
 
     err = -ENOMEM;
     if ( !zalloc_cpumask_var(&d->dirty_cpumask) )
+        goto fail;
+
+    err = -ENOMEM;
+    d->latest_vcpu = xzalloc_array(unsigned int, nr_cpu_ids);
+    if ( !d->latest_vcpu )
         goto fail;
 
     rangeset_domain_initialise(d);
