@@ -9,6 +9,11 @@
 #ifndef __ASM_X86_HVM_SVM_H__
 #define __ASM_X86_HVM_SVM_H__
 
+void svm_asid_init(void);
+void svm_vcpu_assign_asid(struct vcpu *v);
+void svm_vcpu_set_tlb_control(struct vcpu *v);
+void svm_vcpu_clear_tlb_control(struct vcpu *v);
+
 /*
  * PV context switch helpers.  Prefetching the VMCB area itself has been shown
  * to be useful for performance.

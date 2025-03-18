@@ -3144,6 +3144,7 @@ sh_update_linear_entries(struct vcpu *v)
      * without this change, it would fetch the wrong value due to a stale TLB.
      */
     sh_flush_local(d);
+    v->needs_tlb_flush = true;
 }
 
 static pagetable_t cf_check sh_update_cr3(struct vcpu *v, bool noflush)
