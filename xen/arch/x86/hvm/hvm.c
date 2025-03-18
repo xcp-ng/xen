@@ -693,7 +693,7 @@ int hvm_domain_initialise(struct domain *d,
     if ( rc )
         goto fail2;
 
-    rc = hvm_asid_alloc(&d->arch.hvm.asid);
+    rc = hvm_asid_alloc(&d->arch.hvm.asid, 0);
     if ( rc )
         goto fail2;
 

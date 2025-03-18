@@ -52,7 +52,7 @@ int __init hvm_asid_init(unsigned long nasids)
     return 0;
 }
 
-int hvm_asid_alloc(struct hvm_asid *asid)
+int hvm_asid_alloc(struct hvm_asid *asid, unsigned long min_asid)
 {
     unsigned long new_asid;
     
@@ -63,7 +63,7 @@ int hvm_asid_alloc(struct hvm_asid *asid)
     }
 
     spin_lock(&asid_lock);
-    new_asid = find_first_zero_bit(asid_bitmap, asid_count);
+    new_asid = find_next_zero_bit(asid_bitmap, asid_count, min_asid);
     if ( new_asid > asid_count )
         return -ENOSPC;
 

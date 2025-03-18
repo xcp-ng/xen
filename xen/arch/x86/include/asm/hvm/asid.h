@@ -20,7 +20,7 @@ extern bool asid_enabled;
 /* Initialise ASID management distributed across all CPUs. */
 int hvm_asid_init(unsigned long nasids);
 
-int hvm_asid_alloc(struct hvm_asid *asid);
+int hvm_asid_alloc(struct hvm_asid *asid, unsigned long min_asid);
 void hvm_asid_free(struct hvm_asid *asid);
 
 #endif /* __ASM_X86_HVM_ASID_H__ */
