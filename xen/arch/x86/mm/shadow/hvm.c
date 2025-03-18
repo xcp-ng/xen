@@ -738,6 +738,7 @@ bool cf_check shadow_flush_tlb(const unsigned long *vcpu_bitmap)
             continue;
 
         paging_update_cr3(v, false);
+        v->needs_tlb_flush = true;
 
         cpu = read_atomic(&v->dirty_cpu);
         if ( is_vcpu_dirty_cpu(cpu) )

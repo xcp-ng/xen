@@ -25,6 +25,7 @@
 #include <asm/p2m.h>
 #include <asm/mem_sharing.h>
 #include <asm/hvm/nestedhvm.h>
+#include <asm/hvm/vcpu.h>
 #include <asm/altp2m.h>
 #include <asm/vm_event.h>
 #include <xsm/xsm.h>
@@ -1433,7 +1434,7 @@ p2m_flush(struct vcpu *v, struct p2m_domain *p2m)
     ASSERT(v->domain == p2m->domain);
     vcpu_nestedhvm(v).nv_p2m = NULL;
     p2m_flush_table(p2m);
-    hvm_asid_flush_vcpu(v);
+    v->needs_tlb_flush = true;
 }
 
 void
@@ -1492,7 +1493,7 @@ static void assign_np2m(struct vcpu *v, struct p2m_domain *p2m)
 
 static void nvcpu_flush(struct vcpu *v)
 {
-    hvm_asid_flush_vcpu(v);
+    v->needs_tlb_flush = true;
     vcpu_nestedhvm(v).stale_np2m = true;
 }
 
@@ -1612,7 +1613,7 @@ void np2m_schedule(int dir)
             if ( !np2m_valid )
             {
                 /* This vCPU's np2m was flushed while it was not runnable */
-                hvm_asid_flush_core();
+                curr->needs_tlb_flush = true; /* TODO: Is it ok ? */
                 vcpu_nestedhvm(curr).nv_p2m = NULL;
             }
             else

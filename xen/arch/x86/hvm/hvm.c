@@ -519,11 +519,13 @@ static bool hvm_get_pending_event(struct vcpu *v, struct x86_event *info)
 
 void hvm_do_resume(struct vcpu *v)
 {
+    struct domain *currd = v->domain;
+
     check_wakeup_from_wait();
 
     pt_restore_timer(v);
 
-    if ( has_vpci(v->domain) && vpci_process_pending(v) )
+    if ( has_vpci(currd) && vpci_process_pending(v) )
     {
         raise_softirq(SCHEDULE_SOFTIRQ);
         return;
@@ -557,6 +559,13 @@ void hvm_do_resume(struct vcpu *v)
             v->arch.monitor.next_interrupt_enabled = false;
         }
     }
+
+    if ( unlikely(currd->arch.hvm.asid.asid == 1) )
+        /*
+         * As ASID=1 may be shared across multiples domains, we can't easily track the
+         * state of the TLB, we always flush the TLB before resuming this vCPU.
+         */
+        v->needs_tlb_flush = true;
 }
 
 static int cf_check hvm_print_line(
@@ -712,6 +721,10 @@ int hvm_domain_initialise(struct domain *d,
     if ( rc )
         goto fail2;
 
+    rc = hvm_asid_alloc(&d->arch.hvm.asid);
+    if ( rc )
+        goto fail2;
+
     rc = alternative_call(hvm_funcs.domain_initialise, d);
     if ( rc != 0 )
         goto fail2;
@@ -792,8 +805,9 @@ void hvm_domain_destroy(struct domain *d)
         list_del(&ioport->list);
         xfree(ioport);
     }
-
+    hvm_asid_free(&d->arch.hvm.asid);
     destroy_vpci_mmcfg(d);
+
 }
 
 static int cf_check hvm_save_tsc_adjust(struct vcpu *v, hvm_domain_context_t *h)
@@ -1613,7 +1627,7 @@ int hvm_vcpu_initialise(struct vcpu *v)
     int rc;
     struct domain *d = v->domain;
 
-    hvm_asid_flush_vcpu(v);
+    v->needs_tlb_flush = true;
 
     spin_lock_init(&v->arch.hvm.tm_lock);
     INIT_LIST_HEAD(&v->arch.hvm.tm_list);
@@ -4084,6 +4098,11 @@ static void hvm_s3_resume(struct domain *d)
             hvm_set_guest_tsc(v, 0);
         domain_unpause(d);
     }
+}
+
+int hvm_flush_tlb(const unsigned long *vcpu_bitmap)
+{
+    return current->domain->arch.paging.flush_tlb(vcpu_bitmap);
 }
 
 static int hvmop_flush_tlb_all(void)

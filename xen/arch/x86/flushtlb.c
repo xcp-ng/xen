@@ -13,6 +13,7 @@
 #include <xen/softirq.h>
 #include <asm/cache.h>
 #include <asm/flushtlb.h>
+#include <asm/hvm/hvm.h>
 #include <asm/invpcid.h>
 #include <asm/nops.h>
 #include <asm/page.h>
@@ -124,7 +125,6 @@ void switch_cr3_cr4(unsigned long cr3, unsigned long cr4)
 
     if ( tlb_clk_enabled )
         t = pre_flush();
-    hvm_flush_guest_tlbs();
 
     old_cr4 = read_cr4();
     ASSERT(!(old_cr4 & X86_CR4_PCIDE) || !(old_cr4 & X86_CR4_PGE));
@@ -228,9 +228,6 @@ unsigned int flush_area_local(const void *va, unsigned int flags)
             do_tlb_flush();
     }
 
-    if ( flags & FLUSH_HVM_ASID_CORE )
-        hvm_flush_guest_tlbs();
-
     if ( flags & (FLUSH_CACHE_EVICT | FLUSH_CACHE_WRITEBACK) )
     {
         const struct cpuinfo_x86 *c = &current_cpu_data;
@@ -331,6 +328,10 @@ unsigned int guest_flush_tlb_flags(const struct domain *d)
 void guest_flush_tlb_mask(const struct domain *d, const cpumask_t *mask)
 {
     unsigned int flags = guest_flush_tlb_flags(d);
+    struct vcpu *v;
+    
+    for_each_vcpu(d, v)
+        v->needs_tlb_flush = true;
 
     if ( flags )
         flush_mask(mask, flags);
