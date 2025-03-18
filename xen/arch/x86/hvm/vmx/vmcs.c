@@ -20,6 +20,7 @@
 #include <asm/msr.h>
 #include <asm/xstate.h>
 #include <asm/hvm/hvm.h>
+#include <asm/hvm/asid.h>
 #include <asm/hvm/io.h>
 #include <asm/hvm/nestedhvm.h>
 #include <asm/hvm/vmx/vmx.h>
@@ -795,8 +796,6 @@ static int _vmx_cpu_up(bool bsp)
     default:
         BUG();
     }
-
-    hvm_asid_init(cpu_has_vmx_vpid ? (1u << VMCS_VPID_WIDTH) : 0);
 
     if ( cpu_has_vmx_ept )
         ept_sync_all();
@@ -1867,6 +1866,7 @@ int vmx_create_vmcs(struct vcpu *v)
     __vmpclear(vmx->vmcs_pa);
     vmx->active_cpu = -1;
     vmx->launched   = 0;
+    vmx->secondary_exec_control |= SECONDARY_EXEC_ENABLE_VPID;
 
     if ( (rc = construct_vmcs(v)) != 0 )
     {
@@ -1960,7 +1960,7 @@ void cf_check vmx_do_resume(void)
          */
         v->arch.hvm.vmx.hostenv_migrated = 1;
 
-        hvm_asid_flush_vcpu(v);
+        v->needs_tlb_flush = true;
     }
 
     debug_state = v->domain->debugger_attached
@@ -2173,7 +2173,6 @@ void vmcs_dump_vcpu(struct vcpu *v)
          (SECONDARY_EXEC_ENABLE_VPID | SECONDARY_EXEC_ENABLE_VM_FUNCTIONS) )
         printk("Virtual processor ID = 0x%04x VMfunc controls = %016lx\n",
                vmr16(VIRTUAL_PROCESSOR_ID), vmr(VM_FUNCTION_CONTROL));
-
     vmx_vmcs_exit(v);
 }
 

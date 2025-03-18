@@ -16,6 +16,7 @@
 #include <asm/hvm/io.h>
 #include <asm/hvm/vmx/vmcs.h>
 #include <asm/hvm/svm/vmcb.h>
+#include <asm/hvm/asid.h>
 
 #ifdef CONFIG_MEM_SHARING
 struct mem_sharing_domain
@@ -140,6 +141,7 @@ struct hvm_domain {
     } write_map;
 
     struct hvm_pi_ops pi_ops;
+    struct hvm_asid asid;
 
     union {
         struct vmx_domain vmx;

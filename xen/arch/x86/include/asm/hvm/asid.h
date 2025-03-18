@@ -8,25 +8,20 @@
 #ifndef __ASM_X86_HVM_ASID_H__
 #define __ASM_X86_HVM_ASID_H__
 
+#include <xen/stdbool.h>
+#include <xen/stdint.h>
 
-struct vcpu;
-struct hvm_vcpu_asid;
+struct hvm_asid {
+  uint32_t asid;
+};
 
-/* Initialise ASID management for the current physical CPU. */
-void hvm_asid_init(int nasids);
+extern bool asid_enabled;
 
-/* Invalidate a particular ASID allocation: forces re-allocation. */
-void hvm_asid_flush_vcpu_asid(struct hvm_vcpu_asid *asid);
+/* Initialise ASID management distributed across all CPUs. */
+int hvm_asid_init(unsigned long nasids);
 
-/* Invalidate all ASID allocations for specified VCPU: forces re-allocation. */
-void hvm_asid_flush_vcpu(struct vcpu *v);
-
-/* Flush all ASIDs on this processor core. */
-void hvm_asid_flush_core(void);
-
-/* Called before entry to guest context. Checks ASID allocation, returns a
- * boolean indicating whether all ASIDs must be flushed. */
-bool hvm_asid_handle_vmenter(struct hvm_vcpu_asid *asid);
+int hvm_asid_alloc(struct hvm_asid *asid);
+void hvm_asid_free(struct hvm_asid *asid);
 
 #endif /* __ASM_X86_HVM_ASID_H__ */
 
