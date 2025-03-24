@@ -1285,7 +1285,8 @@ static int linear_write(unsigned long addr, unsigned int bytes, void *p_data,
                 return X86EMUL_UNHANDLEABLE;
             }
         }
-        rc = hvm_copy_to_guest_linear(addr, p_data, bytes, pfec, &pfinfo);
+        else
+            rc = hvm_copy_to_guest_linear(addr, p_data, bytes, pfec, &pfinfo);
     }
 
     switch ( rc )
