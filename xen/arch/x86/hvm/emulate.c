@@ -1075,8 +1075,10 @@ static int hvmemul_linear_mmio_access(
     int rc;
 
     if ( cache == NULL )
+    {
+        printk("AS-%s: addr=0x%lx (no cache)\n", __FUNCTION__, gla);
         return X86EMUL_UNHANDLEABLE;
-
+    }
     chunk = min_t(unsigned int, size, PAGE_SIZE - offset);
 
     if ( known_gpfn )
@@ -1099,6 +1101,7 @@ static int hvmemul_linear_mmio_access(
     for ( ;; )
     {
         rc = hvmemul_phys_mmio_access(cache, gpa, chunk, dir, buffer, buffer_offset);
+        printk("AS-%s: gpa=0x%lx try phys (%s)\n", __FUNCTION__, gpa, (rc != X86EMUL_OKAY)?"ko":"ok");
         if ( rc != X86EMUL_OKAY )
             break;
 
@@ -1110,7 +1113,10 @@ static int hvmemul_linear_mmio_access(
             break;
 
         if ( is_sev_domain(current->domain) )
+        {
+            printk("AS-%s: gpa=0x%lx size!!! \n", __FUNCTION__, gpa);
             return X86EMUL_UNHANDLEABLE;
+        }
 
         chunk = min_t(unsigned int, size, PAGE_SIZE);
         rc = hvmemul_linear_to_phys(gla, &gpa, chunk, &one_rep, pfec,
@@ -1200,8 +1206,10 @@ static int linear_read(unsigned long addr, unsigned int bytes, void *p_data,
                 gpa = pfn_to_paddr(hvio->mmio_gpfn) | (addr & ~PAGE_MASK);
                 rc = hvm_copy_from_guest_phys(p_data, gpa, bytes);
             }
-            else
+            else {
+                printk("AS-%s: addr=0x%lx NO GPFN\n", __FUNCTION__, addr);
                 return X86EMUL_UNHANDLEABLE;
+            }
         }
         else
             rc = hvm_copy_from_guest_linear(p_data, addr, bytes, pfec, &pfinfo);
@@ -1272,8 +1280,10 @@ static int linear_write(unsigned long addr, unsigned int bytes, void *p_data,
                 gpa = pfn_to_paddr(hvio->mmio_gpfn) | (addr & ~PAGE_MASK);
                 rc = hvm_copy_to_guest_phys(gpa, p_data, bytes, current);
             }
-            else
+            else {
+                printk("AS-%s: addr=0x%lx NO GPFN\n", __FUNCTION__, addr);
                 return X86EMUL_UNHANDLEABLE;
+            }
         }
         rc = hvm_copy_to_guest_linear(addr, p_data, bytes, pfec, &pfinfo);
     }
@@ -1311,6 +1321,7 @@ static int __hvmemul_read(
 {
     unsigned long addr;
     uint32_t pfec = PFEC_page_present;
+    struct hvm_vcpu_io *hvio = &current->arch.hvm.hvm_io;
     int rc;
 
     if ( is_x86_system_segment(seg) )
@@ -1324,6 +1335,8 @@ static int __hvmemul_read(
         seg, offset, bytes, NULL, access_type, hvmemul_ctxt, &addr);
     if ( rc != X86EMUL_OKAY || !bytes )
         return rc;
+
+    printk("AS-%s: addr=0x%lx gpfn=0x%lx\n", __FUNCTION__, addr, hvio->mmio_gpfn);
 
     return linear_read(addr, bytes, p_data, pfec, hvmemul_ctxt);
 }
@@ -1410,6 +1423,10 @@ static int cf_check hvmemul_write(
     uint32_t pfec = PFEC_page_present | PFEC_write_access;
     int rc;
     void *mapping = NULL;
+    struct hvm_vcpu_io *hvio = &current->arch.hvm.hvm_io;
+
+
+    printk("AS-%s: offset=0x%lx gpfn=0x%lx (start)\n", __FUNCTION__, offset, hvio->mmio_gpfn);
 
     if ( is_x86_system_segment(seg) )
         pfec |= PFEC_implicit;
@@ -1424,12 +1441,17 @@ static int cf_check hvmemul_write(
     if ( !known_gla(addr, bytes, pfec) )
     {
         mapping = hvmemul_map_linear_addr(addr, bytes, pfec, hvmemul_ctxt);
+
+        printk("AS-%s: addr=0x%lx gpfn=0x%lx (mapping %s)\n",
+               __FUNCTION__, addr, hvio->mmio_gpfn, IS_ERR(mapping)?"ko":"ok" );
         if ( IS_ERR(mapping) )
              return ~PTR_ERR(mapping);
     }
 
-    if ( !mapping )
+    if ( !mapping ) {
+        printk("AS-%s: addr=0x%lx gpfn=0x%lx (no mapping)\n", __FUNCTION__, addr, hvio->mmio_gpfn);
         return linear_write(addr, bytes, p_data, pfec, hvmemul_ctxt);
+    }
 
     /* Where possible use single (and hence generally atomic) MOV insns. */
     switch ( bytes )
@@ -2698,6 +2720,7 @@ static int _hvm_emulate_one(struct hvm_emulate_ctxt *hvmemul_ctxt,
     struct vcpu *curr = current;
     uint32_t new_intr_shadow;
     struct hvm_vcpu_io *hvio = &curr->arch.hvm.hvm_io;
+
     int rc;
 
     /*
@@ -2784,6 +2807,7 @@ static int _hvm_emulate_one(struct hvm_emulate_ctxt *hvmemul_ctxt,
         hvm_hlt(regs->eflags);
     }
 
+    printk("AS-%s: gpfn=0x%lx(done %d)\n", __FUNCTION__, hvio->mmio_gpfn, rc);
     return rc;
 }
 
