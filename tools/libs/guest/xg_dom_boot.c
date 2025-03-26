@@ -208,7 +208,14 @@ int xc_dom_boot_image(struct xc_dom_image *dom)
     // Encrypt domain pages
     if ( dom->coco )
     {
+        struct xc_dom_seg initrd_seg = {
+            .pfn = dom->initrd_start >> XC_DOM_PAGE_SHIFT(dom),
+            .pages = dom->initrd_len >> XC_DOM_PAGE_SHIFT(dom)
+        };
+
         if ( (rc = xg_dom_coco_encrypt_seg(dom->xch, dom, dom->kernel_seg, "kernel") != 0) )
+            return rc;
+        if ( initrd_seg.pages && (rc = xg_dom_coco_encrypt_seg(dom->xch, dom, initrd_seg, "ramdisk") != 0) )
             return rc;
         if ( (rc = xg_dom_coco_encrypt_seg(dom->xch, dom, dom->start_info_seg, "start_info") != 0) )
             return rc;
