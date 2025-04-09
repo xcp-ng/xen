@@ -32,7 +32,7 @@ static int svm_dom_coco_add_mem(struct domain *d, gfn_t gfn, size_t page_count)
         else
         {
             // Check for a break.
-            if (mfn_x(mfn_base) + segment_size != mfn_x(mfn))
+            if (mfn_x(mfn_base) + segment_size != mfn_x(mfn) || segment_size == 512)
             {
                 // Make launch update data.
                 printk("LAUNCH_UPDATE_DATA d%d: base=%"PRI_xen_pfn", size=%zx\n",
