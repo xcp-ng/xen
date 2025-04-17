@@ -152,7 +152,10 @@ static void cpuid_hypervisor_leaves(const struct vcpu *v, uint32_t leaf,
          * correctly with PIRQs routed over event channels.
          */
         res->a |= XEN_HVM_CPUID_UPCALL_VECTOR;
-
+        
+        /* Indicate if the guest uses the physical addresses hypercall ABI. */
+        if ( is_hvm_physaddr_abi(v->domain) )
+            res->a |= XEN_HVM_CPUID_PHYS_ADDR_ABI;
         break;
 
     case 5: /* PV-specific parameters */
