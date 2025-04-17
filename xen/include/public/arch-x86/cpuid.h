@@ -106,6 +106,8 @@
  * bound to event channels.
  */
 #define XEN_HVM_CPUID_UPCALL_VECTOR    (1u << 6)
+/* Hypercalls can use physical addresses instead of linear ones. */
+#define XEN_HVM_CPUID_PHYS_ADDR_ABI    (1u << 7)
 
 /*
  * Leaf 6 (0x40000x05)
