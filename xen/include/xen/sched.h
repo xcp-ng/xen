@@ -1201,6 +1201,12 @@ static always_inline bool hap_enabled(const struct domain *d)
         evaluate_nospec(d->options & XEN_DOMCTL_CDF_hap);
 }
 
+static always_inline bool is_hvm_physaddr_abi(const struct domain *d)
+{
+    return IS_ENABLED(CONFIG_HVM) &&
+        evaluate_nospec(d->options & XEN_DOMCTL_CDF_physaddr_abi);
+}
+
 static inline bool is_hwdom_pinned_vcpu(const struct vcpu *v)
 {
     return (is_hardware_domain(v->domain) &&

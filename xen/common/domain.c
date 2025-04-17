@@ -716,12 +716,14 @@ static int sanitise_domain_config(struct xen_domctl_createdomain *config)
     bool hap = config->flags & XEN_DOMCTL_CDF_hap;
     bool iommu = config->flags & XEN_DOMCTL_CDF_iommu;
     bool vpmu = config->flags & XEN_DOMCTL_CDF_vpmu;
+    bool physaddr_abi = config->flags & XEN_DOMCTL_CDF_physaddr_abi;
 
     if ( config->flags &
          ~(XEN_DOMCTL_CDF_hvm | XEN_DOMCTL_CDF_hap |
            XEN_DOMCTL_CDF_s3_integrity | XEN_DOMCTL_CDF_oos_off |
            XEN_DOMCTL_CDF_xs_domain | XEN_DOMCTL_CDF_iommu |
-           XEN_DOMCTL_CDF_nested_virt | XEN_DOMCTL_CDF_vpmu) )
+           XEN_DOMCTL_CDF_nested_virt | XEN_DOMCTL_CDF_vpmu |
+           XEN_DOMCTL_CDF_physaddr_abi) )
     {
         dprintk(XENLOG_INFO, "Unknown CDF flags %#x\n", config->flags);
         return -EINVAL;
@@ -742,6 +744,12 @@ static int sanitise_domain_config(struct xen_domctl_createdomain *config)
     if ( hap && !hvm )
     {
         dprintk(XENLOG_INFO, "HAP requested for non-HVM guest\n");
+        return -EINVAL;
+    }
+
+    if ( physaddr_abi && !hvm )
+    {
+        dprintk(XENLOG_INFO, "Physical address ABI requested for non-HVM guest");
         return -EINVAL;
     }
 
