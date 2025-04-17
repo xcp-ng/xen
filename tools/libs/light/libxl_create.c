@@ -466,6 +466,7 @@ int libxl__domain_build_info_setdefault(libxl__gc *gc,
 
         libxl_defbool_setdefault(&b_info->apic,                     true);
         libxl_defbool_setdefault(&b_info->nested_hvm,               false);
+        libxl_defbool_setdefault(&b_info->physaddr_abi,             false);
     }
 
     if (b_info->max_grant_version == LIBXL_MAX_GRANT_DEFAULT) {
@@ -662,6 +663,9 @@ int libxl__domain_make(libxl__gc *gc, libxl_domain_config *d_config,
 
             if ( libxl_defbool_val(b_info->nested_hvm) )
                 create.flags |= XEN_DOMCTL_CDF_nested_virt;
+
+            if (libxl_defbool_val(b_info->physaddr_abi))
+                create.flags |= XEN_DOMCTL_CDF_physaddr_abi;
         }
 
         if (libxl_defbool_val(b_info->vpmu))

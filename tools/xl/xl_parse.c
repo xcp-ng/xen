@@ -1803,6 +1803,7 @@ void parse_config_data(const char *config_source,
     }
 
     xlu_cfg_get_defbool(config, "nestedhvm", &b_info->nested_hvm, 0);
+    xlu_cfg_get_defbool(config, "physaddr_abi", &b_info->physaddr_abi, 0);
 
     switch(b_info->type) {
     case LIBXL_DOMAIN_TYPE_HVM:

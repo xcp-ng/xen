@@ -179,6 +179,11 @@
 #define LIBXL_HAVE_BUILDINFO_EVENT_CHANNELS 1
 
 /*
+ * The libxl_domain_build_info has physaddr_abi field.
+ */
+#define LIBXL_HAVE_BUILDINFO_PHYS_ADDR_ABI 1
+
+/*
  * libxl_domain_build_info has the u.hvm.ms_vm_genid field.
  */
 #define LIBXL_HAVE_BUILDINFO_HVM_MS_VM_GENID 1
