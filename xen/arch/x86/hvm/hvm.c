@@ -3499,7 +3499,11 @@ unsigned int copy_to_user_hvm(void *to, const void *from, unsigned int len)
         return 0;
     }
 
-    rc = hvm_copy_to_guest_linear((unsigned long)to, from, len, 0, NULL);
+    if ( is_hvm_physaddr_abi(current->domain) )    
+        rc = hvm_copy_to_guest_phys((unsigned long)to, from, len, current);
+    else
+        rc = hvm_copy_to_guest_linear((unsigned long)to, from, len, 0, NULL);
+
     return rc ? len : 0; /* fake a copy_to_user() return code */
 }
 
@@ -3513,7 +3517,10 @@ unsigned int clear_user_hvm(void *to, unsigned int len)
         return 0;
     }
 
-    rc = hvm_copy_to_guest_linear((unsigned long)to, NULL, len, 0, NULL);
+    if ( is_hvm_physaddr_abi(current->domain) )
+        rc = hvm_copy_to_guest_phys((unsigned long)to, NULL, len, current);
+    else
+        rc = hvm_copy_to_guest_linear((unsigned long)to, NULL, len, 0, NULL);
 
     return rc ? len : 0; /* fake a clear_user() return code */
 }
@@ -3528,7 +3535,11 @@ unsigned int copy_from_user_hvm(void *to, const void *from, unsigned int len)
         return 0;
     }
 
-    rc = hvm_copy_from_guest_linear(to, (unsigned long)from, len, 0, NULL);
+    if ( is_hvm_physaddr_abi(current->domain) )
+        rc = hvm_copy_from_guest_phys(to, (unsigned long)from, len);
+    else
+        rc = hvm_copy_from_guest_linear(to, (unsigned long)from, len, 0, NULL);
+
     return rc ? len : 0; /* fake a copy_from_user() return code */
 }
 
