@@ -244,6 +244,8 @@ static const char *const str_m10Al[64] =
     [26] = "gds-no",              [27] = "rfds-no",
     [28] = "rfds-clear",
 
+    [32] = "pb-opt-ctrl",
+
     [62] = "its-no",
 };
 
