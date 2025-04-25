@@ -265,6 +265,7 @@ bool arch_ioreq_server_get_type_addr(const struct domain *d,
                                      uint64_t *addr)
 {
     unsigned int cf8 = d->arch.hvm.pci_cf8;
+    unsigned long mmio_start = (p->type == IOREQ_TYPE_COPY) ? ioreq_mmio_first_byte(p) : 0;
 
     if ( p->type != IOREQ_TYPE_COPY && p->type != IOREQ_TYPE_PIO )
         return false;
@@ -294,6 +295,19 @@ bool arch_ioreq_server_get_type_addr(const struct domain *d,
                  (msr_val & (1ULL << AMD64_NB_CFG_CF8_EXT_ENABLE_BIT)) )
                 *addr |= CF8_ADDR_HI(cf8);
         }
+    }
+    else if ( p->type == IOREQ_TYPE_COPY &&
+              (mmio_start >= d->arch.ecam_base &&
+               mmio_start < (d->arch.ecam_base + d->arch.ecam_size)) )
+    {
+        pci_sbdf_t sbdf;
+        unsigned int reg = mmio_start & ~PAGE_MASK;
+
+        sbdf.bdf =  (((mmio_start - d->arch.ecam_base) & 0x0ffff000) >> 12);
+        sbdf.seg = 0;
+
+        *type = XEN_DMOP_IO_RANGE_PCI;
+        *addr = ((uint64_t)sbdf.sbdf << 32) | reg;
     }
     else
     {

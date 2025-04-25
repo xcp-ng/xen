@@ -1313,6 +1313,50 @@ long arch_do_domctl(
             copyback = true;
         break;
 
+    case XEN_DOMCTL_set_ecam_space:
+    {
+        unsigned long gfn;
+        unsigned int nr_frames, i;
+        p2m_type_t p2mt;
+
+        if ( d->arch.ecam_base )
+            return -EFAULT;
+
+        if ( (domctl->u.ecam.size >> 28) || (!domctl->u.ecam.addr) )
+            return -EINVAL;
+
+        nr_frames = domctl->u.ecam.size >> PAGE_SHIFT;
+        gfn = domctl->u.ecam.addr >> PAGE_SHIFT;
+
+        for ( i = 0; i < nr_frames; i++, gfn++)
+        {
+            get_gfn_query(d, gfn, &p2mt);
+            if ( p2mt != p2m_invalid )
+            {
+                ret = -EINVAL;
+            }
+            else
+            {
+                ret = p2m_change_type_one(d, gfn, p2mt, p2m_mmio_dm);
+            }
+
+            put_gfn(d, gfn);
+
+            if ( ret )
+                return ret;
+        }
+
+        d->arch.ecam_base = domctl->u.ecam.addr;
+        d->arch.ecam_size = domctl->u.ecam.size;
+        break;
+    }
+
+    case XEN_DOMCTL_get_ecam_space:
+        domctl->u.ecam.addr = d->arch.ecam_base;
+        domctl->u.ecam.size = d->arch.ecam_size;
+        copyback = true;
+        break;
+
     default:
         ret = -ENOSYS;
         break;

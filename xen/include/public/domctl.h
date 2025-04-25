@@ -1218,6 +1218,13 @@ struct xen_domctl_dt_overlay {
 };
 #endif
 
+#if defined(__i386__) || defined(__x86_64__)
+struct xen_domctl_ecam_space {
+    unsigned long addr;
+    unsigned int size;
+};
+#endif
+
 struct xen_domctl {
     uint32_t cmd;
 #define XEN_DOMCTL_createdomain                   1
@@ -1306,6 +1313,8 @@ struct xen_domctl {
 #define XEN_DOMCTL_get_paging_mempool_size       85
 #define XEN_DOMCTL_set_paging_mempool_size       86
 #define XEN_DOMCTL_dt_overlay                    87
+#define XEN_DOMCTL_set_ecam_space                88
+#define XEN_DOMCTL_get_ecam_space                89
 #define XEN_DOMCTL_gdbsx_guestmemio            1000
 #define XEN_DOMCTL_gdbsx_pausevcpu             1001
 #define XEN_DOMCTL_gdbsx_unpausevcpu           1002
@@ -1352,6 +1361,7 @@ struct xen_domctl {
         struct xen_domctl_cpu_policy        cpu_policy;
         struct xen_domctl_vcpuextstate      vcpuextstate;
         struct xen_domctl_vcpu_msrs         vcpu_msrs;
+        struct xen_domctl_ecam_space        ecam;
 #endif
         struct xen_domctl_set_access_required access_required;
         struct xen_domctl_audit_p2m         audit_p2m;

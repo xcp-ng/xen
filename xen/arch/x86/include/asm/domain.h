@@ -458,6 +458,10 @@ struct arch_domain
 
     /* Emulated devices enabled bitmap. */
     uint32_t emulation_flags;
+
+    /* PCI ECAM space emulation*/
+    unsigned long ecam_base;
+    unsigned int ecam_size;
 } __cacheline_aligned;
 
 #ifdef CONFIG_HVM
