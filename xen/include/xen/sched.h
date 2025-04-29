@@ -240,6 +240,8 @@ struct vcpu
     bool             hcall_compat;
     /* Physical runstate area registered via compat ABI? */
     bool             runstate_guest_area_compat;
+    /* A hypercall is using the physical address ABI? */
+    bool             hcall_physaddr;
 #endif
 
 #ifdef CONFIG_IOREQ_SERVER
