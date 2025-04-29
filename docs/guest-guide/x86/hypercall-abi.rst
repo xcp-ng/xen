@@ -35,6 +35,10 @@ The registers used for hypercalls depends on the operating mode of the guest.
 HVM guest depends on whether the vCPU is operating in a 64bit segment or not
 [#mode]_.
 
+If `XEN_HVM_CPUID_PHYS_ADDR_ABI` is supported, HVM guests can use a alternative
+ABI where physical addresses are used for hypercall parameters instead of
+linear addresses. This ABI can be used by tagging the hypercall index with
+0x40000000.
 
 Parameters
 ----------
