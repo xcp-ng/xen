@@ -160,8 +160,13 @@ int hvm_hypercall(struct cpu_user_regs *regs)
         HVM_DBG_LOG(DBG_LEVEL_HCALL, "hcall%lu(%lx, %lx, %lx, %lx, %lx)",
                     eax, regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8);
 
-        call_handlers_hvm64(eax, regs->rax, regs->rdi, regs->rsi, regs->rdx,
-                            regs->r10, regs->r8);
+        if ( eax & 0x40000000U )
+            curr->hcall_physaddr = true;
+
+        call_handlers_hvm64(eax & ~0x40000000U, regs->rax, regs->rdi, regs->rsi,
+                            regs->rdx, regs->r10, regs->r8);
+
+        curr->hcall_physaddr = false;
 
         if ( !curr->hcall_preempted && regs->rax != -ENOSYS )
             clobber_regs(regs, eax, hvm, 64);
@@ -172,9 +177,13 @@ int hvm_hypercall(struct cpu_user_regs *regs)
                     regs->ebx, regs->ecx, regs->edx, regs->esi, regs->edi);
 
         curr->hcall_compat = true;
-        call_handlers_hvm32(eax, regs->eax, regs->ebx, regs->ecx, regs->edx,
-                            regs->esi, regs->edi);
+        if ( eax & 0x40000000U )
+            curr->hcall_physaddr = true;
+
+        call_handlers_hvm32(eax & ~0x40000000U, regs->eax, regs->ebx, regs->ecx,
+                            regs->edx, regs->esi, regs->edi);
         curr->hcall_compat = false;
+        curr->hcall_physaddr = false;
 
         if ( !curr->hcall_preempted && regs->eax != -ENOSYS )
             clobber_regs(regs, eax, hvm, 32);
