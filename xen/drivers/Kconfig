@@ -12,6 +12,8 @@ source "drivers/pci/Kconfig"
 
 source "drivers/video/Kconfig"
 
+source "drivers/crypto/Kconfig"
+
 config HAS_VPCI
 	bool
 
