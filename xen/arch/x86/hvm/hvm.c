@@ -7,6 +7,7 @@
  * Copyright (c) 2008, Citrix Systems, Inc.
  */
 
+#include <xen/coco.h>
 #include <xen/console.h>
 #include <xen/cpu.h>
 #include <xen/domain.h>
@@ -706,13 +707,20 @@ int hvm_domain_initialise(struct domain *d,
     if ( rc )
         goto fail2;
 
-    rc = hvm_asid_alloc(&d->arch.hvm.asid);
+    if ( is_coco_domain(d) && d->coco_ops && d->coco_ops->asid_alloc )
+        rc = d->coco_ops->asid_alloc(d, &d->arch.hvm.asid);
+    else
+        rc = hvm_asid_alloc(&d->arch.hvm.asid);
+
     if ( rc )
         goto fail2;
 
     rc = alternative_call(hvm_funcs.domain_initialise, d);
     if ( rc != 0 )
         goto fail2;
+
+    if ( is_coco_domain(d) )
+        coco_domain_initialise(d);
 
     return 0;
 
