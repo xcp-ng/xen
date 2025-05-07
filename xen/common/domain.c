@@ -4,6 +4,7 @@
  * Generic domain-handling functions.
  */
 
+#include <xen/coco.h>
 #include <xen/compat.h>
 #include <xen/init.h>
 #include <xen/lib.h>
@@ -725,6 +726,10 @@ static int domain_teardown(struct domain *d)
         }
 
     PROGRESS(arch_teardown):
+        rc = coco_domain_teardown(d);
+        if ( rc )
+            return rc;
+
         rc = arch_domain_teardown(d);
         if ( rc )
             return rc;
@@ -802,16 +807,50 @@ static int sanitise_domain_config(struct xen_domctl_createdomain *config)
     bool hap = config->flags & XEN_DOMCTL_CDF_hap;
     bool iommu = config->flags & XEN_DOMCTL_CDF_iommu;
     bool vpmu = config->flags & XEN_DOMCTL_CDF_vpmu;
+    bool coco = config->flags & XEN_DOMCTL_CDF_coco;
 
     if ( config->flags &
          ~(XEN_DOMCTL_CDF_hvm | XEN_DOMCTL_CDF_hap |
            XEN_DOMCTL_CDF_s3_integrity | XEN_DOMCTL_CDF_oos_off |
            XEN_DOMCTL_CDF_xs_domain | XEN_DOMCTL_CDF_iommu |
            XEN_DOMCTL_CDF_nested_virt | XEN_DOMCTL_CDF_vpmu |
-           XEN_DOMCTL_CDF_trap_unmapped_accesses) )
+           XEN_DOMCTL_CDF_trap_unmapped_accesses | XEN_DOMCTL_CDF_coco) )
     {
         dprintk(XENLOG_INFO, "Unknown CDF flags %#x\n", config->flags);
         return -EINVAL;
+    }
+
+    if ( coco )
+    {
+        if ( !IS_ENABLED(CONFIG_COCO) )
+        {
+            dprintk(XENLOG_INFO, "COCO support is compiled out\n");
+            return -EINVAL;
+        }
+
+        if ( !coco_is_supported() )
+        {
+            dprintk(XENLOG_INFO, "COCO is not available\n");
+            return -EINVAL;
+        }
+
+        if ( !hvm )
+        {
+            dprintk(XENLOG_INFO, "COCO requested for non-HVM guest\n");
+            return -EINVAL;
+        }
+
+        if ( !hap )
+        {
+            dprintk(XENLOG_INFO, "COCO cannot work without HAP\n");
+            return -EINVAL;
+        }
+
+        if ( config->flags & XEN_DOMCTL_CDF_nested_virt )
+        {
+            dprintk(XENLOG_INFO, "Nested virtualization isn't supported with COCO\n");
+            return -EINVAL;
+        }
     }
 
     if ( config->grant_opts & ~XEN_DOMCTL_GRANT_version_mask )
@@ -933,6 +972,9 @@ struct domain *domain_create(domid_t domid,
 
     /* Holding CDF_* internal flags. */
     d->cdf = flags;
+
+    if ( is_coco_domain(d) )
+        coco_set_domain_ops(d, config);
 
     TRACE_TIME(TRC_DOM0_DOM_ADD, d->domain_id);
 
@@ -1367,7 +1409,9 @@ void __domain_crash(struct domain *d)
     {
         printk("Domain %d (vcpu#%d) crashed on cpu#%d:\n",
                d->domain_id, current->vcpu_id, smp_processor_id());
-        show_execution_state(guest_cpu_user_regs());
+
+        if ( !coco_show_execution_state(current) )
+            show_execution_state(guest_cpu_user_regs());
     }
     else
     {
@@ -1732,6 +1776,8 @@ int domain_unpause_by_systemcontroller(struct domain *d)
         }
         d->creation_finished = true;
         arch_domain_creation_finished(d);
+        if ( coco_domain_creation_finished(d) ) /* TODO: or before arch_* ? */
+            domain_crash(d);
     }
 
     domain_unpause(d);
@@ -2401,9 +2447,8 @@ long common_vcpu_fast_op(struct cpu_user_regs *regs, int cmd, struct vcpu *v)
         domain_unlock(d);
         if ( wake )
             vcpu_wake(v);
-    }
-
         break;
+    }
 
     case VCPUOP_down:
         for_each_vcpu ( d, v )
@@ -2487,7 +2532,6 @@ long common_vcpu_fast_op(struct cpu_user_regs *regs, int cmd, struct vcpu *v)
 
         migrate_timer(&v->singleshot_timer, smp_processor_id());
         set_timer(&v->singleshot_timer, set.timeout_abs_ns);
-
         break;
     }
 
@@ -2496,7 +2540,6 @@ long common_vcpu_fast_op(struct cpu_user_regs *regs, int cmd, struct vcpu *v)
             return -EINVAL;
 
         stop_timer(&v->singleshot_timer);
-
         break;
 
     case VCPUOP_register_vcpu_info:

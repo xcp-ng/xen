@@ -12,6 +12,7 @@
  */
 
 #include <xen/acpi.h>
+#include <xen/coco.h>
 #include <xen/compat.h>
 #include <xen/console.h>
 #include <xen/cpu.h>
@@ -987,6 +988,9 @@ void arch_domain_destroy(struct domain *d)
 
     free_xenheap_page(d->shared_info);
     cleanup_domain_irq_mapping(d);
+
+    if ( is_coco_domain(d) )
+        coco_domain_destroy(d);
 
     psr_domain_free(d);
 }

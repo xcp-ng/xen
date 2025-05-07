@@ -4,6 +4,7 @@ obj-y += x86_emulate/
 
 obj-y += acpi/
 obj-y += boot/
+obj-$(CONFIG_COCO) += coco/
 obj-y += cpu/
 obj-y += efi/
 obj-y += genapic/

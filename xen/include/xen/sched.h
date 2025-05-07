@@ -642,6 +642,10 @@ struct domain
     struct argo_domain *argo;
 #endif
 
+#ifdef CONFIG_COCO
+    struct coco_domain_ops *coco_ops;
+#endif
+
     /*
      * Continuation information for domain_teardown().  All fields entirely
      * private.
@@ -1224,6 +1228,12 @@ static always_inline bool is_hvm_domain(const struct domain *d)
 static always_inline bool is_hvm_vcpu(const struct vcpu *v)
 {
     return is_hvm_domain(v->domain);
+}
+
+static always_inline bool is_coco_domain(const struct domain *d)
+{
+    return IS_ENABLED(CONFIG_COCO) &&
+        evaluate_nospec(d->options & XEN_DOMCTL_CDF_coco);
 }
 
 static always_inline bool hap_enabled(const struct domain *d)

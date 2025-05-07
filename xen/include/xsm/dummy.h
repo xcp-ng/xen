@@ -783,4 +783,11 @@ static XSM_INLINE int cf_check xsm_domain_resource_map(
     return xsm_default_action(action, current->domain, d);
 }
 
+static XSM_INLINE int cf_check xsm_coco_op(
+    XSM_DEFAULT_ARG struct domain *d, unsigned int cmd)
+{
+    XSM_ASSERT_ACTION(XSM_DM_PRIV);
+    return xsm_default_action(action, current->domain, d);
+}
+
 #endif /* __XEN_XSM_DUMMY_H__ */

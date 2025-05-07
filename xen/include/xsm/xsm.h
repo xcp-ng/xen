@@ -179,6 +179,9 @@ struct xsm_ops {
     int (*dm_op)(struct domain *d);
     int (*xen_version)(uint32_t cmd);
     int (*domain_resource_map)(struct domain *d);
+#ifdef CONFIG_COCO
+    int (*coco_op)(struct domain *d, unsigned int cmd);
+#endif
 #ifdef CONFIG_ARGO
     int (*argo_enable)(const struct domain *d);
     int (*argo_register_single_source)(const struct domain *d,
@@ -674,6 +677,13 @@ static inline int xsm_domain_resource_map(xsm_default_t def, struct domain *d)
 {
     return alternative_call(xsm_ops.domain_resource_map, d);
 }
+
+#ifdef CONFIG_COCO
+static inline int xsm_coco_op(xsm_default_t def, struct domain *d, unsigned int cmd)
+{
+    return alternative_call(xsm_ops.coco_op, d);
+}
+#endif
 
 #ifdef CONFIG_ARGO
 static inline int xsm_argo_enable(const struct domain *d)

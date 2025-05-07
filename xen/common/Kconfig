@@ -677,4 +677,9 @@ config FASTABI
 	help
 		Add support for a alternative fast HVM ABI.
 
+config COCO
+	bool "Enable COnfidential COmputing support for guests" if EXPERT
+	default n
+	help
+	  Allows to run guests in private encrypted memory space.
 endmenu

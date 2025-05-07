@@ -69,8 +69,11 @@ struct xen_domctl_createdomain {
 /* Should we trap guest accesses to unmapped addresses? */
 #define XEN_DOMCTL_CDF_trap_unmapped_accesses  (1U << 8)
 
+#define _XEN_DOMCTL_CDF_coco          9
+#define XEN_DOMCTL_CDF_coco           (1U << _XEN_DOMCTL_CDF_coco)
+
 /* Max XEN_DOMCTL_CDF_* constant.  Used for ABI checking. */
-#define XEN_DOMCTL_CDF_MAX XEN_DOMCTL_CDF_trap_unmapped_accesses
+#define XEN_DOMCTL_CDF_MAX XEN_DOMCTL_CDF_coco
 
     uint32_t flags;
 
