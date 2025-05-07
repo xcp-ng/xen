@@ -1,0 +1,10 @@
+config AMD_SP
+        bool "AMD Secure Processor (UNSUPPORTED)" if UNSUPPORTED
+        depends on X86
+        default n
+        help
+          Enables AMD Secure Processor.
+
+          If your platform includes AMD Secure Processor devices and you are
+          intended to use AMD Secure Encrypted Virtualization Technology, say Y.
+          If in doubt, say N.
