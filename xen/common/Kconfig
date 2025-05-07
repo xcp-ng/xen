@@ -576,4 +576,9 @@ config BUDDY_ALLOCATOR_SIZE
 	  Amount of memory reserved for the buddy allocator to serve Xen heap,
 	  working alongside the colored one.
 
+config COCO
+	bool "Enable COnfidential COmputing support for guests" if EXPERT
+	default n
+	help
+	  Allows to run guests in private encrypted memory space.
 endmenu
