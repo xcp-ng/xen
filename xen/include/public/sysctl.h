@@ -1112,8 +1112,12 @@ struct xen_sysctl_livepatch_list {
                                                amount of payloads and version.
                                                OUT: How many payloads left. */
     uint32_t pad;                           /* IN: Must be zero. */
-    uint32_t name_total_size;               /* OUT: Total size of all transfer names */
-    uint32_t metadata_total_size;           /* OUT: Total size of all transfer metadata */
+    uint32_t name_total_size;               /* IN: Size of name buffer
+                                               OUT: Total size of transferred
+                                               names */
+    uint32_t metadata_total_size;           /* IN: Size of metadata buffer
+                                               OUT: Total size of transferred
+                                               metadata */
     XEN_GUEST_HANDLE_64(xen_livepatch_status_t) status;  /* OUT. Must have enough
                                                space allocate for nr of them. */
     XEN_GUEST_HANDLE_64(char) name;         /* OUT: Array of names. Each member
