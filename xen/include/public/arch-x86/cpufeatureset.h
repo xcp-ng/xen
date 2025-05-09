@@ -394,6 +394,11 @@ XEN_CPUFEATURE(MON_UMON_MITG,      16*32+30) /*   MCU_OPT_CTRL.MON_UMON_MITG */
 /* Intel-defined CPU features, MSR_ARCH_CAPS 0x10a.edx, word 17 (express in terms of word 16) */
 XEN_CPUFEATURE(ITS_NO,             16*32+62) /*!A No Indirect Target Selection */
 
+/* AMD-defined CPU features, CPUID level 0x8000001f.eax, word 18 */
+XEN_CPUFEATURE(SME,                18*32+ 0) /*   Secure Memory Encryption */
+XEN_CPUFEATURE(SEV,                18*32+ 1) /*   Secure Encrypted Virtualization */
+XEN_CPUFEATURE(SEV_ES,             18*32+ 3) /*   SEV Encrypted State */
+
 #endif /* XEN_CPUFEATURE */
 
 /* Clean up from a default include.  Close the enum (for C). */
