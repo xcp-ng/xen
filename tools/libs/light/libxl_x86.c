@@ -810,7 +810,7 @@ static int domain_construct_memmap(libxl__gc *gc,
     {
         e820[nr].type = XEN_HVM_MEMMAP_TYPE_SHARED_INFO;
         e820[nr].addr = special_region_offset;
-        e820[nr].size = PAGE_SIZE;
+        e820[nr].size = page_size;
         special_region_offset += e820[nr].size;
         nr++;
 
@@ -818,7 +818,7 @@ static int domain_construct_memmap(libxl__gc *gc,
         {
             e820[nr].type = XEN_HVM_MEMMAP_TYPE_GRANT_TABLE;
             e820[nr].addr = special_region_offset;
-            e820[nr].size = gnttab_frame_count * PAGE_SIZE;
+            e820[nr].size = gnttab_frame_count * page_size;
             special_region_offset += e820[nr].size;
             nr++;
         }
@@ -827,7 +827,7 @@ static int domain_construct_memmap(libxl__gc *gc,
         {
             e820[nr].type = XEN_HVM_MEMMAP_TYPE_GNTTAB_STATUS;
             e820[nr].addr = special_region_offset;
-            e820[nr].size = gnttab_status_frame_count * PAGE_SIZE;
+            e820[nr].size = gnttab_status_frame_count * page_size;
             special_region_offset += e820[nr].size;
             nr++;
         }

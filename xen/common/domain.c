@@ -1337,7 +1337,9 @@ void __domain_crash(struct domain *d)
     {
         printk("Domain %d (vcpu#%d) crashed on cpu#%d:\n",
                d->domain_id, current->vcpu_id, smp_processor_id());
-        show_execution_state(guest_cpu_user_regs());
+        
+        if ( !coco_show_execution_state(current) )
+            show_execution_state(guest_cpu_user_regs());
     }
     else
     {

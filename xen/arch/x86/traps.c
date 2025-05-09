@@ -14,6 +14,7 @@
 
 #include <xen/bitops.h>
 #include <xen/bug.h>
+#include <xen/coco.h>
 #include <xen/console.h>
 #include <xen/delay.h>
 #include <xen/domain_page.h>
@@ -905,7 +906,8 @@ void vcpu_show_execution_state(struct vcpu *v)
 
     if ( v == current )
     {
-        show_execution_state(guest_cpu_user_regs());
+        if ( !coco_show_execution_state(v) )
+            show_execution_state(guest_cpu_user_regs());
         return;
     }
 
@@ -927,7 +929,8 @@ void vcpu_show_execution_state(struct vcpu *v)
     /* Prevent interleaving of output. */
     flags = console_lock_recursive_irqsave();
 
-    vcpu_show_registers(v);
+    if ( !coco_show_execution_state(v) )
+        vcpu_show_registers(v);
 
     if ( is_hvm_vcpu(v) )
     {
@@ -937,7 +940,8 @@ void vcpu_show_execution_state(struct vcpu *v)
          */
         console_unlock_recursive_irqrestore(flags);
 
-        show_hvm_stack(v, &v->arch.user_regs);
+        if ( !is_coco_domain(v->domain) )
+            show_hvm_stack(v, &v->arch.user_regs);
     }
     else
     {

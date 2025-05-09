@@ -1199,13 +1199,16 @@ void vcpu_show_execution_state(struct vcpu *v)
 
     if ( v == current )
     {
-        show_execution_state(guest_cpu_user_regs());
+        if ( !coco_show_execution_state(v) )
+            show_execution_state(guest_cpu_user_regs());
         return;
     }
 
     vcpu_pause(v); /* acceptably dangerous */
 
-    vcpu_show_registers(v);
+    if ( !coco_show_execution_state(v) )
+        vcpu_show_registers(v);
+
     if ( !regs_mode_is_user(&v->arch.cpu_info->guest_cpu_user_regs) )
         show_guest_stack(v, &v->arch.cpu_info->guest_cpu_user_regs);
 

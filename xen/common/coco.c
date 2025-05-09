@@ -94,7 +94,7 @@ long coco_op_prepare_initial_mem(struct coco_prepare_initial_mem arg)
         goto out;
     }
 
-    rc = coco_prepare_initial_memory(d, arg.gfn, arg.count);
+    rc = coco_prepare_initial_memory(d, _gfn(arg.gfn), arg.count);
 
 out:
     put_domain(d);

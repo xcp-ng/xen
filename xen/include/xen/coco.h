@@ -18,6 +18,9 @@ struct coco_domain_ops {
     int (*domain_creation_finished)(struct domain *d);
     void (*domain_destroy)(struct domain *d);
 
+    /* Returns false if the general handler needs to be used. */
+    bool (*show_execution_state)(struct vcpu *v);
+
 #ifdef CONFIG_X86
     /* COCO-specific ASID allocation logic */
     int (*asid_alloc)(struct domain *d, struct hvm_asid *asid);
@@ -63,6 +66,16 @@ static inline void coco_domain_destroy(struct domain *d)
     if ( d->coco_ops && d->coco_ops->domain_destroy )
         d->coco_ops->domain_destroy(d);
 }
+
+static inline bool coco_show_execution_state(struct vcpu *v)
+{
+    struct domain *d = v->domain;
+
+    if ( d->coco_ops && d->coco_ops->show_execution_state )
+        return d->coco_ops->show_execution_state(v);
+
+    return false;
+}
 #else
 static inline bool coco_is_supported(void)
 {
@@ -81,6 +94,11 @@ static inline int coco_domain_creation_finished(struct domain *d)
 
 static inline void coco_domain_destroy(struct domain *d)
 {
+}
+
+static inline bool coco_show_execution_state(struct vcpu *v)
+{
+    return false;
 }
 #endif
 
