@@ -103,6 +103,7 @@ struct xc_dom_image_x86 {
 #define MAPPING_MAX 2
     struct xc_dom_x86_mapping maps[MAPPING_MAX];
     const struct xc_dom_params *params;
+    bool coco;
 
     /* PV: Pointer to the in-guest P2M. */
     void *p2m_guest;
