@@ -21,6 +21,17 @@ bool svm_load_segs(unsigned int ldt_ents, unsigned long ldt_base,
                    unsigned long fs_base, unsigned long gs_base,
                    unsigned long gs_shadow);
 
+struct svm_domain {
+    /* OSVW MSRs */
+    union {
+        uint64_t raw[2];
+        struct {
+            uint64_t length;
+            uint64_t status;
+        };
+    } osvw;
+};
+
 extern u32 svm_feature_flags;
 
 #define SVM_FEATURE_NPT            0 /* Nested page table support */
