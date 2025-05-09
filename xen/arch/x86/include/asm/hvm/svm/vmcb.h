@@ -548,17 +548,6 @@ struct vmcb_struct {
     u64 res18[291];
 };
 
-struct svm_domain {
-    /* OSVW MSRs */
-    union {
-        uint64_t raw[2];
-        struct {
-            uint64_t length;
-            uint64_t status;
-        };
-    } osvw;
-};
-
 /*
  * VMRUN doesn't switch fs/gs/tr/ldtr and SHADOWGS/SYSCALL/SYSENTER state.
  * Therefore, guest state is in the hardware registers when servicing a
