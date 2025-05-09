@@ -1,0 +1,262 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/*
+ * coco/sev.c: AMD SEV support
+ * Copyright (c) Vates SAS
+ */
+
+#include <asm/cpu-policy.h>
+#include <asm/cpufeature.h>
+#include <asm/p2m.h>
+#include <asm/hvm/asid.h>
+ 
+#include <public/hvm/coco.h>
+
+#include <xen/config.h>
+#include <xen/coco.h>
+#include <asm/psp-sev.h>
+
+static int sev_domain_initialise(struct domain *d)
+{
+    struct sev_data_launch_start sd_ls;
+    struct sev_data_activate sd_a;
+    int psp_ret;
+    long rc = 0;
+
+    sd_ls.handle = 0;          /* generate new one */
+    sd_ls.policy = 0;          /* NOKS policy */
+    sd_ls.dh_cert_address = 0; /* do not DH stuff */
+
+    rc = sev_do_cmd(SEV_CMD_LAUNCH_START, (void *)(&sd_ls), &psp_ret, true);
+    if ( rc )
+    {
+        printk(XENLOG_ERR "asp: failed to LAUNCH_START domain(%d): psp_ret %d\n",
+                d->domain_id, psp_ret);
+        return rc;
+    }
+
+    sd_a.handle = sd_ls.handle;
+    sd_a.asid = d->arch.hvm.asid.asid;
+
+    rc = sev_do_cmd(SEV_CMD_ACTIVATE, (void *)(&sd_a), &psp_ret, true);
+    if ( rc )
+    {
+        printk(XENLOG_ERR "asp: failed to ACTIVATE domain(%d): psp_ret %d\n",
+                d->domain_id, psp_ret);
+        return rc;
+    }
+
+    d->arch.hvm.svm.sev.asp_handle = sd_ls.handle;
+    d->arch.hvm.svm.sev.asp_policy = 0;
+
+    return 0;
+}
+
+static int sev_domain_prepare_initial_mem(struct domain *d, gfn_t gfn, size_t count)
+{
+    struct page_info *page;
+    int rc, psp_ret;
+    struct sev_data_launch_update_data sd_lud;
+
+    mfn_t mfn, mfn_base = INVALID_MFN;
+    size_t segment_size = 0;
+
+    do {
+        page = get_page_from_gfn(d, gfn_x(gfn), NULL, P2M_ALLOC);
+        if ( unlikely(!page) )
+            return rc;
+
+        mfn = page_to_mfn(page);
+        put_page(page);
+
+        if ( !mfn_valid(mfn_base) )
+            mfn_base = mfn;
+        else
+        {
+            // Check for a break.
+            if (mfn_x(mfn_base) + segment_size != mfn_x(mfn) || segment_size == 512)
+            {
+                // Make launch update data.
+                printk(XENLOG_DEBUG
+                       "asp: LAUNCH_UPDATE_DATA d%d: base=%"PRI_xen_pfn", size=%zx\n",
+                       d->domain_id, mfn_x(mfn_base), segment_size);
+                
+                sd_lud.reserved = 0;
+                sd_lud.handle = d->arch.hvm.svm.sev.asp_handle;
+                sd_lud.address = mfn_x(mfn_base) << PAGE_SHIFT;
+                sd_lud.len = segment_size * PAGE_SIZE;
+                rc = sev_do_cmd(SEV_CMD_LAUNCH_UPDATE_DATA, (void *)(&sd_lud),
+                                &psp_ret, true);
+                if (rc)
+                {
+                    printk(XENLOG_ERR
+                           "asp: failed to LAUNCH_UPDATE_DATA dom(%d): err %d\n",
+                           d->domain_id, psp_ret);
+                    return rc;
+                }
+
+                mfn_base = mfn_x(mfn);
+                segment_size = 0;
+            }
+        }  
+
+        gfn = gfn_add(gfn, 1);
+        segment_size++;
+        count--;
+    } while ( count );
+
+    // Last launch update data.
+    if ( segment_size )
+    {
+        sd_lud.reserved = 0;
+        sd_lud.handle = d->arch.hvm.svm.sev.asp_handle;
+        sd_lud.address = mfn_x(mfn_base) << PAGE_SHIFT;
+        sd_lud.len = segment_size * PAGE_SIZE;
+        rc = sev_do_cmd(SEV_CMD_LAUNCH_UPDATE_DATA, (void *)(&sd_lud),
+                        &psp_ret, true);
+
+        if ( rc )
+            printk(XENLOG_ERR "asp: failed to LAUNCH_UPDATE_DATA dom(%d): err %d\n",
+                   d->domain_id, psp_ret);
+    }
+
+    return rc;
+}
+
+static int sev_domain_creation_finished(struct domain *d)
+{
+    struct sev_data_launch_measure sd_lm;
+    struct sev_data_launch_finish sd_lf;
+    int psp_ret;
+    long rc = 0;
+
+    sd_lm.handle = d->arch.hvm.svm.sev.asp_handle;
+    sd_lm.address = virt_to_maddr(d->arch.hvm.svm.sev.measure);
+    sd_lm.len = sizeof(d->arch.hvm.svm.sev.measure);
+    sd_lm.reserved = 0;
+
+    rc = sev_do_cmd(SEV_CMD_LAUNCH_MEASURE, (void *)(&sd_lm), &psp_ret, true);
+    if ( rc )
+    {
+        printk(XENLOG_ERR "asp: failed to LAUNCH_MEASURE for d%hu: psp_ret %hu, rc %ld\n",
+               d->domain_id, psp_ret, rc);
+        
+        if (psp_ret == SEV_RET_INVALID_LEN)
+            printk(XENLOG_ERR "asp: Expected %"PRIu32" bytes\n", sd_lm.len);
+        return rc;
+    }
+
+    sd_lf.handle = d->arch.hvm.svm.sev.asp_handle;
+
+    rc = sev_do_cmd(SEV_CMD_LAUNCH_FINISH, (void *)(&sd_lf), &psp_ret, true);
+    if ( rc )
+    {
+        printk(XENLOG_ERR "asp: failed to LAUNCH_FINISH for d%hu: psp_ret %d, rc %ld\n",
+                d->domain_id, psp_ret, rc);
+        return rc;
+    }
+
+    d->arch.hvm.svm.sev.measure_len = sd_lm.len;
+    return 0;
+}
+
+static void sev_domain_destroy(struct domain *d)
+{
+    struct sev_data_deactivate sd_da;
+    struct sev_data_decommission sd_de;
+    int psp_ret;
+    long rc = 0;
+
+    sd_da.handle = d->arch.hvm.svm.sev.asp_handle;
+
+    rc = sev_do_cmd(SEV_CMD_DEACTIVATE, (void *)(&sd_da), &psp_ret, true);
+    if (rc)
+    {
+        printk(XENLOG_ERR "asp: failed to DEACTIVATE for d%hu: psp_ret %d\n",
+               d->domain_id, psp_ret);
+        return;
+    }
+
+    sd_de.handle = d->arch.hvm.svm.sev.asp_handle;
+
+    rc = sev_do_cmd(SEV_CMD_DECOMMISSION, (void *)(&sd_de), &psp_ret, true);
+    if (rc)
+    {
+        printk(XENLOG_ERR "asp: failed to DECOMMISSION for d%hu: psp_ret %d\n",
+               d->domain_id, psp_ret);
+        return;
+    }
+
+    d->arch.hvm.svm.sev.asp_handle = 0;
+}
+
+static int sev_asid_alloc(struct domain *d, struct hvm_asid *asid)
+{
+    /* TODO: SEV-ES/SNP */
+    unsigned long asid_min = raw_cpu_policy.extd.min_no_es_asid;
+    unsigned long asid_max = raw_cpu_policy.extd.max_sev_guests;
+
+    return hvm_asid_alloc_range(asid, asid_min, asid_max);
+}
+
+static struct coco_domain_ops sev_domain_ops = {
+    .prepare_initial_mem = sev_domain_prepare_initial_mem,
+    .domain_initialise = sev_domain_initialise,
+    .domain_creation_finished = sev_domain_creation_finished,
+    .domain_destroy = sev_domain_destroy,
+    .asid_alloc = sev_asid_alloc,
+};
+
+static int sev_init(void)
+{
+    unsigned long syscfg;
+
+    if ( WARN_ON(!cpu_has_sev) )
+        return -ENOSYS;
+
+    ASSERT(raw_cpu_policy.extd.c_bit_pos > 0);
+    ASSERT(raw_cpu_policy.extd.max_sev_guests > 0);
+
+    printk(XENLOG_INFO "sev: C-bit is %"PRIu32"\n", raw_cpu_policy.extd.c_bit_pos);
+    printk(XENLOG_INFO "sev: Supports up to %"PRIu32" guests\n",
+            raw_cpu_policy.extd.max_sev_guests);
+
+    /* Enable AMD SME */	
+    rdmsrl(MSR_K8_SYSCFG, syscfg);
+
+    if ( !(syscfg & SYSCFG_MEM_ENCRYPT) )
+    {
+        syscfg |= SYSCFG_MEM_ENCRYPT;
+        wrmsrl(MSR_K8_SYSCFG, syscfg);
+
+        printk(XENLOG_INFO "sev: Enabled AMD SME\n");
+    }
+
+    return 0;
+}
+
+static int sev_get_platform_status(struct coco_platform_status *status)
+{
+    status->platform = COCO_PLATFORM_amd_sev;
+
+    // if ( cpu_has_sev_es )
+    //   status->platform_flags |= COCO_PLATFORM_FLAG_sev_es;
+
+    status->flags = COCO_STATUS_FLAG_supported;
+
+    return 0;
+}
+
+static struct coco_domain_ops *sev_get_domain_ops(struct domain *d)
+{
+    // TODO: SEV-ES and SEV-SNP support
+    return &sev_domain_ops;
+}
+
+struct coco_ops sev_coco_ops = {
+    .name = "SEV",
+    .init = sev_init,
+    .get_platform_status = sev_get_platform_status,
+    .get_domain_ops = sev_get_domain_ops,
+};
+
+
