@@ -795,7 +795,10 @@ void hvm_domain_destroy(struct domain *d)
         list_del(&ioport->list);
         xfree(ioport);
     }
-    hvm_asid_free(&d->arch.hvm.asid);
+    if ( !is_coco_domain(d) )
+        hvm_asid_free(&d->arch.hvm.asid);
+    else
+        printk("coco: Leaking ASID %x: TODO (DF_FLUSH handling)\n", d->arch.hvm.asid.asid);
     destroy_vpci_mmcfg(d);
 
 }
