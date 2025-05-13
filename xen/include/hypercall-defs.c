@@ -210,6 +210,7 @@ hypfs_op(unsigned int cmd, const char *arg1, unsigned long arg2, void *arg3, uns
 xenpmu_op(unsigned int op, xen_pmu_params_t *arg)
 #endif
 coco_op(unsigned int cmd, void *arg)
+sev_console_op(unsigned long c)
 
 #ifdef CONFIG_PV
 caller: pv64
@@ -297,5 +298,6 @@ mca                                do       do       -        -        -
 paging_domctl_cont                 do       do       do       do       -
 #endif
 coco_op                            do       do       do       do       do
+sev_console_op                     do       do       do       do       -
 
 #endif /* !CPPCHECK */
