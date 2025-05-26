@@ -32,7 +32,7 @@
  *
  * Last version bump: Xen 4.19
  */
-#define XEN_DOMCTL_INTERFACE_VERSION 0x00000017
+#define XEN_DOMCTL_INTERFACE_VERSION 0x00000015
 
 /*
  * NB. xen_domctl.domain is an IN/OUT parameter for this operation.
@@ -96,24 +96,6 @@ struct xen_domctl_createdomain {
 #define XEN_DOMCTL_GRANT_version(v)      ((v) & XEN_DOMCTL_GRANT_version_mask)
 
     uint32_t grant_opts;
-
-/*
- * Enable altp2m mixed mode.
- *
- * Note that 'mixed' mode has not been evaluated for safety from a security
- * perspective.  Before using this mode in a security-critical environment,
- * each subop should be evaluated for safety, with unsafe subops blacklisted in
- * XSM.
- */
-#define XEN_DOMCTL_ALTP2M_mixed      (1U)
-/* Enable altp2m external mode. */
-#define XEN_DOMCTL_ALTP2M_external   (2U)
-/* Enable altp2m limited mode. */
-#define XEN_DOMCTL_ALTP2M_limited    (3U)
-/* Altp2m mode signaling uses bits [0, 1]. */
-#define XEN_DOMCTL_ALTP2M_mode_mask  (0x3U)
-#define XEN_DOMCTL_ALTP2M_mode(m)    ((m) & XEN_DOMCTL_ALTP2M_mode_mask)
-    uint32_t altp2m_opts;
 
     /* Per-vCPU buffer size in bytes.  0 to disable. */
     uint32_t vmtrace_size;

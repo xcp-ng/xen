@@ -168,58 +168,39 @@ int amd_iommu_set_root_page_table(struct amd_iommu_dte *dte,
 {
     bool valid = flags & SET_ROOT_VALID;
 
-    if ( dte->v && dte->tv )
+    union {
+        struct amd_iommu_dte dte;
+        uint64_t raw64[4];
+        __uint128_t raw128[2];
+    } ldte = { .dte = *dte };
+    __uint128_t res, old = ldte.raw128[0];
+    int ret = 0;
+
+    ldte.dte.domain_id = domain_id;
+    ldte.dte.pt_root = paddr_to_pfn(root_ptr);
+    ldte.dte.iw = true;
+    ldte.dte.ir = true;
+    ldte.dte.paging_mode = paging_mode;
+    ldte.dte.tv = true;
+    ldte.dte.v = valid;
+
+    res = cmpxchg16b(dte, &old, &ldte.raw128[0]);
+
+    /*
+     * Hardware does not update the DTE behind our backs, so the
+     * return value should match "old".
+     */
+    if ( res != old )
     {
-        union {
-            struct amd_iommu_dte dte;
-            uint64_t raw64[4];
-            __uint128_t raw128[2];
-        } ldte = { .dte = *dte };
-        __uint128_t res, old = ldte.raw128[0];
-        int ret = 0;
-
-        ldte.dte.domain_id = domain_id;
-        ldte.dte.pt_root = paddr_to_pfn(root_ptr);
-        ldte.dte.iw = true;
-        ldte.dte.ir = true;
-        ldte.dte.paging_mode = paging_mode;
-        ldte.dte.v = valid;
-
-        res = cmpxchg16b(dte, &old, &ldte.raw128[0]);
-
-        /*
-         * Hardware does not update the DTE behind our backs, so the
-         * return value should match "old".
-         */
-        if ( res != old )
-        {
-            printk(XENLOG_ERR
-                   "Dom%d: unexpected DTE %016lx_%016lx (expected %016lx_%016lx)\n",
-                   domain_id,
-                   (uint64_t)(res >> 64), (uint64_t)res,
-                   (uint64_t)(old >> 64), (uint64_t)old);
-            ret = -EILSEQ;
-        }
-
-        return ret;
+        printk(XENLOG_ERR
+                "Dom%d: unexpected DTE %016lx_%016lx (expected %016lx_%016lx)\n",
+                domain_id,
+                (uint64_t)(res >> 64), (uint64_t)res,
+                (uint64_t)(old >> 64), (uint64_t)old);
+        ret = -EILSEQ;
     }
 
-    if ( valid || dte->v )
-    {
-        dte->tv = false;
-        dte->v = true;
-        smp_wmb();
-    }
-    dte->domain_id = domain_id;
-    dte->pt_root = paddr_to_pfn(root_ptr);
-    dte->iw = true;
-    dte->ir = true;
-    dte->paging_mode = paging_mode;
-    smp_wmb();
-    dte->tv = true;
-    dte->v = valid;
-
-    return 0;
+    return ret;
 }
 
 void amd_iommu_set_intremap_table(
@@ -703,7 +684,7 @@ int cf_check amd_iommu_lookup_page(struct domain *d, dfn_t dfn, mfn_t *mfn,
      * remove these flags if it is not actually the case.
      * TODO: Consider DTE iw and ir flags.
      */
-    *flags = IOMMUF_writable | IOMMUF_readable;
+    *flags |= IOMMUF_writable | IOMMUF_readable;
     return lookup_pagewalk(root_table, dfn, level, mfn, flags);
 }
 

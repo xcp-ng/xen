@@ -1011,12 +1011,14 @@ int cf_check iommu_reattach_context(struct domain *prev_dom, struct domain *next
 
     if ( !(prev_ctx = iommu_get_context(prev_dom, prev_ctx_id)) )
     {
+        printk("ENOENT: No previous context\n");
         ret = -ENOENT;
         goto unlock;
     }
 
     if ( !(next_ctx = iommu_get_context(next_dom, ctx_id)) )
     {
+        printk("ENOENT: No next context\n");
         ret = -ENOENT;
         goto unlock;
     }

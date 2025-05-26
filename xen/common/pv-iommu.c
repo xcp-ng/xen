@@ -157,8 +157,9 @@ static long reattach_device_op(struct pv_iommu_reattach_device *reattach,
 
     if ( !pdev )
     {
+        printk("ENODEV: No PCI device found\n");
         pcidevs_unlock();
-        return -ENOENT;
+        return 0;
     }
 
     ret = iommu_reattach_context(d, d, pdev, reattach->ctx_no);
@@ -374,6 +375,7 @@ static long do_iommu_subop(int subop, XEN_GUEST_HANDLE_PARAM(void) arg,
             }
 
             ret = init_op(&init, d);
+            printk("PV-IOMMU: init -> %ld\n", ret);
         }
 
         case IOMMU_alloc_context:
@@ -391,6 +393,7 @@ static long do_iommu_subop(int subop, XEN_GUEST_HANDLE_PARAM(void) arg,
             if ( unlikely(copy_to_guest(arg, &alloc, 1)) )
                 ret = -EFAULT;
 
+            printk("PV-IOMMU: alloc_context(flags:%x) -> ctx_no: %d, %ld\n", alloc.alloc_flags, alloc.ctx_no, ret);
             break;
         }
 
@@ -405,6 +408,7 @@ static long do_iommu_subop(int subop, XEN_GUEST_HANDLE_PARAM(void) arg,
             }
 
             ret = free_context_op(&free, d);
+            printk("PV-IOMMU: free_context(ctx_no:%d) -> %ld\n", free.ctx_no, ret);
             break;
         }
 
@@ -419,6 +423,8 @@ static long do_iommu_subop(int subop, XEN_GUEST_HANDLE_PARAM(void) arg,
             }
 
             ret = reattach_device_op(&reattach, d);
+            printk("PV-IOMMU: reattach(ctx_no:%d, bus:%02x, devfn:%2x) -> %ld\n",
+                   reattach.ctx_no, reattach.dev.bus, reattach.dev.devfn, ret);
             break;
         }
 
