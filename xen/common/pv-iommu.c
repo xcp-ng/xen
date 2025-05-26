@@ -173,7 +173,7 @@ static long map_pages_op(struct pv_iommu_map_pages *map, struct domain *d)
     int ret = 0, flush_ret;
     struct page_info *page = NULL;
     mfn_t mfn, mfn_lookup;
-    unsigned int flags = 0, flush_flags = 0;
+    unsigned int lookup_flags, flags = 0, flush_flags = 0;
     size_t i = 0;
     dfn_t dfn0 = _dfn(map->dfn); /* original map->dfn */
 
@@ -205,7 +205,7 @@ static long map_pages_op(struct pv_iommu_map_pages *map, struct domain *d)
             break;
 
         /* Check for conflict with existing mappings */
-        if ( !iommu_lookup_page(d, dfn, &mfn_lookup, &flags, map->ctx_no) )
+        if ( !iommu_lookup_page(d, dfn, &mfn_lookup, &lookup_flags, map->ctx_no) )
         {
             if ( page )
                 put_page(page);
