@@ -2559,7 +2559,7 @@ static int cf_check intel_iommu_reattach(struct domain *d,
     int ret, rc;
     const struct acpi_drhd_unit *drhd = acpi_find_matched_drhd_unit(pdev);
 
-    if (!pdev || !drhd)
+    if ( !pdev || !drhd )
         return -EINVAL;
 
     ret = intel_iommu_dev_rmrr(d, pdev, ctx, false);
@@ -2570,12 +2570,20 @@ static int cf_check intel_iommu_reattach(struct domain *d,
     ret = apply_context(d, ctx, pdev, pdev->devfn, prev_ctx);
 
     if ( ret )
-        return ret;
+    {
+        /* Remove the RMRR we just added */
+        if ( (rc = intel_iommu_dev_rmrr(d, pdev, ctx, true)) )
+            printk(XENLOG_WARNING VTDPREFIX
+                   " Unable to unmap RMRR from d%dc%d for %pp (%d)\n",
+                   d->domain_id, prev_ctx->id, &pdev->sbdf, rc);
 
+        return ret;
+    }
+
+    /* Remove previous context RMRR  */
     if ( (rc = intel_iommu_dev_rmrr(d, pdev, prev_ctx, true)) )
         printk(XENLOG_WARNING VTDPREFIX
-               " Unable to unmap RMRR from d%dc%d for %pp (%d)\n",
-               d->domain_id, prev_ctx->id, &pdev->sbdf, rc);
+               " Unable to unmap previous RMRR for %pp (%d)\n", &pdev->sbdf, rc);
 
     pci_vtd_quirk(pdev);
 
