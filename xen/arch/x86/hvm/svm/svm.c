@@ -1028,8 +1028,8 @@ void asmlinkage svm_vmenter_helper(void)
 
     svm_sync_vmcb(curr, vmcb_needs_vmsave);
 
-    if ( test_and_clear_bool(curr->needs_tlb_flush) )
-        svm_vcpu_set_tlb_control(curr);
+    //if ( test_and_clear_bool(curr->needs_tlb_flush) )
+    svm_vcpu_set_tlb_control(curr);
 
     vmcb->rax = regs->rax;
     vmcb->rip = regs->rip;
