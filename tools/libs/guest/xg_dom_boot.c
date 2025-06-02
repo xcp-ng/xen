@@ -210,7 +210,7 @@ int xc_dom_boot_image(struct xc_dom_image *dom)
     {
         struct xc_dom_seg initrd_seg = {
             .pfn = dom->initrd_start >> XC_DOM_PAGE_SHIFT(dom),
-            .pages = dom->initrd_len >> XC_DOM_PAGE_SHIFT(dom)
+            .pages = round_pgup(dom->initrd_len) >> XC_DOM_PAGE_SHIFT(dom)
         };
 
         if ( (rc = xg_dom_coco_encrypt_seg(dom->xch, dom, dom->kernel_seg, "kernel") != 0) )
