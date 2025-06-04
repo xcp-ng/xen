@@ -2128,7 +2128,7 @@ static void cf_check vmcs_dump(unsigned char ch)
 {
     struct domain *d;
     struct vcpu *v;
-    
+
     printk("*********** VMCS Areas **************\n");
 
     rcu_read_lock(&domlist_read_lock);
@@ -2147,6 +2147,8 @@ static void cf_check vmcs_dump(unsigned char ch)
             }
             printk("\tVCPU %d\n", v->vcpu_id);
             vmcs_dump_vcpu(v);
+
+            process_pending_softirqs();
         }
     }
 
