@@ -287,10 +287,10 @@ extern uint8_t posted_intr_vector;
 #define cpu_has_vmx_vpid_invvpid_single_context_retaining_global    \
     (vmx_caps.vpid & VMX_VPID_INVVPID_SINGLE_CONTEXT_RETAINING_GLOBAL)
 
-#define INVVPID_INDIVIDUAL_ADDR                 0
-#define INVVPID_SINGLE_CONTEXT                  1
-#define INVVPID_ALL_CONTEXT                     2
-#define INVVPID_SINGLE_CONTEXT_RETAINING_GLOBAL 3
+#define INVVPID_INDIVIDUAL_ADDR                 0UL
+#define INVVPID_SINGLE_CONTEXT                  1UL
+#define INVVPID_ALL_CONTEXT                     2UL
+#define INVVPID_SINGLE_CONTEXT_RETAINING_GLOBAL 3UL
 
 static always_inline void __vmptrld(u64 addr)
 {
@@ -454,25 +454,16 @@ void ept_sync_domain(struct p2m_domain *p2m);
 
 static inline void vpid_sync_vcpu_gva(struct vcpu *v, unsigned long gva)
 {
-    int type = INVVPID_INDIVIDUAL_ADDR;
+    unsigned long type;
 
-    /*
-     * If individual address invalidation is not supported, we escalate to
-     * use single context invalidation.
-     */
+    /* Use the most precise invalidation type available. */
     if ( likely(cpu_has_vmx_vpid_invvpid_individual_addr) )
-        goto execute_invvpid;
-
-    type = INVVPID_SINGLE_CONTEXT;
-
-    /*
-     * If single context invalidation is not supported, we escalate to
-     * use all context invalidation.
-     */
-    if ( !cpu_has_vmx_vpid_invvpid_single_context )
+        type = INVVPID_INDIVIDUAL_ADDR;
+    else if ( likely(cpu_has_vmx_vpid_invvpid_single_context) )
+        type = INVVPID_SINGLE_CONTEXT;
+    else
         type = INVVPID_ALL_CONTEXT;
 
-execute_invvpid:
     __invvpid(type, v->arch.hvm.n1asid.asid, (u64)gva);
 }
 
