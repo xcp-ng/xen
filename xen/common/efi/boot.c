@@ -1292,6 +1292,7 @@ void EFIAPI __init noreturn efi_start(EFI_HANDLE ImageHandle,
     bool base_video = false;
     const char *option_str;
     bool use_cfg_file;
+    bool kernel_verified = false;
     int dt_modules_found;
 
     __set_bit(EFI_BOOT, &efi_flags);
@@ -1462,6 +1463,11 @@ void EFIAPI __init noreturn efi_start(EFI_HANDLE ImageHandle,
             read_file(dir_handle, s2w(&name), &kernel, option_str);
             efi_bs->FreePool(name.w);
         }
+        else
+        {
+            /* Kernel was embedded so Xen signature includes it. */
+            kernel_verified = true;
+        }
 
         if ( !read_section(loaded_image, L"ramdisk", &ramdisk, NULL) )
         {
@@ -1538,6 +1544,7 @@ void EFIAPI __init noreturn efi_start(EFI_HANDLE ImageHandle,
      * verify it.
      */
     if ( kernel.ptr &&
+         !kernel_verified &&
          !EFI_ERROR(efi_bs->LocateProtocol(&shim_lock_guid, NULL,
                                            (void **)&shim_lock)) &&
          (status = shim_lock->Verify(kernel.ptr, kernel.size)) != EFI_SUCCESS )
