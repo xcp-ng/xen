@@ -1,0 +1,45 @@
+[package]
+name = "xen-rust"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["staticlib"]
+harness = false
+bench = false
+
+[profile.release]
+lto = "thin"
+panic = "abort"
+
+[dependencies]
+rustc-demangle = "0.1"
+
+[dependencies.ciborium]
+version = "0.2.2"
+default-features = false
+
+[dependencies.enumflags2]
+version = "0.7.12"
+features = [
+  "serde",
+]
+default-features = false
+
+[dependencies.serde]
+version = "1.0.219"
+features = ["derive"]
+default-features = false
+
+[dependencies.strum]
+version = "0.27.1"
+features = [
+  "derive",
+  "strum_macros",
+]
+default-features = false
+
+[dependencies.tinyvec]
+version = "1.9.0"
+default-features = false
+features = ["serde"]

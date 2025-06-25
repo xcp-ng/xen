@@ -461,8 +461,20 @@ ALL_OBJS-y                += lib/built_in.o
 ALL_OBJS-y                += xsm/built_in.o
 ALL_OBJS-y                += arch/$(SRCARCH)/built_in.o
 ALL_OBJS-$(CONFIG_CRYPTO) += crypto/built_in.o
+ALL_OBJS-$(CONFIG_RUST) 	+= rust/built_in.o
 
 ALL_LIBS-y                := lib/lib.a
+
+ifeq ($(CONFIG_RUST),y)
+RUST_FLAGS := -Zbuild-std=core,alloc -Zbuild-std-features=compiler-builtins-mem
+RUST_TARGET_TRIPLE := x86_64-unknown-none
+
+RUST_LIB := rust/target/$(RUST_TARGET_TRIPLE)/release/libxen_rust.a
+ALL_LIBS-y += $(RUST_LIB)
+
+$(RUST_LIB):
+	cargo build --manifest-path "rust/Cargo.toml" --release --target rust/$(RUST_TARGET_TRIPLE).json $(RUST_FLAGS)
+endif
 
 include $(srctree)/arch/$(SRCARCH)/arch.mk
 
@@ -485,8 +497,8 @@ $(main-targets):
 	echo "*** Xen x86/32 target no longer supported!"
 endif
 
-.PHONY: _build
-_build: $(TARGET)$(CONFIG_XEN_INSTALL_SUFFIX)
+.PHONY: _build $(RUST_LIB)
+_build: $(RUST_LIB) $(TARGET)$(CONFIG_XEN_INSTALL_SUFFIX)
 
 # Strip
 #
@@ -581,6 +593,7 @@ _clean:
 	$(Q)$(MAKE) $(clean)=lib
 	$(Q)$(MAKE) $(clean)=xsm
 	$(Q)$(MAKE) $(clean)=crypto
+	$(Q)$(MAKE) $(clean)=rust
 	$(Q)$(MAKE) $(clean)=arch/arm
 	$(Q)$(MAKE) $(clean)=arch/ppc
 	$(Q)$(MAKE) $(clean)=arch/riscv

@@ -23,6 +23,9 @@
 #include <xen/livepatch.h>
 #include <asm/div64.h>
 #include <asm/page.h>
+#ifdef CONFIG_RUST
+#include <xen/rust.h>
+#endif
 
 static int skip_atoi(const char **s)
 {
@@ -399,6 +402,9 @@ static char *pointer(char *str, const char *end, const char **fmt_ptr,
     {
         unsigned long sym_size, sym_offset;
         char namebuf[KSYM_NAME_LEN+1];
+        #ifdef CONFIG_RUST
+        char rust_symbol[KSYM_NAME_LEN+1];
+        #endif
 
         /* Advance parents fmt string, as we have consumed 's' or 'S' */
         ++*fmt_ptr;
@@ -408,6 +414,13 @@ static char *pointer(char *str, const char *end, const char **fmt_ptr,
         /* If the symbol is not found, fall back to printing the address */
         if ( !s )
             break;
+        
+        // Attempt to unmangle the symbol if Rust.
+        #ifdef CONFIG_RUST
+        if ( !rust_demangle_symbol(s, strlen(s), rust_symbol,
+                                   sizeof(rust_symbol)) )
+            s = rust_symbol;
+        #endif
 
         /* Print symbol name */
         str = string(str, end, s, -1, -1, 0);

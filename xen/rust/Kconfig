@@ -1,0 +1,8 @@
+menu "Rust support"
+
+config RUST
+	bool "Rust language support (unsupported)"
+	depends on UNSUPPORTED
+	default n
+
+endmenu

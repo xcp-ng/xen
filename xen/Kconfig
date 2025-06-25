@@ -79,6 +79,8 @@ config DEFCONFIG_LIST
 	option defconfig_list
 	default ARCH_DEFCONFIG
 
+source "rust/Kconfig"
+
 config EXPERT
 	bool "Configure EXPERT features"
 	help
