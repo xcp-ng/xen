@@ -1,25 +1,8 @@
 //! Rust symbol demangling utilities for C code.
 
-use core::{
-    ffi::c_int,
-    fmt::{self, Write},
-    slice,
-};
+use core::{ffi::c_int, fmt::Write, slice};
 
-/// Wrapper on mutable bytes to implement fmt::Write.
-pub struct Cursor<'a>(&'a mut [u8], usize);
-
-impl Write for Cursor<'_> {
-    fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        let Some(part) = self.0.get_mut(self.1..self.1 + s.len()) else {
-            return Err(fmt::Error);
-        };
-
-        part.copy_from_slice(s.as_bytes());
-        self.1 += s.len();
-        Ok(())
-    }
-}
+use crate::Cursor;
 
 /// Take a symbol, and try to demangle it if it is a Rust one.
 #[unsafe(no_mangle)]

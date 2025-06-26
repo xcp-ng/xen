@@ -473,7 +473,8 @@ RUST_LIB := rust/target/$(RUST_TARGET_TRIPLE)/release/libxen_rust.a
 ALL_LIBS-y += $(RUST_LIB)
 
 $(RUST_LIB):
-	cargo build --manifest-path "rust/Cargo.toml" --release --target rust/$(RUST_TARGET_TRIPLE).json $(RUST_FLAGS)
+	cargo +nightly build --manifest-path "rust/Cargo.toml" \
+		--release --target rust/$(RUST_TARGET_TRIPLE).json $(RUST_FLAGS)
 endif
 
 include $(srctree)/arch/$(SRCARCH)/arch.mk

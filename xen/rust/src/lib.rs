@@ -2,31 +2,23 @@
 #![no_main]
 #![panic_handler]
 
-pub mod xen;
+use core::fmt::{self, Write};
+
+mod cbor;
 mod demangle;
+pub mod xen;
 
-use core::{slice, fmt::Write};
+/// Wrapper on mutable bytes to implement fmt::Write.
+pub struct Cursor<'a>(&'a mut [u8], usize);
 
-use ciborium::Value;
+impl Write for Cursor<'_> {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        let Some(part) = self.0.get_mut(self.1..self.1 + s.len()) else {
+            return Err(fmt::Error);
+        };
 
-use crate::xen::XenConsole;
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn dump_cbor_buffer(buffer: *const u8, len: usize) {
-    let buffer = unsafe { slice::from_raw_parts(buffer, len) };
-
-    let value: Value = match ciborium::from_reader(buffer) {
-        Ok(v) => v,
-        Err(e) => {
-            writeln!(XenConsole, "Unable to parse CBOR: {e}").ok();
-            return;
-        }
-    };
-
-    writeln!(XenConsole, "{:#?}", value).ok();
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn test_rust_panic() {
-    panic!("Test panic");
+        part.copy_from_slice(s.as_bytes());
+        self.1 += s.len();
+        Ok(())
+    }
 }
