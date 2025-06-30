@@ -15,6 +15,8 @@ panic = "abort"
 
 [dependencies]
 rustc-demangle = "0.1"
+ciborium-io = "0.2.2"
+uuid = { version = "1.17.0", default-features = false, features = ["serde"] }
 
 [dependencies.ciborium]
 version = "0.2.2"
@@ -22,9 +24,7 @@ default-features = false
 
 [dependencies.enumflags2]
 version = "0.7.12"
-features = [
-  "serde",
-]
+features = ["serde"]
 default-features = false
 
 [dependencies.serde]
@@ -34,10 +34,7 @@ default-features = false
 
 [dependencies.strum]
 version = "0.27.1"
-features = [
-  "derive",
-  "strum_macros",
-]
+features = ["derive", "strum_macros"]
 default-features = false
 
 [dependencies.tinyvec]

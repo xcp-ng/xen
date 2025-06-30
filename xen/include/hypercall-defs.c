@@ -210,7 +210,7 @@ hypfs_op(unsigned int cmd, const char *arg1, unsigned long arg2, void *arg3, uns
 xenpmu_op(unsigned int op, xen_pmu_params_t *arg)
 #endif
 #ifdef CONFIG_RUST
-cbor_call(unsigned int op, unsigned long len, char *input, char *output)
+cbor_call(unsigned int op, unsigned long input_len, const char *input, unsigned long output_len, char *output)
 #endif
 
 #ifdef CONFIG_PV

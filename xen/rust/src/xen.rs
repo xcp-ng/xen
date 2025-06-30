@@ -12,11 +12,10 @@ use core::{
 unsafe extern "C" {
     pub unsafe fn rust_stub_printk(line: *const c_char);
 
-    pub unsafe fn xvfree(va: *mut u8);
-
     pub unsafe fn _xvmalloc(size: usize, align: c_uint) -> *mut u8;
     pub unsafe fn _xvzalloc(size: usize, align: c_uint) -> *mut u8;
     pub unsafe fn _xvrealloc(va: *mut u8, size: usize, align: c_uint) -> *mut u8;
+    pub unsafe fn xvfree(va: *mut u8);
 }
 
 /// printk console
@@ -35,8 +34,6 @@ impl Write for XenConsole {
 
         Ok(())
     }
-
-    
 }
 
 #[global_allocator]
@@ -64,23 +61,7 @@ unsafe impl GlobalAlloc for XenAllocator {
 
 #[panic_handler]
 fn panic<'a, 'b>(info: &'a PanicInfo<'b>) -> ! {
-    write!(XenConsole, "Rust code panic").ok();
-    if let Some(location) = info.location() {
-        writeln!(
-            XenConsole,
-            " in {}:{}:{}",
-            location.file(),
-            location.line(),
-            location.column()
-        )
-        .ok();
-    } else {
-        writeln!(XenConsole).ok();
-    }
-
-    if let Some(message) = info.message().as_str() {
-        writeln!(XenConsole, "{message}").ok();
-    }
+    writeln!(XenConsole, "Rust code panic: {info}").ok();
 
     unsafe {
         #[cfg(target_arch = "x86_64")]
