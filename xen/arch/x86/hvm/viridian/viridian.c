@@ -495,6 +495,8 @@ int viridian_domain_init(struct domain *d)
     if ( !d->arch.hvm.viridian )
         return -ENOMEM;
 
+    spin_lock_init(&d->arch.hvm.viridian->lock);
+
     rc = viridian_synic_domain_init(d);
     if ( rc )
         goto fail;
