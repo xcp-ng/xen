@@ -208,10 +208,17 @@ struct evtchn_status {
         } unbound;                 /* EVTCHNSTAT_unbound */
         struct {
             domid_t dom;
+            uint16_t _pad;
             evtchn_port_t port;
         } interdomain;             /* EVTCHNSTAT_interdomain */
         uint32_t pirq;             /* EVTCHNSTAT_pirq        */
         uint32_t virq;             /* EVTCHNSTAT_virq        */
+#ifndef __XEN__
+        struct {
+            uint32_t _output1;
+            uint32_t _output2;
+        };
+#endif
     } u;
 };
 typedef struct evtchn_status evtchn_status_t;

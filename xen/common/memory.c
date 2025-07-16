@@ -10,6 +10,7 @@
 #include <xen/domain_page.h>
 #include <xen/errno.h>
 #include <xen/event.h>
+#include <xen/fastabi.h>
 #include <xen/grant_table.h>
 #include <xen/guest_access.h>
 #include <xen/hypercall.h>
@@ -1863,6 +1864,112 @@ long do_memory_op(unsigned long cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
 
     return rc;
 }
+
+#ifdef CONFIG_FASTABI
+void do_memory_fast_op(struct cpu_user_regs *regs)
+{
+    unsigned long cmd = fastabi_value_n(regs, 1);
+    unsigned long start_extent = cmd >> MEMOP_EXTENT_SHIFT;
+    long rc;
+    int op = cmd & MEMOP_CMD_MASK;
+
+    switch ( op ) {
+    case XENMEM_add_to_physmap:
+    {
+        struct xen_add_to_physmap xatp = {
+            .size = fastabi_value_n(regs, 2),
+            .space = fastabi_value_n(regs, 3),
+            .idx = fastabi_value_n(regs, 4),
+            .gpfn = fastabi_value_n(regs, 5)
+        };
+
+        BUILD_BUG_ON((typeof(xatp.size))-1 > (UINT_MAX >> MEMOP_EXTENT_SHIFT));
+
+        /* Check for malicious or buggy input. */
+        if ( start_extent != (typeof(xatp.size))start_extent )
+        {
+            rc = -EDOM;
+            break;
+        }
+
+        /* Foreign mapping is only possible via add_to_physmap_batch. */
+        if ( xatp.space == XENMAPSPACE_gmfn_foreign )
+        {
+            rc = -ENOSYS;
+            break;
+        }
+
+        rc = xatp_permission_check(current->domain, xatp.space);
+        if ( rc )
+            break;
+
+        rc = xenmem_add_to_physmap(current->domain, &xatp, start_extent);
+
+        if ( xatp.space == XENMAPSPACE_gmfn_range && rc > 0 )
+            panic("TODO");
+            //rc = hypercall_create_continuation(
+            //         __HYPERVISOR_memory_op, "lh",
+            //         op | (rc << MEMOP_EXTENT_SHIFT), arg);
+        break;
+    }
+    
+    case XENMEM_remove_from_physmap:
+    {
+        unsigned long gpfn = fastabi_value_n(regs, 5);
+        struct page_info *page;
+
+        if ( unlikely(start_extent) )
+        {
+            rc = -EINVAL;
+            break;
+        }
+
+        if ( !paging_mode_translate(current->domain) )
+        {
+            rc = -EACCES;
+            break;
+        }
+
+        page = get_page_from_gfn(current->domain, gpfn, NULL, P2M_ALLOC);
+        if ( page )
+        {
+            rc = guest_physmap_remove_page(current->domain, _gfn(gpfn),
+                                           page_to_mfn(page), 0);
+            put_page(page);
+        }
+        else
+            rc = -ENOENT;
+
+        break;
+    }
+    
+    case XENMEM_memory_map:
+    {
+        struct domain *d = current->domain;
+        unsigned long nr_entries = fastabi_value_n(regs, 2);
+        paddr_t buffer_addr = fastabi_value_n(regs, 3);
+
+        spin_lock(&d->arch.e820_lock);
+
+        if ( nr_entries > d->arch.nr_e820 )
+            nr_entries = d->arch.nr_e820;
+
+        if ( hvm_copy_to_guest_phys(buffer_addr, d->arch.e820,
+                                    nr_entries * sizeof(struct e820entry), current) )
+            rc = -EFAULT;
+
+        spin_unlock(&d->arch.e820_lock);
+        break;
+    }
+
+    default:
+        rc = -ENOSYS;
+        break;
+    }
+
+    fastabi_value_n(regs, 0) = rc;
+}
+#endif
 
 void clear_domain_page(mfn_t mfn)
 {

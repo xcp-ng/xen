@@ -3040,6 +3040,7 @@ skip_usbdev:
                     "WARNING: msr_relaxed will be removed in future versions.\n"
                     "If it fixes an issue you are having please report to "
                     "xen-devel@lists.xenproject.org.\n");
+    xlu_cfg_get_defbool(config, "fixed_mem_layout", &b_info->arch_x86.fixed_mem_layout, 0);
 
     xlu_cfg_get_defbool(config, "vpmu", &b_info->vpmu, 0);
 

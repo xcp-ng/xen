@@ -1,0 +1,44 @@
+name: physdev
+hypercall_index: 33
+
+subops:
+  irq_status_query:
+    index: 5
+    cstruct: physdev_irq_status_query
+    input:
+      irq: 2
+    output:
+      flags: 3
+
+  eoi:
+    index: 12
+    cstruct: physdev_eoi
+    input:
+      irq: 2
+ 
+#   map_pirq_gsi:
+#     index: 13
+
+#   map_pirq_msi:
+#     index: 14
+
+#   map_pirq_msi_table:
+#     index: 15
+#     cstruct: physdev_op_map_pirq
+#     input:
+#       domid: 2
+#       index: 4
+#       pirq: 5
+#       sbdf: 6
+#       entry_nr: 7
+#       table_base: 8
+#     output:
+#       pirq: 5
+#       entry_nr: 7
+#   
+#   unmap_pirq:
+#     index: 14
+#     cstruct: physdev_unmap_pirq
+#     input:
+#       domid: 2
+#       pirq: 5

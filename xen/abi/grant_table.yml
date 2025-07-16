@@ -1,0 +1,67 @@
+name: grant_table
+hypercall_index: 20
+
+subops:
+  #TODO
+  map_grant_ref:
+    index: 0
+    input:
+      dom: 2
+      host_addr: 3
+      flags: 4
+      ref: 5
+    output:
+      handle: 6
+    c_lang:
+      struct: gnttab_map_grant_ref
+  
+  #TODO
+  unmap_grant_ref:
+    index: 1
+    input:
+      host_addr: 3
+      handle: 6
+    c_lang:
+      struct: gnttab_unmap_grant_ref
+  
+  #TODO
+  # copy:
+  #   cstruct: xen_gnttab_copy
+  #   index: 4
+  #   input:
+  #     domid: 2
+  #     copy.flags: 3
+  #     copy.offset: 4
+  #     copy.gntref: 5
+  #     copy.gfn: 6
+
+  #TODO
+  # copy_list:
+  #   cstruct: xen_gnttab_copy_sg
+  #   index: 5
+  #   input:
+  #     domid: 2
+  #     sg_count: 3
+  #     sg_list: 4
+
+  query_size:
+    index: 6
+    output:
+      nr_frames: 2
+      max_nr_frames: 3
+    c_lang:
+      struct: gnttab_query_size
+
+  set_version:
+    index: 8
+    input:
+      version: 2
+    c_lang:
+      struct: gnttab_set_version
+
+  get_version:
+    index: 10
+    output:
+      version: 2
+    c_lang:
+      struct: gnttab_get_version
