@@ -1,6 +1,7 @@
 #include "libxl_internal.h"
 #include "libxl_arch.h"
 #include <xen/arch-x86/cpuid.h>
+#include <xen/arch-x86/hvm/start_info.h>
 
 int libxl__arch_domain_prepare_config(libxl__gc *gc,
                                       libxl_domain_config *d_config,
@@ -50,6 +51,10 @@ static const char *e820_names(int type)
         case E820_ACPI: return "ACPI";
         case E820_NVS: return "ACPI NVS";
         case E820_UNUSABLE: return "Unusable";
+        case XEN_HVM_MEMMAP_TYPE_SHARED_INFO: return "HVM Shared Info";
+        case XEN_HVM_MEMMAP_TYPE_GRANT_TABLE: return "HVM Grant Table";
+        case XEN_HVM_MEMMAP_TYPE_GNTTAB_STATUS: return "HVM Grant Status";
+        case XEN_HVM_MEMMAP_TYPE_FOREIGN_REG: return "HVM Foreign mapping region";
         default: break;
     }
     return "Unknown";
@@ -689,10 +694,31 @@ static int domain_construct_memmap(libxl__gc *gc,
     /* We always own at least one lowmem entry. */
     unsigned int e820_entries = 1;
     struct e820entry *e820 = NULL;
+    uint64_t highmem_start = ((uint64_t)1 << 32);
     uint64_t highmem_size =
                     dom->highmem_end ? dom->highmem_end - (1ull << 32) : 0;
     uint32_t lowmem_start = dom->device_model ? GUEST_LOW_MEM_START_DEFAULT : 0;
     unsigned page_size = XC_DOM_PAGE_SIZE(dom);
+    /* Special region starts at the first 1G boundary after the highmem */
+    uint64_t special_region_start =
+        (highmem_start + highmem_size + GB(1) - 1) & ~(GB(1) - 1);
+    uint64_t special_region_offset = special_region_start;
+    size_t gnttab_frame_count, gnttab_status_frame_count;
+    gnttab_query_size_t gnttab_query;
+
+    gnttab_query.dom = domid;
+    rc = xc_gnttab_query_size(dom->xch, &gnttab_query);
+
+    if (rc != 0 || gnttab_query.status != GNTST_okay)
+    {
+        gnttab_frame_count = 0;
+        gnttab_status_frame_count = 0;
+    }
+
+    gnttab_frame_count = gnttab_query.max_nr_frames;
+    gnttab_status_frame_count = DIV_ROUNDUP(
+        gnttab_frame_count * (page_size / sizeof(grant_entry_v2_t)),
+        page_size / sizeof(grant_status_t));
 
     /* Add all rdm entries. */
     for (i = 0; i < d_config->num_rdms; i++)
@@ -706,6 +732,18 @@ static int domain_construct_memmap(libxl__gc *gc,
     /* If we should have a highmem range. */
     if (highmem_size)
         e820_entries++;
+    
+    if (libxl_defbool_val(d_config->b_info.arch_x86.fixed_mem_layout))
+    {
+        e820_entries++; /* XEN_HVM_MEMMAP_TYPE_SHARED_INFO */
+        if ( gnttab_frame_count )
+        {
+            e820_entries++; /* XEN_HVM_MEMMAP_TYPE_GRANT_TABLE */
+            if (d_config->b_info.max_grant_version >= 2 && gnttab_status_frame_count)
+                e820_entries++; /* XEN_HVM_MEMMAP_TYPE_GNTTAB_STATUS status */
+        }
+        e820_entries++; /* XEN_HVM_MEMMAP_TYPE_FOREIGN_REG */
+    }
 
     for (i = 0; i < MAX_ACPI_MODULES; i++)
         if (dom->acpi_modules[i].length)
@@ -772,6 +810,40 @@ static int domain_construct_memmap(libxl__gc *gc,
         e820[nr].type = E820_RAM;
     }
 
+    /* Special regions */
+    if (libxl_defbool_val(d_config->b_info.arch_x86.fixed_mem_layout))
+    {
+        e820[nr].type = XEN_HVM_MEMMAP_TYPE_SHARED_INFO;
+        e820[nr].addr = special_region_offset;
+        e820[nr].size = page_size;
+        special_region_offset += e820[nr].size;
+        nr++;
+
+        if ( gnttab_frame_count )
+        {
+            e820[nr].type = XEN_HVM_MEMMAP_TYPE_GRANT_TABLE;
+            e820[nr].addr = special_region_offset;
+            e820[nr].size = gnttab_frame_count * page_size;
+            special_region_offset += e820[nr].size;
+            nr++;
+
+            if (d_config->b_info.max_grant_version >= 2 && gnttab_status_frame_count)
+            {
+                e820[nr].type = XEN_HVM_MEMMAP_TYPE_GNTTAB_STATUS;
+                e820[nr].addr = special_region_offset;
+                e820[nr].size = gnttab_status_frame_count * page_size;
+                special_region_offset += e820[nr].size;
+                nr++;
+            }
+        }
+
+        e820[nr].type = XEN_HVM_MEMMAP_TYPE_FOREIGN_REG;
+        e820[nr].addr = special_region_offset;
+        e820[nr].size = MB(512);
+        special_region_offset += e820[nr].size;
+        nr++;
+    }
+
     if (xc_domain_set_memory_map(CTX->xch, domid, e820, e820_entries) != 0) {
         rc = ERROR_FAIL;
         goto out;
@@ -823,6 +895,7 @@ int libxl__arch_domain_build_info_setdefault(libxl__gc *gc,
     libxl_defbool_setdefault(&b_info->arch_x86.msr_relaxed, false);
     libxl_defbool_setdefault(&b_info->arch_x86.x2apic_preenable, false);
     libxl_defbool_setdefault(&b_info->trap_unmapped_accesses, false);
+    libxl_defbool_setdefault(&b_info->arch_x86.fixed_mem_layout, false);
 
     if (b_info->type == LIBXL_DOMAIN_TYPE_HVM) {
         /*

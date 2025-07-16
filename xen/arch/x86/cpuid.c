@@ -154,6 +154,9 @@ static void cpuid_hypervisor_leaves(const struct vcpu *v, uint32_t leaf,
          */
         res->a |= XEN_HVM_CPUID_UPCALL_VECTOR;
 
+        if ( IS_ENABLED(CONFIG_FASTABI) && is_hvm_vcpu(v) )
+            res->a |= XEN_HVM_CPUID_FASTABI;
+
         break;
 
     case 5: /* PV-specific parameters */

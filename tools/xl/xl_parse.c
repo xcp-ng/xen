@@ -3052,6 +3052,8 @@ skip_usbdev:
         }
     }
 
+    xlu_cfg_get_defbool(config, "fixed_mem_layout", &b_info->arch_x86.fixed_mem_layout, 0);
+
     xlu_cfg_get_defbool(config, "vpmu", &b_info->vpmu, 0);
 
     xlu_cfg_destroy(config);

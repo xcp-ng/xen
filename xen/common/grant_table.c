@@ -24,6 +24,7 @@
  */
 
 #include <xen/err.h>
+#include <xen/fastabi.h>
 #include <xen/iocap.h>
 #include <xen/lib.h>
 #include <xen/sched.h>
@@ -3825,6 +3826,46 @@ long do_grant_table_op(
 
     return rc;
 }
+
+#ifdef CONFIG_FASTABI
+void do_grant_table_fast_op(struct cpu_user_regs *regs)
+{
+    long rc = 0;
+    unsigned int cmd = fastabi_value_n(regs, 1);
+
+    switch (cmd)
+    {
+    case GNTTABOP_query_size:
+    {
+        struct grant_table *gt = current->domain->grant_table;
+
+        grant_read_lock(gt);
+        fastabi_value_n(regs, 2) = nr_grant_frames(gt);
+        fastabi_value_n(regs, 3) = gt->max_grant_frames;
+        grant_read_unlock(gt);
+        break;
+    }
+    case GNTTABOP_get_version:
+    {
+        struct grant_table *gt = current->domain->grant_table;
+
+        fastabi_value_n(regs, 2) = gt->gt_version;
+        break;
+    }
+    case GNTTABOP_set_version:
+    {
+        gnttab_set_version_t op = { .version = fastabi_value_n(regs, 2) };
+        rc = gnttab_set_version(&op);
+        break;
+    }
+    default:
+        rc = -ENOSYS;
+        break;
+    }
+
+    fastabi_value_n(regs, 0) = rc;
+}
+#endif
 
 #ifdef CONFIG_COMPAT
 #include "compat/grant_table.c"

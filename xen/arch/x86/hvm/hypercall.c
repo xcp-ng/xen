@@ -10,6 +10,7 @@
 #include <xen/hypercall.h>
 #include <xen/ioreq.h>
 #include <xen/nospec.h>
+#include <xen/fastabi.h>
 
 #include <asm/hvm/emulate.h>
 #include <asm/hvm/support.h>
@@ -154,6 +155,24 @@ int hvm_hypercall(struct cpu_user_regs *regs)
     token = hvmemul_cache_disable(curr);
 
     curr->hcall_preempted = false;
+
+    #ifdef CONFIG_FASTABI
+    if ( eax & 0x40000000U && is_hvm_domain(currd) && mode == X86_MODE_64BIT )
+    {
+        unsigned long index = eax & ~0x40000000U;
+        HVM_DBG_LOG(DBG_LEVEL_HCALL,
+                    "fasthcall%lu(%lx, %lx, %lx, %lx, %lx, %lx, %lx)",
+                    index, fastabi_value_n(regs, 1), fastabi_value_n(regs, 2),
+                    fastabi_value_n(regs, 3), fastabi_value_n(regs, 4),
+                    fastabi_value_n(regs, 5), fastabi_value_n(regs, 6),
+                    fastabi_value_n(regs, 7));
+
+        fastabi_dispatch(index, regs);
+
+        hvmemul_cache_restore(curr, token);
+        return HVM_HCALL_completed;
+    }
+    #endif
 
     if ( mode == X86_MODE_64BIT )
     {

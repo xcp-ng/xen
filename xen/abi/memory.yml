@@ -1,0 +1,61 @@
+name: memory
+hypercall_index: 12
+
+subops:
+  # increase_reservation:
+  #   index: 0
+  #   input:
+  #     extent_start: 2
+  #     nr_extends: 3
+  #     extent_order: 4
+  #     mem_flags: 5
+  #     domid: 6
+  #   c_lang:
+  #     struct: xen_memory_reservation
+
+  # decrease_reservation:
+  #   index: 0
+  #   input:
+  #     extent_start: 2
+  #     nr_extends: 3
+  #     extent_order: 4
+  #     mem_flags: 5
+  #     domid: 6
+  #   c_lang:
+  #     struct: xen_memory_reservation
+
+  # populate_physmap:
+  #   index: 0
+  #   input:
+  #     extent_start: 2
+  #     nr_extends: 3
+  #     extent_order: 4
+  #     mem_flags: 5
+  #     domid: 6
+  #   c_lang:
+  #     struct: xen_memory_reservation
+
+  # add_to_physmap:
+  #   index: 7
+  #   input:
+  #     size: 2
+  #     space: 3
+  #     idx: 4
+  #     gpfn: 5
+  #   c_lang:
+  #     struct: xen_add_to_physmap
+
+  # remove_from_physmap:
+  #   index: 15
+  #   input:
+  #     gpfn: 5
+  #   c_lang:
+  #     struct: xen_remove_from_physmap
+
+  memory_map:
+    index: 9
+    input:
+      nr_entries: 2
+      buffer: 3
+    c_lang:
+      struct: xen_memory_map
