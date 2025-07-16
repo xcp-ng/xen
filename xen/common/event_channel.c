@@ -19,6 +19,7 @@
 #include <xen/init.h>
 #include <xen/lib.h>
 #include <xen/errno.h>
+#include <xen/fastabi.h>
 #include <xen/sched.h>
 #include <xen/irq.h>
 #include <xen/iocap.h>
@@ -1513,6 +1514,203 @@ long do_event_channel_op(int cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
     return rc;
 }
 
+#ifdef CONFIG_FASTABI
+void do_event_channel_fast_op(struct cpu_user_regs *regs)
+{
+    long rc;
+    uint64_t cmd = fastabi_value_n(regs, 1);
+
+    switch ( cmd )
+    {
+    case EVTCHNOP_alloc_unbound: {
+        struct evtchn_alloc_unbound alloc_unbound = {
+            .dom = fastabi_value_n(regs, 2),
+            .remote_dom = fastabi_value_n(regs, 3),
+            .port = 0,
+        };
+        rc = evtchn_alloc_unbound(&alloc_unbound, 0);
+
+        if ( !rc )
+            fastabi_value_n(regs, 4) = alloc_unbound.port;
+        break;
+    }
+
+    case EVTCHNOP_bind_interdomain: {
+        struct evtchn_bind_interdomain bind_interdomain = {
+            .remote_dom = fastabi_value_n(regs, 2),
+            .remote_port = fastabi_value_n(regs, 3),
+            .local_port = 0,
+        };
+        rc = evtchn_bind_interdomain(&bind_interdomain, current->domain, 0);
+
+        if ( !rc )
+            fastabi_value_n(regs, 4) = bind_interdomain.local_port;
+        break;
+    }
+
+    case EVTCHNOP_bind_virq: {
+        struct evtchn_bind_virq bind_virq = {
+            .virq = fastabi_value_n(regs, 2),
+            .vcpu = fastabi_value_n(regs, 3),
+            .port = 0,
+        };
+        rc = evtchn_bind_virq(&bind_virq, 0);
+
+        if ( !rc )
+            fastabi_value_n(regs, 4) = bind_virq.port;
+        break;
+    }
+
+    case EVTCHNOP_bind_ipi: {
+        struct evtchn_bind_ipi bind_ipi = {
+            .vcpu = fastabi_value_n(regs, 2),
+            .port = 0,
+        };
+        rc = evtchn_bind_ipi(&bind_ipi);
+
+        if ( !rc )
+            fastabi_value_n(regs, 4) = bind_ipi.port;
+        break;
+    }
+
+    case EVTCHNOP_bind_pirq: {
+        struct evtchn_bind_pirq bind_pirq = {
+            .pirq = fastabi_value_n(regs, 2),
+            .flags = fastabi_value_n(regs, 3),
+        };
+        rc = evtchn_bind_pirq(&bind_pirq);
+
+        if ( !rc )
+            fastabi_value_n(regs, 4) = bind_pirq.port;
+        break;
+    }
+
+    case EVTCHNOP_close: {
+        struct evtchn_close close = { .port = fastabi_value_n(regs, 2) };
+        rc = evtchn_close(current->domain, close.port, 1);
+        break;
+    }
+
+    case EVTCHNOP_send: {
+        struct evtchn_send send = { .port = fastabi_value_n(regs, 2) };
+        rc = evtchn_send(current->domain, send.port);
+        break;
+    }
+
+    case EVTCHNOP_status: {
+        struct evtchn_status status = {
+            .dom = fastabi_value_n(regs, 2),
+            .port = fastabi_value_n(regs, 3),
+        };
+        rc = evtchn_status(&status);
+
+        if ( !rc )
+        {
+            fastabi_value_n(regs, 4) = status.status;
+            fastabi_value_n(regs, 5) = status.vcpu;
+
+            switch (status.status)
+            {
+            case EVTCHNSTAT_unbound:
+                fastabi_value_n(regs, 6) = status.u.unbound.dom;
+                break;
+            case EVTCHNSTAT_interdomain:
+                fastabi_value_n(regs, 6) = status.u.interdomain.dom;
+                fastabi_value_n(regs, 7) = status.u.interdomain.port;
+                break;
+            case EVTCHNSTAT_pirq:
+                fastabi_value_n(regs, 6) = status.u.pirq;
+                break;
+            case EVTCHNSTAT_virq:
+                fastabi_value_n(regs, 6) = status.u.virq;
+                break;
+            default:
+                break;
+            }
+        }
+        break;
+    }
+
+    case EVTCHNOP_bind_vcpu: {
+        struct evtchn_bind_vcpu bind_vcpu = {
+            .vcpu = fastabi_value_n(regs, 2),
+            .port = fastabi_value_n(regs, 3)
+        };
+        rc = evtchn_bind_vcpu(bind_vcpu.port, bind_vcpu.vcpu);
+        break;
+    }
+
+    case EVTCHNOP_unmask: {
+        struct evtchn_unmask unmask = { .port = fastabi_value_n(regs, 2) };
+        rc = evtchn_unmask(unmask.port);
+        break;
+    }
+
+    case EVTCHNOP_reset:
+    case EVTCHNOP_reset_cont: {
+        struct evtchn_reset reset = { .dom = fastabi_value_n(regs, 2) };
+        struct domain *d;
+
+        d = rcu_lock_domain_by_any_id(reset.dom);
+        if ( d == NULL )
+        {
+            rc = -ESRCH;
+            break;
+        }
+
+        rc = xsm_evtchn_reset(XSM_TARGET, current->domain, d);
+        if ( !rc )
+            rc = evtchn_reset(d, cmd == EVTCHNOP_reset_cont);
+
+        rcu_unlock_domain(d);
+
+        if ( rc == -ERESTART )
+        {
+            fastabi_value_n(regs, 1) = EVTCHNOP_reset_cont;
+            fastabi_make_continuation();
+            return;
+        }
+        break;
+    }
+
+    case EVTCHNOP_init_control: {
+        struct evtchn_init_control init_control = {
+            .control_gfn = fastabi_value_n(regs, 2),
+            .offset = fastabi_value_n(regs, 3),
+            .vcpu = fastabi_value_n(regs, 4)
+        };
+        rc = evtchn_fifo_init_control(&init_control);
+
+        if ( !rc )
+            fastabi_value_n(regs, 5) = init_control.link_bits;
+        break;
+    }
+
+    case EVTCHNOP_expand_array: {
+        struct evtchn_expand_array expand_array = {
+            .array_gfn = fastabi_value_n(regs, 2)
+        };
+        rc = evtchn_fifo_expand_array(&expand_array);
+        break;
+    }
+
+    case EVTCHNOP_set_priority: {
+        struct evtchn_set_priority set_priority = {
+            .port = fastabi_value_n(regs, 2),
+            .priority = fastabi_value_n(regs, 3),
+        };
+        rc = evtchn_set_priority(&set_priority);
+        break;
+    }
+
+    default:
+        rc = -ENOSYS;
+        break;
+    }
+
+    fastabi_value_n(regs, 0) = rc;
+}
+#endif
 
 int alloc_unbound_xen_event_channel(
     struct domain *ld, unsigned int lvcpu, domid_t remote_domid,

@@ -36,6 +36,7 @@
 #include <xen/argo.h>
 #include <xen/llc-coloring.h>
 #include <xen/xvmalloc.h>
+#include <asm/fastabi.h>
 #include <asm/p2m.h>
 #include <asm/processor.h>
 #include <public/sched.h>
@@ -2373,6 +2374,181 @@ long common_vcpu_op(int cmd, struct vcpu *v, XEN_GUEST_HANDLE_PARAM(void) arg)
 
     return rc;
 }
+
+#ifdef CONFIG_FASTABI
+long common_vcpu_fast_op(struct cpu_user_regs *regs, int cmd, struct vcpu *v)
+{
+    long rc = 0;
+    struct domain *d = v->domain;
+    unsigned int vcpuid = v->vcpu_id;
+
+    switch ( cmd )
+    {
+    case VCPUOP_initialise:
+        rc = arch_initialise_vcpu(v, (XEN_GUEST_HANDLE(void)) {
+            (void *)fastabi_value_n(regs, 2) });
+        break;
+
+    case VCPUOP_up:
+    {
+        bool wake = false;
+
+        domain_lock(d);
+        if ( !v->is_initialised )
+            rc = -EINVAL;
+        else
+            wake = test_and_clear_bit(_VPF_down, &v->pause_flags);
+        domain_unlock(d);
+        if ( wake )
+            vcpu_wake(v);
+    }
+
+        break;
+
+    case VCPUOP_down:
+        for_each_vcpu ( d, v )
+            if ( !test_bit(_VPF_down, &v->pause_flags) )
+            {
+               rc = 1;
+               break;
+            }
+
+        if ( !rc ) /* Last vcpu going down? */
+        {
+            domain_shutdown(d, SHUTDOWN_poweroff);
+            break;
+        }
+
+        rc = 0;
+        v = d->vcpu[vcpuid];
+
+        if ( !test_and_set_bit(_VPF_down, &v->pause_flags) )
+            vcpu_sleep_nosync(v);
+
+        break;
+
+    case VCPUOP_is_up:
+        rc = !(v->pause_flags & VPF_down);
+        break;
+
+    case VCPUOP_get_runstate_info:
+    {
+        struct vcpu_runstate_info runstate;
+        vcpu_runstate_get(v, &runstate);
+
+        fastabi_value_n(regs, 2) = runstate.state;
+        fastabi_value_n(regs, 3) = runstate.state_entry_time;
+        fastabi_value_n(regs, 4) = runstate.time[0];
+        fastabi_value_n(regs, 5) = runstate.time[1];
+        fastabi_value_n(regs, 6) = runstate.time[2];
+        fastabi_value_n(regs, 7) = runstate.time[3];
+        break;
+    }
+
+    case VCPUOP_set_periodic_timer:
+    {
+        uint64_t period_ns = fastabi_value_n(regs, 3);
+
+        if ( period_ns < MILLISECS(1) )
+            return -EINVAL;
+
+        if ( period_ns > STIME_DELTA_MAX )
+            return -EINVAL;
+
+        vcpu_set_periodic_timer(v, period_ns);
+
+        break;
+    }
+
+    case VCPUOP_stop_periodic_timer:
+        vcpu_set_periodic_timer(v, 0);
+        break;
+
+    case VCPUOP_set_singleshot_timer:
+    {
+        struct vcpu_set_singleshot_timer set = {
+            .timeout_abs_ns = fastabi_value_n(regs, 3),
+            .flags = fastabi_value_n(regs, 4),
+        };
+
+        if ( v != current )
+            return -EINVAL;
+
+        if ( set.timeout_abs_ns < NOW() )
+        {
+            /*
+             * Simplify the logic if the timeout has already expired and just
+             * inject the event.
+             */
+            stop_timer(&v->singleshot_timer);
+            send_timer_event(v);
+            break;
+        }
+
+        migrate_timer(&v->singleshot_timer, smp_processor_id());
+        set_timer(&v->singleshot_timer, set.timeout_abs_ns);
+
+        break;
+    }
+
+    case VCPUOP_stop_singleshot_timer:
+        if ( v != current )
+            return -EINVAL;
+
+        stop_timer(&v->singleshot_timer);
+
+        break;
+
+    case VCPUOP_register_vcpu_info:
+    {
+        struct vcpu_register_vcpu_info info = {
+            .mfn = fastabi_value_n(regs, 3),
+            .offset = fastabi_value_n(regs, 4)
+        };
+        paddr_t gaddr;
+
+        rc = -EINVAL;
+        gaddr = gfn_to_gaddr(_gfn(info.mfn)) + info.offset;
+        if ( !~gaddr ||
+             gfn_x(gaddr_to_gfn(gaddr)) != info.mfn )
+            break;
+
+        /* Preliminary check only; see map_guest_area(). */
+        rc = -EBUSY;
+        if ( v->vcpu_info_area.pg )
+            break;
+
+        /* See the BUILD_BUG_ON() in vcpu_info_populate(). */
+        rc = map_guest_area(v, gaddr, sizeof(vcpu_info_t),
+                            &v->vcpu_info_area, vcpu_info_populate);
+        break;
+    }
+
+    case VCPUOP_register_runstate_phys_area:
+    {
+        struct vcpu_register_runstate_memory_area area = {
+            .addr.p = fastabi_value_n(regs, 3)
+        };
+
+        rc = -ENOSYS;
+        if ( 0 /* TODO: Dom's XENFEAT_runstate_phys_area setting */ )
+            break;
+
+        rc = map_guest_area(v, area.addr.p,
+                            sizeof(struct vcpu_runstate_info),
+                            &v->runstate_guest_area,
+                            runstate_area_populate);
+        break;
+    }
+
+    default:
+        rc = -ENOSYS;
+        break;
+    }
+
+    return rc;
+}
+#endif
 
 #ifdef arch_vm_assist_valid_mask
 long do_vm_assist(unsigned int cmd, unsigned int type)

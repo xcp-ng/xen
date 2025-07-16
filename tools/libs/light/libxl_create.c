@@ -405,7 +405,7 @@ int libxl__domain_build_info_setdefault(libxl__gc *gc,
 
         libxl_defbool_setdefault(&b_info->apic,                     true);
         libxl_defbool_setdefault(&b_info->nested_hvm,               false);
-    }
+   }
 
     if (b_info->max_grant_version == LIBXL_MAX_GRANT_DEFAULT) {
         if (info.cap_gnttab_v2)
@@ -2381,6 +2381,7 @@ int libxl_domain_create_restore(libxl_ctx *ctx, libxl_domain_config *d_config,
      * configuration.
      */
     libxl_defbool_setdefault(&d_config->b_info.arch_x86.msr_relaxed, true);
+    libxl_defbool_setdefault(&d_config->b_info.arch_x86.fixed_mem_layout, false);
     libxl_defbool_setdefault(&d_config->b_info.u.hvm.pirq, true);
 
     return do_domain_create(ctx, d_config, domid, restore_fd, send_back_fd,

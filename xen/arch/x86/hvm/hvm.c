@@ -12,6 +12,7 @@
 #include <xen/domain.h>
 #include <xen/domain_page.h>
 #include <xen/event.h>
+#include <xen/fastabi.h>
 #include <xen/guest_access.h>
 #include <xen/hypercall.h>
 #include <xen/init.h>
@@ -4506,7 +4507,7 @@ static int hvmop_get_param(struct xen_hvm_param *op)
 
     rc = -EINVAL;
     if ( is_hvm_domain(d) && !(rc = hvm_get_param(d, op->index, &op->value)) )
-        HVM_DBG_LOG(DBG_LEVEL_HCALL, "get param %u = %"PRIx64, a.index, a.value);
+        HVM_DBG_LOG(DBG_LEVEL_HCALL, "get param %u = %"PRIx64, op->index, op->value);
 
     rcu_unlock_domain(d);
     return rc;
@@ -5208,6 +5209,79 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE_PARAM(void) arg)
                                            op, arg);
 
     return rc;
+}
+
+void do_hvm_fast_op(struct cpu_user_regs *regs)
+{
+    long rc = 0;
+    unsigned long op = fastabi_value_n(regs, 1);
+
+    switch ( op )
+    {
+    case HVMOP_set_evtchn_upcall_vector:
+    {
+        struct xen_hvm_evtchn_upcall_vector op = {
+            .vcpu = fastabi_value_n(regs, 2),
+            .vector = fastabi_value_n(regs, 3),
+        };
+
+        rc = hvmop_set_evtchn_upcall_vector(op);
+        break;
+    }
+
+    case HVMOP_set_param:
+    {
+        struct xen_hvm_param op = {
+            .domid = fastabi_value_n(regs, 2),
+            .index = fastabi_value_n(regs, 3),
+            .value = fastabi_value_n(regs, 4),
+        };
+
+        rc = hvmop_set_param(op);
+        break;
+    }
+
+    case HVMOP_get_param:
+    {
+        struct xen_hvm_param op = {
+            .domid = fastabi_value_n(regs, 2),
+            .index = fastabi_value_n(regs, 3),
+        };
+
+        rc = hvmop_get_param(&op);
+        if ( !rc )
+            fastabi_value_n(regs, 4) = op.value;
+        break;
+    }
+
+    case HVMOP_flush_tlbs:
+        rc = hvmop_flush_tlb_all();
+        break;
+
+    case HVMOP_get_time:
+        fastabi_value_n(regs, 2) = NOW();
+        break;
+    
+    case HVMOP_get_mem_type:
+    {
+        struct xen_hvm_get_mem_type op = {
+            .domid = fastabi_value_n(regs, 2),
+            .pfn = fastabi_value_n(regs, 3),
+        };
+
+        rc = hvmop_get_mem_type(&op);
+
+        if ( !rc )
+            fastabi_value_n(regs, 4) = op.mem_type;
+        break;
+    }
+
+    default:
+        rc = -ENOSYS;
+        break;
+    }
+
+    fastabi_value_n(regs, 0) = rc;
 }
 
 int hvm_debug_op(struct vcpu *v, int32_t op)

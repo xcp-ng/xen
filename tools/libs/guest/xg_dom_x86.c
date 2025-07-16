@@ -627,6 +627,82 @@ static void build_hvm_info(void *hvm_info_page, struct xc_dom_image *dom)
     hvm_info->checksum = -sum;
 }
 
+/* Prepare special (shared_info, grant table, ...) regions marked in E820. */
+static int prepare_fixed_special_regions(xc_interface *xch, struct xc_dom_image *dom)
+{
+    int rc = 0; unsigned int i;
+    uint32_t domid = dom->guest_domid;
+    gnttab_query_size_t gnttab_query;
+    size_t gnttab_frame_count, gnttab_status_frame_count;
+    
+    gnttab_query.dom = domid;
+    rc = xc_gnttab_query_size(xch, &gnttab_query);
+
+    if ( rc != 0 || gnttab_query.status != GNTST_okay )
+    {
+        DOMPRINTF("Unable to query grant table size.");
+        return rc;
+    }
+
+    gnttab_frame_count = gnttab_query.max_nr_frames;
+    gnttab_status_frame_count = DIV_ROUNDUP(
+        gnttab_frame_count * (XC_DOM_PAGE_SIZE(dom) / sizeof(grant_entry_v2_t)),
+        XC_DOM_PAGE_SIZE(dom) / sizeof(grant_status_t));
+
+    for ( i = 0; i < dom->e820_entries; i++ )
+    {
+        struct e820entry entry = dom->e820[i];
+        rc = 0;
+
+        switch ( entry.type ) {
+        case XEN_HVM_MEMMAP_TYPE_SHARED_INFO:
+            rc = xc_domain_add_to_physmap(xch, domid, XENMAPSPACE_shared_info,
+                                          0, entry.addr >> PAGE_SHIFT);
+            break;
+        case XEN_HVM_MEMMAP_TYPE_GRANT_TABLE:
+            if ( gnttab_frame_count != entry.size >> PAGE_SHIFT )
+            {
+                DOMPRINTF("Invalid grant table memmap region size");
+                return -EINVAL;
+            }
+
+            for ( i = 0; i < gnttab_frame_count; i++ )
+            {
+                rc = xc_domain_add_to_physmap(xch, domid, XENMAPSPACE_grant_table, i,
+                                              (entry.addr >> PAGE_SHIFT) + i);
+                
+                if ( rc !=  0 )
+                    break;
+            }
+            break;
+        case XEN_HVM_MEMMAP_TYPE_GNTTAB_STATUS:
+        {
+            if ( gnttab_status_frame_count != entry.size >> PAGE_SHIFT )
+            {
+                DOMPRINTF("Invalid grant table status memmap region size");
+                return -EINVAL;
+            }
+
+            for ( i = 0; i < gnttab_status_frame_count; i++ )
+            {
+                rc = xc_domain_add_to_physmap(xch, domid, XENMAPSPACE_grant_table,
+                                              i | XENMAPIDX_grant_table_status,
+                                              (entry.addr >> PAGE_SHIFT) + i);
+                
+                if ( rc !=  0 )
+                    break;
+            }
+            break;
+        }
+        }
+
+        if ( rc != 0 )
+            break;
+    }
+
+    return rc;
+}
+
 static int alloc_magic_pages_hvm(struct xc_dom_image *dom)
 {
     unsigned long i;
@@ -718,6 +794,14 @@ static int alloc_magic_pages_hvm(struct xc_dom_image *dom)
     if ( rc != 0 )
     {
         DOMPRINTF("Unable to reserve memory for the start info");
+        goto out;
+    }
+
+    rc = prepare_fixed_special_regions(xch, dom);
+
+    if ( rc != 0 )
+    {
+        DOMPRINTF("Unable to prepare fixed special regions");
         goto out;
     }
 

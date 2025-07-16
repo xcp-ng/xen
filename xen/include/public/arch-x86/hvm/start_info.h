@@ -99,6 +99,15 @@
 #define XEN_HVM_MEMMAP_TYPE_DISABLED  6
 #define XEN_HVM_MEMMAP_TYPE_PMEM      7
 
+/* Xen-specific types (OEM-specific range of the ACPI spec) */
+#define XEN_HVM_MEMMAP_TYPE_SHARED_INFO   0xF0000001 /* Shared info page */
+#define XEN_HVM_MEMMAP_TYPE_GRANT_TABLE   0xF0000002 /* Grant table pages */
+#define XEN_HVM_MEMMAP_TYPE_GNTTAB_STATUS 0xF0000003 /* Grant table status page (v2) */
+#define XEN_HVM_MEMMAP_TYPE_FOREIGN_REG   0xF0000004 /* Suitable region for grant mappings */
+                                                     /* and foreign mappings */
+/* For the future :) */
+#define XEN_HVM_MEMMAP_TYPE_HOTPLUG_ZONE  0xF0000005 /* Memory hotpluggable zone */
+
 /*
  * C representation of the x86/HVM start info layout.
  *

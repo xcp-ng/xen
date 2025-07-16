@@ -11,6 +11,7 @@
 #include <xen/version.h>
 #include <xen/sched.h>
 #include <xen/paging.h>
+#include <xen/fastabi.h>
 #include <xen/guest_access.h>
 #include <xen/hypercall.h>
 #include <xen/hypfs.h>
@@ -765,6 +766,35 @@ long do_xen_version(int cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
 
     return -ENOSYS;
 }
+
+#ifdef CONFIG_FASTABI
+void do_xen_version_fast_op(struct cpu_user_regs *regs)
+{
+    long cmd = fastabi_value_n(regs, 1);
+    long rc = 0;
+
+    switch ( cmd ) {
+    case XENVER_version:
+        rc = (xen_major_version() << 16) | xen_minor_version();
+        break;
+    case XENVER_get_features:
+    {
+        uint32_t submap = 0, submap_idx = fastabi_value_n(regs, 2);
+
+        rc = xenver_get_features(current->domain, submap_idx, &submap);
+
+        if ( !rc )
+            fastabi_value_n(regs, 3) = submap;
+        break;
+    }
+    default:
+        rc = -ENOSYS;
+        break;
+    }
+
+    fastabi_value_n(regs, 0) = rc;
+}
+#endif
 
 /*
  * Local variables:

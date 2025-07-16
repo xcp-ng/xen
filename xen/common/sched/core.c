@@ -21,6 +21,7 @@
 #include <xen/domain.h>
 #include <xen/delay.h>
 #include <xen/event.h>
+#include <xen/fastabi.h>
 #include <xen/time.h>
 #include <xen/timer.h>
 #include <xen/perfc.h>
@@ -1446,20 +1447,12 @@ void vcpu_block_enable_events(void)
     vcpu_block();
 }
 
-static long do_poll(const struct sched_poll *sched_poll)
+static long vcpu_poll(unsigned int nr_ports, uint64_t timeout, evtchn_port_t *ports)
 {
     struct vcpu   *v = current;
     struct domain *d = v->domain;
-    evtchn_port_t  port = 0;
     long           rc;
     unsigned int   i;
-
-    /* Fairly arbitrary limit. */
-    if ( sched_poll->nr_ports > 128 )
-        return -EINVAL;
-
-    if ( !guest_handle_okay(sched_poll->ports, sched_poll->nr_ports) )
-        return -EFAULT;
 
     set_bit(_VPF_blocked, &v->pause_flags);
     v->poll_evtchn = -1;
@@ -1487,13 +1480,9 @@ static long do_poll(const struct sched_poll *sched_poll)
     if ( local_events_need_delivery() )
         goto out;
 
-    for ( i = 0; i < sched_poll->nr_ports; i++ )
+    for ( i = 0; i < nr_ports; i++ )
     {
-        rc = -EFAULT;
-        if ( __copy_from_guest_offset(&port, sched_poll->ports, i, 1) )
-            goto out;
-
-        rc = evtchn_port_poll(d, port);
+        rc = evtchn_port_poll(d, ports[i]);
         if ( rc )
         {
             if ( rc > 0 )
@@ -1502,11 +1491,11 @@ static long do_poll(const struct sched_poll *sched_poll)
         }
     }
 
-    if ( sched_poll->nr_ports == 1 )
-        v->poll_evtchn = port;
+    if ( nr_ports == 1 )
+        v->poll_evtchn = ports[0];
 
-    if ( sched_poll->timeout != 0 )
-        set_timer(&v->poll_timer, sched_poll->timeout);
+    if ( timeout != 0 )
+        set_timer(&v->poll_timer, timeout);
 
     TRACE_TIME(TRC_SCHED_BLOCK, d->domain_id, v->vcpu_id);
     raise_softirq(SCHEDULE_SOFTIRQ);
@@ -1518,6 +1507,20 @@ static long do_poll(const struct sched_poll *sched_poll)
     clear_bit(v->vcpu_id, d->poll_mask);
     clear_bit(_VPF_blocked, &v->pause_flags);
     return rc;
+}
+
+static long do_poll(struct sched_poll *sched_poll)
+{
+    evtchn_port_t ports[128];
+
+    /* Fairly arbitrary limit */
+    if ( sched_poll->nr_ports > 128 )
+        return -EINVAL;
+
+    if ( copy_from_guest(ports, sched_poll->ports, sched_poll->nr_ports) )
+        return -EFAULT;
+
+    return vcpu_poll(sched_poll->nr_ports, sched_poll->timeout, ports);
 }
 
 /* Voluntarily yield the processor for this allocation. */
@@ -1902,6 +1905,110 @@ void domain_update_node_aff(struct domain *d, struct affinity_masks *affinity)
 
 typedef long ret_t;
 
+#ifdef CONFIG_FASTABI
+void do_sched_fast_op(struct cpu_user_regs *regs)
+{
+    long ret = 0;
+    unsigned long cmd = fastabi_value_n(regs, 1);
+
+    switch ( cmd )
+    {
+    case SCHEDOP_yield:
+    {
+        ret = vcpu_yield();
+        break;
+    }
+
+    case SCHEDOP_block:
+    {
+        vcpu_block_enable_events();
+        break;
+    }
+
+    case SCHEDOP_shutdown:
+    {
+        struct sched_shutdown sched_shutdown = {
+            .reason = fastabi_value_n(regs, 2)
+        };
+
+        TRACE_TIME(TRC_SCHED_SHUTDOWN, current->domain->domain_id,
+                   current->vcpu_id, sched_shutdown.reason);
+        ret = domain_shutdown(current->domain, (u8)sched_shutdown.reason);
+
+        break;
+    }
+
+    case SCHEDOP_shutdown_code:
+    {
+        struct sched_shutdown sched_shutdown = {
+            .reason = fastabi_value_n(regs, 2)
+        };
+        struct domain *d = current->domain;
+
+        TRACE_TIME(TRC_SCHED_SHUTDOWN_CODE, d->domain_id, current->vcpu_id,
+                   sched_shutdown.reason);
+
+        spin_lock(&d->shutdown_lock);
+        if ( d->shutdown_code == SHUTDOWN_CODE_INVALID )
+            d->shutdown_code = (u8)sched_shutdown.reason;
+        spin_unlock(&d->shutdown_lock);
+
+        ret = 0;
+        break;
+    }
+
+    case SCHEDOP_poll:
+    {
+        uint64_t timeout = fastabi_value_n(regs, 2);
+        evtchn_port_t port = fastabi_value_n(regs, 3);
+
+        ret = vcpu_poll(1, timeout, &port);
+
+        break;
+    }
+
+    case SCHEDOP_watchdog:
+    {
+        struct sched_watchdog sched_watchdog = {
+            .id = fastabi_value_n(regs, 2),
+            .timeout = fastabi_value_n(regs, 3)
+        };
+
+        ret = domain_watchdog(
+            current->domain, sched_watchdog.id, sched_watchdog.timeout);
+        break;
+    }
+
+    case SCHEDOP_pin_override:
+    {
+        struct sched_pin_override sched_pin_override = {
+            .pcpu = fastabi_value_n(regs, 2),
+        };
+        unsigned int cpu;
+
+        ret = -EPERM;
+        if ( !is_hardware_domain(current->domain) )
+            break;
+
+        ret = -EINVAL;
+        if ( sched_pin_override.pcpu >= NR_CPUS )
+           break;
+
+        cpu = sched_pin_override.pcpu < 0 ? NR_CPUS : sched_pin_override.pcpu;
+        ret = vcpu_temporary_affinity(current, cpu, VCPU_AFFINITY_OVERRIDE);
+
+        break;
+    }
+
+    default:
+        ret = -ENOSYS;
+        break;
+    }
+
+    fastabi_value_n(regs, 0) = ret;
+}
+#endif
+
 #endif /* !COMPAT */
 
 ret_t do_sched_op(int cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
@@ -1967,7 +2074,6 @@ ret_t do_sched_op(int cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
             break;
 
         ret = do_poll(&sched_poll);
-
         break;
     }
 

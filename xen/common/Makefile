@@ -63,6 +63,7 @@ obj-y += vsprintf.o
 obj-$(CONFIG_VM_EVENT) += wait.o
 obj-bin-y += warning.init.o
 obj-y += xmalloc_tlsf.o
+obj-$(CONFIG_FASTABI) += fastabi.o
 
 obj-bin-$(CONFIG_X86) += $(foreach n,decompress bunzip2 unxz unlzma lzo unlzo unlz4 unzstd,$(n).init.o)
 

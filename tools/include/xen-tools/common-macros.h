@@ -71,6 +71,10 @@
 #define ROUNDUP(x, a) (((x) + (a) - 1) & ~((a) - 1))
 #define ROUNDDOWN(x, a) ((x) & ~((a) - 1))
 
+#ifndef DIV_ROUNDUP
+#define DIV_ROUNDUP(n, d) (((n) + (d) - 1) / (d))
+#endif
+
 #define MASK_EXTR(v, m) (((v) & (m)) / ((m) & -(m)))
 #define MASK_INSR(v, m) (((v) * ((m) & -(m))) & (m))
 

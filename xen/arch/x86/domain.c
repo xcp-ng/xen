@@ -21,6 +21,7 @@
 #include <xen/event.h>
 #include <xen/grant_table.h>
 #include <xen/guest_access.h>
+#include <xen/fastabi.h>
 #include <xen/hypercall.h>
 #include <xen/init.h>
 #include <xen/iocap.h>
@@ -1766,6 +1767,72 @@ long do_vcpu_op(int cmd, unsigned int vcpuid, XEN_GUEST_HANDLE_PARAM(void) arg)
 
     return rc;
 }
+
+#ifdef CONFIG_FASTABI
+void do_vcpu_fast_op(struct cpu_user_regs *regs)
+{
+    long rc = 0;
+    struct domain *d = current->domain;
+    struct vcpu *v;
+
+    unsigned long cmd = fastabi_value_n(regs, 1);
+    unsigned long vcpuid = fastabi_value_n(regs, 2);
+
+    if ( (v = domain_vcpu(d, vcpuid)) == NULL )
+    {
+        fastabi_value_n(regs, 0) = -ENOENT;
+        return;
+    }
+
+    switch ( cmd )
+    {
+    case VCPUOP_send_nmi:
+        if ( !test_and_set_bool(v->arch.nmi_pending) )
+            vcpu_kick(v);
+        break;
+
+    case VCPUOP_register_vcpu_time_phys_area:
+    {
+        struct vcpu_register_time_memory_area area = {
+            .addr.p = fastabi_value_n(regs, 3)
+        };
+
+        rc = -ENOSYS;
+        if ( 0 /* TODO: Dom's XENFEAT_vcpu_time_phys_area setting */ )
+            break;
+
+        rc = map_guest_area(v, area.addr.p,
+                            sizeof(vcpu_time_info_t),
+                            &v->arch.time_guest_area,
+                            time_area_populate);
+        break;
+    }
+
+    case VCPUOP_get_physid:
+    {
+        rc = -EINVAL;
+        if ( !is_hwdom_pinned_vcpu(v) )
+            break;
+
+        fastabi_value_n(regs, 3) =
+            (uint64_t)x86_cpu_to_apicid[v->vcpu_id] |
+            ((uint64_t)acpi_get_processor_id(v->vcpu_id) << 32);
+
+        rc = 0;
+        break;
+    }
+
+    default:
+        rc = common_vcpu_fast_op(regs, cmd, v);
+        break;
+    }
+
+    if ( rc == -ERESTART )
+        fastabi_make_continuation();
+    else
+        fastabi_value_n(regs, 0) = rc;
+}
+#endif
 
 /*
  * Notes on PV segment handling:
