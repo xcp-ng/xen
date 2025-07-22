@@ -260,6 +260,20 @@ static inline void vcpu_urgent_count_update(struct vcpu *v)
     }
 }
 
+/*
+ * For accounting purposes, we need to know whether a vCPU is (or was just)
+ * running outside of the soft affinity mask of the scheduling unit. We check
+ * this in the vcpu_runstate_get() and the vcpu_runstate_change() functions.
+ *
+ * This is used to account for the time spent running non-affine.
+ */
+static inline bool is_running_nonaffine(const struct vcpu *v,
+                                        const struct sched_unit *unit)
+{
+    return v->runstate.state == RUNSTATE_running && has_soft_affinity(unit) &&
+           !cpumask_test_cpu(v->processor, unit->cpu_soft_affinity);
+}
+
 static inline void vcpu_runstate_change(
     struct vcpu *v, int new_state, s_time_t new_entry_time)
 {
@@ -284,6 +298,10 @@ static inline void vcpu_runstate_change(
     if ( delta > 0 )
     {
         v->runstate.time[v->runstate.state] += delta;
+
+        if ( is_running_nonaffine(v, unit) )
+            v->runstate_extra.nonaffine_time += delta;
+
         v->runstate.state_entry_time = new_entry_time;
     }
 
@@ -304,12 +322,25 @@ void sched_guest_idle(void (*idle) (void), unsigned int cpu)
     atomic_dec(&per_cpu(sched_urgent_count, cpu));
 }
 
-void vcpu_runstate_get(const struct vcpu *v,
-                       struct vcpu_runstate_info *runstate)
+/**
+ * vcpu_runstate_get(): Return vCPU time spent in different runstates
+ *
+ * @param v:        vCPU to get runstate times (since vCPU start)
+ * @param runstate: Return time spent in each runstate.
+ *                  This structure is part of the runstate memory areas
+ *                  shared with the domains which is part of the ABI
+ *                  with domains that is frozen and cannot be changed.
+ *                  To return additional values, use e.g. the return
+ *                  value(no need to change all callers) of this function.
+ * @returns         struct with non-affine running time since vcpu creation
+ */
+struct vcpu_runstate_extra vcpu_runstate_get(
+    const struct vcpu *v, struct vcpu_runstate_info *runstate)
 {
     spinlock_t *lock;
     s_time_t delta;
     struct sched_unit *unit;
+    struct vcpu_runstate_extra ret;
 
     rcu_read_lock(&sched_res_rculock);
 
@@ -323,14 +354,23 @@ void vcpu_runstate_get(const struct vcpu *v,
                            : v->sched_unit;
     lock = likely(v == current) ? NULL : unit_schedule_lock_irq(unit);
     memcpy(runstate, &v->runstate, sizeof(*runstate));
+    ret = v->runstate_extra;
+
     delta = NOW() - runstate->state_entry_time;
     if ( delta > 0 )
+    {
         runstate->time[runstate->state] += delta;
+
+        if ( is_running_nonaffine(v, unit) )
+            ret.nonaffine_time += delta;
+    }
 
     if ( unlikely(lock != NULL) )
         unit_schedule_unlock_irq(lock, unit);
 
     rcu_read_unlock(&sched_res_rculock);
+
+    return ret;
 }
 
 uint64_t get_cpu_idle_time(unsigned int cpu)
