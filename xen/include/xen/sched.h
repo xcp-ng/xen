@@ -206,6 +206,13 @@ struct vcpu
     struct seqcount  runstate_seq;
     unsigned int     new_state;
 
+    /* Accessed under runstate_seq */
+    struct vcpu_runstate_extra {
+        uint64_t nonaffine_time; /* Time running outside soft_affinity mask */
+    } runstate_extra;
+    /* Signal whether the vCPU is running on a non-affine CPU */
+    bool is_running_nonaffine;
+
     /* Has the FPU been initialised? */
     bool             fpu_initialised;
     /* Has the FPU been used since it was last saved? */
@@ -1042,8 +1049,8 @@ int vcpu_set_hard_affinity(struct vcpu *v, const cpumask_t *affinity);
 int vcpu_affinity_domctl(struct domain *d, uint32_t cmd,
                          struct xen_domctl_vcpuaffinity *vcpuaff);
 
-void vcpu_runstate_get(const struct vcpu *v,
-                       struct vcpu_runstate_info *runstate);
+struct vcpu_runstate_extra vcpu_runstate_get(
+    const struct vcpu *v, struct vcpu_runstate_info *runstate);
 uint64_t vcpu_runstate_get_running(const struct vcpu *v);
 uint64_t get_cpu_idle_time(unsigned int cpu);
 void sched_guest_idle(void (*idle) (void), unsigned int cpu);
