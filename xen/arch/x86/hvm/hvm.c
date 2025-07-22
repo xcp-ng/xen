@@ -4102,18 +4102,13 @@ static int hvmop_flush_tlb_all(void)
     return paging_flush_tlb(NULL) ? 0 : -ERESTART;
 }
 
-static int hvmop_set_evtchn_upcall_vector(
-    XEN_GUEST_HANDLE_PARAM(xen_hvm_evtchn_upcall_vector_t) uop)
+static int hvmop_set_evtchn_upcall_vector(xen_hvm_evtchn_upcall_vector_t op)
 {
-    xen_hvm_evtchn_upcall_vector_t op;
     struct domain *d = current->domain;
     struct vcpu *v;
 
     if ( !is_hvm_domain(d) )
         return -EINVAL;
-
-    if ( copy_from_guest(&op, uop, 1) )
-        return -EFAULT;
 
     if ( op.vector < 0x10 )
         return -EINVAL;
@@ -4392,26 +4387,21 @@ static int hvm_set_param(struct domain *d, uint32_t index, uint64_t value)
     return rc;
 }
 
-static int hvmop_set_param(
-    XEN_GUEST_HANDLE_PARAM(xen_hvm_param_t) arg)
+static int hvmop_set_param(struct xen_hvm_param op)
 {
-    struct xen_hvm_param a;
     struct domain *d;
     int rc;
 
-    if ( copy_from_guest(&a, arg, 1) )
-        return -EFAULT;
-
-    if ( a.index >= HVM_NR_PARAMS )
+    if ( op.index >= HVM_NR_PARAMS )
         return -EINVAL;
 
-    d = rcu_lock_domain_by_any_id(a.domid);
+    d = rcu_lock_domain_by_any_id(op.domid);
     if ( d == NULL )
         return -ESRCH;
 
     rc = -EINVAL;
     if ( is_hvm_domain(d) )
-        rc = hvm_set_param(d, a.index, a.value);
+        rc = hvm_set_param(d, op.index, op.value);
 
     rcu_unlock_domain(d);
     return rc;
@@ -4502,31 +4492,21 @@ int hvm_get_param(struct domain *d, uint32_t index, uint64_t *value)
     return 0;
 };
 
-static int hvmop_get_param(
-    XEN_GUEST_HANDLE_PARAM(xen_hvm_param_t) arg)
+static int hvmop_get_param(struct xen_hvm_param *op)
 {
-    struct xen_hvm_param a;
     struct domain *d;
     int rc;
 
-    if ( copy_from_guest(&a, arg, 1) )
-        return -EFAULT;
-
-    if ( a.index >= HVM_NR_PARAMS )
+    if ( op->index >= HVM_NR_PARAMS )
         return -EINVAL;
 
-    d = rcu_lock_domain_by_any_id(a.domid);
+    d = rcu_lock_domain_by_any_id(op->domid);
     if ( d == NULL )
         return -ESRCH;
 
     rc = -EINVAL;
-    if ( is_hvm_domain(d) && !(rc = hvm_get_param(d, a.index, &a.value)) )
-    {
-        rc = __copy_to_guest(arg, &a, 1) ? -EFAULT : 0;
-
-        HVM_DBG_LOG(DBG_LEVEL_HCALL, "get param %u = %"PRIx64,
-                    a.index, a.value);
-    }
+    if ( is_hvm_domain(d) && !(rc = hvm_get_param(d, op->index, &op->value)) )
+        HVM_DBG_LOG(DBG_LEVEL_HCALL, "get param %u = %"PRIx64, a.index, a.value);
 
     rcu_unlock_domain(d);
     return rc;
@@ -5032,18 +5012,13 @@ static int compat_altp2m_op(
     return rc;
 }
 
-static int hvmop_get_mem_type(
-    XEN_GUEST_HANDLE_PARAM(xen_hvm_get_mem_type_t) arg)
+static int hvmop_get_mem_type(struct xen_hvm_get_mem_type *op)
 {
-    struct xen_hvm_get_mem_type a;
     struct domain *d;
     p2m_type_t t;
     int rc;
 
-    if ( copy_from_guest(&a, arg, 1) )
-        return -EFAULT;
-
-    d = rcu_lock_domain_by_any_id(a.domid);
+    d = rcu_lock_domain_by_any_id(op->domid);
     if ( d == NULL )
         return -ESRCH;
 
@@ -5060,25 +5035,22 @@ static int hvmop_get_mem_type(
      * type, not in allocating or unsharing. That'll happen
      * on access.
      */
-    get_gfn_query_unlocked(d, a.pfn, &t);
+    get_gfn_query_unlocked(d, op->pfn, &t);
     if ( p2m_is_mmio(t) )
-        a.mem_type =  HVMMEM_mmio_dm;
+        op->mem_type =  HVMMEM_mmio_dm;
     else if ( t == p2m_ioreq_server )
-        a.mem_type = HVMMEM_ioreq_server;
+        op->mem_type = HVMMEM_ioreq_server;
     else if ( p2m_is_readonly(t) )
-        a.mem_type =  HVMMEM_ram_ro;
+        op->mem_type =  HVMMEM_ram_ro;
     else if ( p2m_is_ram(t) )
-        a.mem_type =  HVMMEM_ram_rw;
+        op->mem_type =  HVMMEM_ram_rw;
     else if ( p2m_is_pod(t) )
-        a.mem_type =  HVMMEM_ram_rw;
+        op->mem_type =  HVMMEM_ram_rw;
     else if ( p2m_is_grant(t) )
-        a.mem_type =  HVMMEM_ram_rw;
+        op->mem_type =  HVMMEM_ram_rw;
     else
-        a.mem_type =  HVMMEM_mmio_dm;
+        op->mem_type =  HVMMEM_mmio_dm;
 
-    rc = -EFAULT;
-    if ( __copy_to_guest(arg, &a, 1) )
-        goto out;
     rc = 0;
 
  out:
@@ -5101,28 +5073,70 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE_PARAM(void) arg)
     switch ( op )
     {
     case HVMOP_set_evtchn_upcall_vector:
-        rc = hvmop_set_evtchn_upcall_vector(
-            guest_handle_cast(arg, xen_hvm_evtchn_upcall_vector_t));
+    {
+        struct xen_hvm_evtchn_upcall_vector op;
+
+        if ( copy_from_guest(&op, arg, 1) )
+        {
+            rc = -EFAULT;
+            break;
+        }
+
+        rc = hvmop_set_evtchn_upcall_vector(op);
         break;
+    }
     
     case HVMOP_set_param:
-        rc = hvmop_set_param(
-            guest_handle_cast(arg, xen_hvm_param_t));
+    {
+        struct xen_hvm_param op;
+        
+        if ( copy_from_guest(&op, arg, 1) )
+        {
+            rc = -EFAULT;
+            break;
+        }
+
+        rc = hvmop_set_param(op);
         break;
+    }
 
     case HVMOP_get_param:
-        rc = hvmop_get_param(
-            guest_handle_cast(arg, xen_hvm_param_t));
+    {
+        struct xen_hvm_param op;
+        
+        if ( copy_from_guest(&op, arg, 1) )
+        {
+            rc = -EFAULT;
+            break;
+        }
+
+        rc = hvmop_get_param(&op);
+
+        if ( !rc && copy_to_guest(arg, &op, 1) )
+            rc = -EFAULT;
         break;
+    }
 
     case HVMOP_flush_tlbs:
         rc = guest_handle_is_null(arg) ? hvmop_flush_tlb_all() : -EINVAL;
         break;
 
     case HVMOP_get_mem_type:
-        rc = hvmop_get_mem_type(
-            guest_handle_cast(arg, xen_hvm_get_mem_type_t));
+    {
+        struct xen_hvm_get_mem_type op;
+
+        if ( copy_from_guest(&op, arg, 1) )
+        {
+            rc = -EFAULT;
+            break;
+        }
+        
+        rc = hvmop_get_mem_type(&op);
+
+        if ( !rc && copy_to_guest(arg, &op, 1) )
+            rc = -EFAULT;
         break;
+    }
 
     case HVMOP_pagetable_dying:
     {
