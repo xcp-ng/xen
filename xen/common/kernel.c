@@ -563,6 +563,50 @@ static long xenver_varbuf_op(int cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
     return sz;
 }
 
+static long xenver_get_features(struct domain *d, uint32_t submap_idx, uint32_t *submap)
+{
+    switch ( submap_idx )
+    {
+    case 0:
+        *submap = (1U << XENFEAT_memory_op_vnode_supported) |
+#ifdef CONFIG_X86
+                  (1U << XENFEAT_vcpu_time_phys_area) |
+#endif
+                  (1U << XENFEAT_runstate_phys_area);
+        if ( VM_ASSIST(d, pae_extended_cr3) )
+            *submap |= (1U << XENFEAT_pae_pgdir_above_4gb);
+        if ( paging_mode_translate(d) )
+            *submap |=
+                (1U << XENFEAT_writable_page_tables) |
+                (1U << XENFEAT_auto_translated_physmap);
+        if ( is_hardware_domain(d) )
+            *submap |= 1U << XENFEAT_dom0;
+#ifdef CONFIG_ARM
+        *submap |= (1U << XENFEAT_ARM_SMCCC_supported);
+#endif
+#ifdef CONFIG_X86
+        if ( is_pv_domain(d) )
+            *submap |= (1U << XENFEAT_mmu_pt_update_preserve_ad) |
+                       (1U << XENFEAT_highmem_assist) |
+                       (1U << XENFEAT_gnttab_map_avail_bits);
+        else
+            *submap |= (1U << XENFEAT_hvm_safe_pvclock) |
+                       (1U << XENFEAT_hvm_callback_vector) |
+                       (has_pirq(d) ? (1U << XENFEAT_hvm_pirqs) : 0);
+        *submap |= (1U << XENFEAT_dm_msix_all_writes);
+#endif
+        if ( !paging_mode_translate(d) || is_domain_direct_mapped(d) )
+            *submap |= (1U << XENFEAT_direct_mapped);
+        else
+            *submap |= (1U << XENFEAT_not_direct_mapped);
+        break;
+    default:
+        return -EINVAL;
+    }
+
+    return 0;
+}
+
 long do_xen_version(int cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
 {
     bool deny = xsm_xen_version(XSM_OTHER, cmd);
@@ -669,45 +713,9 @@ long do_xen_version(int cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
         if ( copy_from_guest(&fi, arg, 1) )
             return -EFAULT;
 
-        switch ( fi.submap_idx )
-        {
-        case 0:
-            fi.submap = (1U << XENFEAT_memory_op_vnode_supported) |
-#ifdef CONFIG_X86
-                        (1U << XENFEAT_vcpu_time_phys_area) |
-#endif
-                        (1U << XENFEAT_runstate_phys_area);
-            if ( VM_ASSIST(d, pae_extended_cr3) )
-                fi.submap |= (1U << XENFEAT_pae_pgdir_above_4gb);
-            if ( paging_mode_translate(d) )
-                fi.submap |=
-                    (1U << XENFEAT_writable_page_tables) |
-                    (1U << XENFEAT_auto_translated_physmap);
-            if ( is_hardware_domain(d) )
-                fi.submap |= 1U << XENFEAT_dom0;
-#ifdef CONFIG_ARM
-            fi.submap |= (1U << XENFEAT_ARM_SMCCC_supported);
-#endif
-#ifdef CONFIG_X86
-            if ( is_pv_domain(d) )
-                fi.submap |= (1U << XENFEAT_mmu_pt_update_preserve_ad) |
-                             (1U << XENFEAT_highmem_assist) |
-                             (1U << XENFEAT_gnttab_map_avail_bits);
-            else
-                fi.submap |= (1U << XENFEAT_hvm_safe_pvclock) |
-                             (1U << XENFEAT_hvm_callback_vector) |
-                             (has_pirq(d) ? (1U << XENFEAT_hvm_pirqs) : 0);
-            fi.submap |= (1U << XENFEAT_dm_msix_all_writes);
-#endif
-            if ( !paging_mode_translate(d) || is_domain_direct_mapped(d) )
-                fi.submap |= (1U << XENFEAT_direct_mapped);
-            else
-                fi.submap |= (1U << XENFEAT_not_direct_mapped);
-            break;
-        default:
+        if ( xenver_get_features(d, fi.submap_idx, &fi.submap) )
             return -EINVAL;
-        }
-
+            
         if ( __copy_to_guest(arg, &fi, 1) )
             return -EFAULT;
         return 0;
