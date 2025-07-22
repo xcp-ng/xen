@@ -259,6 +259,17 @@ static inline void vcpu_urgent_count_update(struct vcpu *v)
     }
 }
 
+/*
+ * For accounting purposes, we need to know whether a vCPU is (or was just)
+ * running outside of the soft affinity mask of the scheduling unit.
+ */
+static inline bool is_running_nonaffine(const struct vcpu *v,
+                                        const struct sched_unit *unit)
+{
+    return v->runstate.state == RUNSTATE_running && has_soft_affinity(unit) &&
+           !cpumask_test_cpu(v->processor, unit->cpu_soft_affinity);
+}
+
 static inline void vcpu_runstate_change(
     struct vcpu *v, int new_state, s_time_t new_entry_time)
 {
@@ -284,9 +295,15 @@ static inline void vcpu_runstate_change(
     /* Serialization: ->schedule_lock (see ASSERT() above). */
     with_seq_write(&v->runstate_seq)
     {
+        v->is_running_nonaffine = is_running_nonaffine(v, unit);
+
         if ( delta > 0 )
         {
             v->runstate.time[v->runstate.state] += delta;
+
+            if ( v->is_running_nonaffine )
+                v->runstate_extra.nonaffine_time += delta;
+
             v->runstate.state_entry_time = new_entry_time;
         }
 
@@ -308,21 +325,41 @@ void sched_guest_idle(void (*idle) (void), unsigned int cpu)
     atomic_dec(&per_cpu(sched_urgent_count, cpu));
 }
 
-void vcpu_runstate_get(const struct vcpu *v,
-                       struct vcpu_runstate_info *runstate)
+/**
+ * vcpu_runstate_get(): Return vCPU time spent in different runstates
+ *
+ * @param v:        vCPU to get runstate times (since vCPU start)
+ * @param runstate: Return time spent in each runstate.
+ *                  This structure is part of the runstate memory areas
+ *                  shared with the domains which is part of the ABI
+ *                  with domains that is frozen and cannot be changed.
+ *                  To return additional values, use e.g. the return
+ *                  value(no need to change all callers) of this function.
+ * @returns         struct with non-affine running time since vcpu creation
+ */
+struct vcpu_runstate_extra vcpu_runstate_get(
+    const struct vcpu *v, struct vcpu_runstate_info *runstate)
 {
     struct seqcount seq = SEQCNT_ZERO();
     const struct seqcount *s = likely(v == current) ? &seq : &v->runstate_seq;
+    struct vcpu_runstate_extra ret;
 
     until_seq_read(s)
     {
         s_time_t delta;
 
         *runstate = v->runstate;
+        ret = v->runstate_extra;
         delta = NOW() - runstate->state_entry_time;
         if ( delta > 0 )
+        {
             runstate->time[runstate->state] += delta;
+            if ( v->is_running_nonaffine )
+                ret.nonaffine_time += delta;
+        }
     }
+
+    return ret;
 }
 
 uint64_t vcpu_runstate_get_running(const struct vcpu *v)
