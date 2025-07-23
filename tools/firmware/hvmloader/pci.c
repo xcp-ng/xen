@@ -62,6 +62,23 @@ static bool check_overlap_all(uint64_t start, uint64_t size)
     return false;
 }
 
+static void adjust_pci_hole_end(void)
+{
+    unsigned int i;
+
+    for ( i = 0; i < memory_map.nr_map; i++ )
+    {
+        if ( memory_map.map[i].type == E820_RESERVED &&
+             check_overlap(pci_mem_end - 1, 0,
+                           memory_map.map[i].addr, memory_map.map[i].size) )
+        {
+            printf("PCI low MMIO hole end adjusted to %x\n",
+                    (uint32_t)memory_map.map[i].addr);
+            pci_mem_end = memory_map.map[i].addr;
+        }
+    }
+}
+
 /* Find the lowest RMRR ending above base but below 4G. */
 static int find_next_rmrr(uint32_t base)
 {
@@ -137,6 +154,13 @@ void pci_setup(void)
                  PCI_COMMAND_MEMORY);
     BUILD_BUG_ON((typeof(*pci_devfn_decode_type))PCI_COMMAND_MASTER !=
                  PCI_COMMAND_MASTER);
+
+    /*
+     * Other components in the system might have reserved memory from the end
+     * of the PCI hole, adjust the usable window by hvmloader to take that into
+     * account.
+     */
+    adjust_pci_hole_end();
 
     s = xenstore_read(HVM_XS_ALLOW_MEMORY_RELOCATE, NULL);
     if ( s )
