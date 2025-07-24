@@ -3164,29 +3164,24 @@ static long gnttab_copy(
     return rc;
 }
 
-static long
-gnttab_set_version(XEN_GUEST_HANDLE_PARAM(gnttab_set_version_t) uop)
+static long gnttab_set_version(gnttab_set_version_t *op)
 {
-    gnttab_set_version_t op;
     struct domain *currd = current->domain;
     struct grant_table *gt = currd->grant_table;
     grant_entry_v1_t reserved_entries[GNTTAB_NR_RESERVED_ENTRIES];
     int res;
     unsigned int i, nr_ents;
 
-    if ( copy_from_guest(&op, uop, 1) )
-        return -EFAULT;
-
     res = -EINVAL;
-    if ( op.version != 1 && op.version != 2 )
+    if ( op->version != 1 && op->version != 2 )
         goto out;
 
     res = -ENOSYS;
-    if ( op.version == 2 && gt->max_version == 1 )
+    if ( op->version == 2 && gt->max_version == 1 )
         goto out; /* Behave as before set_version was introduced. */
 
     res = 0;
-    if ( gt->gt_version == op.version )
+    if ( gt->gt_version == op->version )
         goto out;
 
     grant_write_lock(gt);
@@ -3203,7 +3198,7 @@ gnttab_set_version(XEN_GUEST_HANDLE_PARAM(gnttab_set_version_t) uop)
         {
             gdprintk(XENLOG_WARNING,
                      "tried to change grant table version from %u to %u, but some grant entries still in use\n",
-                     gt->gt_version, op.version);
+                     gt->gt_version, op->version);
             res = -EBUSY;
             goto out_unlock;
         }
@@ -3268,7 +3263,7 @@ gnttab_set_version(XEN_GUEST_HANDLE_PARAM(gnttab_set_version_t) uop)
         break;
     }
 
-    if ( op.version < 2 && gt->gt_version == 2 &&
+    if ( op->version < 2 && gt->gt_version == 2 &&
          (res = gnttab_unpopulate_status_frames(currd, gt)) != 0 )
         goto out_unlock;
 
@@ -3279,7 +3274,7 @@ gnttab_set_version(XEN_GUEST_HANDLE_PARAM(gnttab_set_version_t) uop)
     /* Restore the first 8 entries (toolstack reserved grants). */
     if ( gt->gt_version )
     {
-        switch ( op.version )
+        switch ( op->version )
         {
         case 1:
             memcpy(&shared_entry_v1(gt, 0), reserved_entries, sizeof(reserved_entries));
@@ -3300,16 +3295,14 @@ gnttab_set_version(XEN_GUEST_HANDLE_PARAM(gnttab_set_version_t) uop)
         }
     }
 
-    gt->gt_version = op.version;
+    gt->gt_version = op->version;
 
  out_unlock:
     grant_write_unlock(gt);
 
  out:
-    op.version = gt->gt_version;
+    op->version = gt->gt_version;
 
-    if ( __copy_to_guest(uop, &op, 1) )
-        res = -EFAULT;
 
     return res;
 }
@@ -3387,17 +3380,12 @@ gnttab_get_status_frames(XEN_GUEST_HANDLE_PARAM(gnttab_get_status_frames_t) uop,
     return 0;
 }
 
-static long
-gnttab_get_version(XEN_GUEST_HANDLE_PARAM(gnttab_get_version_t) uop)
+static long gnttab_get_version(gnttab_get_version_t *op)
 {
-    gnttab_get_version_t op;
     struct domain *d;
     int rc;
 
-    if ( copy_from_guest(&op, uop, 1) )
-        return -EFAULT;
-
-    d = rcu_lock_domain_by_any_id(op.dom);
+    d = rcu_lock_domain_by_any_id(op->dom);
     if ( d == NULL )
         return -ESRCH;
 
@@ -3408,12 +3396,9 @@ gnttab_get_version(XEN_GUEST_HANDLE_PARAM(gnttab_get_version_t) uop)
         return rc;
     }
 
-    op.version = d->grant_table->gt_version;
+    op->version = d->grant_table->gt_version;
 
     rcu_unlock_domain(d);
-
-    if ( __copy_field_to_guest(uop, &op, version) )
-        return -EFAULT;
 
     return 0;
 }
@@ -3749,8 +3734,20 @@ long do_grant_table_op(
         break;
 
     case GNTTABOP_set_version:
-        rc = gnttab_set_version(guest_handle_cast(uop, gnttab_set_version_t));
+    {
+        gnttab_set_version_t op;
+        if ( copy_from_guest(&op, uop, 1) )
+        {
+            rc = -EFAULT;
+            break;
+        }
+
+        rc = gnttab_set_version(&op);
+
+        if ( copy_to_guest(uop, &op, 1) )
+            rc = -EFAULT;
         break;
+    }
 
     case GNTTABOP_get_status_frames:
         rc = gnttab_get_status_frames(
@@ -3758,8 +3755,21 @@ long do_grant_table_op(
         break;
 
     case GNTTABOP_get_version:
-        rc = gnttab_get_version(guest_handle_cast(uop, gnttab_get_version_t));
+    {
+        gnttab_get_version_t op;
+
+        if ( copy_from_guest(&op, uop, 1) )
+        {
+            rc = -EFAULT;
+            break;
+        }
+
+        rc = gnttab_get_version(&op);
+
+        if ( copy_to_guest(uop, &op, 1) )
+            rc = -EFAULT;
         break;
+    }
 
     case GNTTABOP_swap_grant_ref:
     {
