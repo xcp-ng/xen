@@ -1426,7 +1426,7 @@ int apply_context_single(struct domain *domain, struct iommu_context *ctx,
     spin_unlock(&iommu->lock);
 
     if ( !seg && !rc )
-        rc = me_wifi_quirk(domain, bus, devfn, did, 0, ctx, prev_ctx);
+        WARN_ON(me_wifi_quirk(domain, bus, devfn, did, 0, ctx, prev_ctx));
 
     return rc;
 
@@ -1446,15 +1446,6 @@ int apply_context(struct domain *d, struct iommu_context *ctx,
 
     if ( !drhd )
         return -EINVAL;
-
-    if ( pdev->type == DEV_TYPE_PCI_HOST_BRIDGE ||
-         pdev->type == DEV_TYPE_PCIe_BRIDGE ||
-         pdev->type == DEV_TYPE_PCIe2PCI_BRIDGE ||
-         pdev->type == DEV_TYPE_LEGACY_PCI_BRIDGE )
-    {
-        printk(XENLOG_WARNING VTDPREFIX " Ignoring apply_context on PCI bridge\n");
-        return 0;
-    }
 
     ASSERT(pcidevs_locked());
 
@@ -1528,8 +1519,8 @@ int unapply_context_single(struct domain *domain, struct vtd_iommu *iommu,
     unmap_vtd_domain_page(context_entries);
 
     if ( !iommu->drhd->segment && !rc )
-        rc = me_wifi_quirk(domain, bus, devfn, DOMID_INVALID, UNMAP_ME_PHANTOM_FUNC,
-                           NULL, prev_ctx);
+        WARN_ON(me_wifi_quirk(domain, bus, devfn, DOMID_INVALID, UNMAP_ME_PHANTOM_FUNC,
+                           NULL, prev_ctx));
 
     if ( rc && !is_hardware_domain(domain) && domain != dom_io )
     {
@@ -1778,30 +1769,9 @@ static bool __init vtd_ept_page_compatible(const struct vtd_iommu *iommu)
             (cap_sps_1gb(vtd_cap) && iommu_superpages);
 }
 
-static int cf_check intel_iommu_enable_device(struct pci_dev *pdev)
-{
-    struct acpi_drhd_unit *drhd = acpi_find_matched_drhd_unit(pdev);
-    int ret = drhd ? ats_device(pdev, drhd) : -ENODEV;
-
-    pci_vtd_quirk(pdev);
-
-    if ( ret <= 0 )
-        return ret;
-
-    ret = enable_ats_device(pdev, &drhd->iommu->ats_devices);
-
-    return ret >= 0 ? 0 : ret;
-}
-
 static int __hwdom_init cf_check setup_hwdom_device(
     u8 devfn, struct pci_dev *pdev)
 {
-    if (pdev->type == DEV_TYPE_PCI_HOST_BRIDGE ||
-        pdev->type == DEV_TYPE_PCIe_BRIDGE ||
-        pdev->type == DEV_TYPE_PCIe2PCI_BRIDGE ||
-        pdev->type == DEV_TYPE_LEGACY_PCI_BRIDGE)
-        return 0;
-
     return iommu_attach_context(hardware_domain, pdev, 0);
 }
 
@@ -2535,7 +2505,7 @@ static int cf_check intel_iommu_detach(struct domain *d, struct pci_dev *pdev,
     int ret, rc;
     const struct acpi_drhd_unit *drhd = acpi_find_matched_drhd_unit(pdev);
 
-    if (!pdev || !drhd)
+    if ( !pdev || !drhd )
         return -EINVAL;
 
     ret = unapply_context_single(d, drhd->iommu, prev_ctx, pdev->bus, pdev->devfn);
@@ -2603,14 +2573,14 @@ static int cf_check intel_iommu_add_devfn(struct domain *d,
 }
 
 static int cf_check intel_iommu_remove_devfn(struct domain *d, struct pci_dev *pdev,
-                                             u16 devfn)
+                                             u16 devfn, struct iommu_context *prev_ctx)
 {
     const struct acpi_drhd_unit *drhd = acpi_find_matched_drhd_unit(pdev);
 
     if ( !pdev || !drhd )
         return -EINVAL;
 
-    return unapply_context_single(d, drhd->iommu, NULL, pdev->bus, devfn);
+    return unapply_context_single(d, drhd->iommu, prev_ctx, pdev->bus, devfn);
 }
 
 static uint64_t cf_check intel_iommu_get_max_iova(struct domain *d)
@@ -2649,7 +2619,6 @@ static const struct iommu_ops __initconst_cf_clobber vtd_ops = {
     .reattach = intel_iommu_reattach,
     .add_devfn = intel_iommu_add_devfn,
     .remove_devfn = intel_iommu_remove_devfn,
-    .enable_device = intel_iommu_enable_device,
     .teardown = iommu_domain_teardown,
     .clear_root_pgtable = iommu_clear_root_pgtable,
     .map_page = intel_iommu_map_page,
