@@ -184,7 +184,7 @@ int __must_check amd_iommu_setup_domain_device(
             rc = amd_iommu_set_root_page_table(
                      dte, page_to_maddr(root_pg), domid,
                      hd->arch.amd.paging_mode, sr_flags);
-        if ( rc < 0 )
+        if ( rc )
         {
             spin_unlock_irqrestore(&iommu->lock, flags);
             return rc;
@@ -235,8 +235,8 @@ int __must_check amd_iommu_setup_domain_device(
     if ( prev_ctx )
     {
         /* Don't underflow the counter. */
-        //BUG_ON(!prev_ctx->arch.amd.iommu_dev_cnt[iommu->index]);
-        prev_ctx->arch.vtd.iommu_dev_cnt[iommu->index]--;
+        BUG_ON(!prev_ctx->arch.amd.iommu_dev_cnt[iommu->index]);
+        prev_ctx->arch.amd.iommu_dev_cnt[iommu->index]--;
     }
 
     ctx->arch.amd.iommu_dev_cnt[iommu->index]++;
@@ -355,8 +355,6 @@ static void amd_iommu_disable_domain_device(const struct domain *domain,
     int req_id;
     u8 bus = pdev->bus;
 
-    printk("Disable %pp", pdev);
-
     ASSERT(pcidevs_locked());
 
     if ( pci_ats_device(iommu->seg, bus, pdev->devfn) &&
@@ -468,13 +466,39 @@ static int cf_check amd_iommu_attach(
     int req_id = get_dma_requestor_id(pdev->seg, pdev->sbdf.bdf);
     struct ivrs_unity_map *map = ivrs_mappings[req_id].unity_map;
     struct amd_iommu *iommu = find_iommu_for_device(pdev->seg, pdev->sbdf.bdf);
+    uint16_t bdf = pdev->sbdf.bdf;
 
-    if ( pdev->type == DEV_TYPE_PCI_HOST_BRIDGE ||
-        pdev->type == DEV_TYPE_PCIe_BRIDGE ||
-        pdev->type == DEV_TYPE_PCIe2PCI_BRIDGE ||
-        pdev->type == DEV_TYPE_LEGACY_PCI_BRIDGE ||
-        !iommu )
+    if ( !iommu )
         return 0;
+
+    if ( iommu_intremap &&
+         ivrs_mappings[bdf].dte_requestor_id == bdf &&
+         !ivrs_mappings[bdf].intremap_table )
+    {
+        unsigned long flags;
+
+        if ( pdev->msix || pdev->msi_maxvec )
+        {
+            ivrs_mappings[bdf].intremap_table =
+                amd_iommu_alloc_intremap_table(
+                    iommu, &ivrs_mappings[bdf].intremap_inuse,
+                    pdev->msix ? pdev->msix->nr_entries
+                               : pdev->msi_maxvec);
+            if ( !ivrs_mappings[bdf].intremap_table )
+                return -ENOMEM;
+        }
+
+        spin_lock_irqsave(&iommu->lock, flags);
+
+        amd_iommu_set_intremap_table(
+            iommu->dev_table.buffer + (bdf * IOMMU_DEV_TABLE_ENTRY_SIZE),
+            ivrs_mappings[bdf].intremap_table, iommu, iommu_intremap);
+
+        spin_unlock_irqrestore(&iommu->lock, flags);
+
+        /* DTE didn't have DMA translations enabled, do not flush the TLB. */
+        amd_iommu_flush_device(iommu, bdf, DOMID_INVALID);
+    }
 
     ret = amd_iommu_reserve_domain_unity_map(d, ctx, map, 0);
     if ( ret )
@@ -490,6 +514,9 @@ static int cf_check amd_iommu_detach(struct domain *d, struct pci_dev *pdev,
     int req_id = get_dma_requestor_id(pdev->seg, pdev->sbdf.bdf);
     struct amd_iommu *iommu = find_iommu_for_device(pdev->seg, pdev->sbdf.bdf);
 
+    if ( !iommu )
+        return 0;
+
     amd_iommu_disable_domain_device(d, iommu, prev_ctx, pdev->devfn, pdev);
 
     return amd_iommu_reserve_domain_unity_unmap(d, prev_ctx, ivrs_mappings[req_id].unity_map);
@@ -500,15 +527,21 @@ static int cf_check amd_iommu_add_devfn(struct domain *d, struct pci_dev *pdev,
 {
     struct amd_iommu *iommu = find_iommu_for_device(pdev->seg, pdev->sbdf.bdf);
 
+    if ( !iommu )
+        return 0;
+
     return amd_iommu_setup_domain_device(d, ctx, iommu, pdev->devfn, pdev, NULL);
 }
 
 static int cf_check amd_iommu_remove_devfn(struct domain *d, struct pci_dev *pdev,
-                                           u16 devfn)
+                                           u16 devfn, struct iommu_context *prev_ctx)
 {
     struct amd_iommu *iommu = find_iommu_for_device(pdev->seg, pdev->sbdf.bdf);
 
-    amd_iommu_disable_domain_device(d, iommu, NULL, pdev->devfn, pdev);
+    if ( !iommu )
+        return 0;
+
+    amd_iommu_disable_domain_device(d, iommu, prev_ctx, pdev->devfn, pdev);
 
     return 0;
 }
@@ -524,10 +557,7 @@ static int cf_check amd_iommu_reattach(struct domain *d,
     struct amd_iommu *iommu = find_iommu_for_device(pdev->seg, pdev->sbdf.bdf);
 
     if ( !iommu )
-    {
-        AMD_IOMMU_DEBUG("No IOMMU ?\n");
         return 0;
-    }
 
     ret = amd_iommu_reserve_domain_unity_map(d, ctx, map, 0);
     if ( ret )

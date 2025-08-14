@@ -426,11 +426,14 @@ void cf_check iommu_domain_destroy(struct domain *d)
 bool cf_check iommu_check_context(struct domain *d, u16 ctx_id) {
     struct domain_iommu *hd = dom_iommu(d);
 
-    if (ctx_id == 0)
-        return 1; /* Default context always exist. */
+    if ( ctx_id == 0 )
+        return true; /* Default context always exist. */
 
-    if ((ctx_id - 1) >= hd->other_contexts.count)
-        return 0; /* out of bounds */
+    if ( (ctx_id - 1) >= hd->other_contexts.count )
+        return false; /* out of bounds */
+
+    if ( ctx_id == IOMMU_INVALID_CONTEXT_ID )
+        return false; /* Invalid ID */
 
     return test_bit(ctx_id - 1, hd->other_contexts.bitmap);
 }
@@ -847,7 +850,8 @@ static int cf_check iommu_reattach_phantom(struct domain *d, device_t *dev,
 /**
  * Detach all device phantom functions.
  */
-static int cf_check iommu_detach_phantom(struct domain *d, device_t *dev)
+static int cf_check iommu_detach_phantom(struct domain *d, device_t *dev,
+                                         struct iommu_context *prev_ctx)
 {
     int ret = 0;
     uint8_t devfn = dev->devfn;
@@ -860,7 +864,7 @@ static int cf_check iommu_detach_phantom(struct domain *d, device_t *dev)
         if ( PCI_SLOT(devfn) != PCI_SLOT(dev->devfn) )
             break;
 
-        ret = iommu_call(hd->platform_ops, remove_devfn, d, dev, devfn);
+        ret = iommu_call(hd->platform_ops, remove_devfn, d, dev, devfn, prev_ctx);
 
         if ( ret )
             break;
@@ -872,7 +876,10 @@ static int cf_check iommu_detach_phantom(struct domain *d, device_t *dev)
 int cf_check iommu_attach_context(struct domain *d, device_t *dev, u16 ctx_id)
 {
     struct iommu_context *ctx = NULL;
-    int ret, rc;
+    int ret = 0, rc;
+
+    if ( dev->context == ctx_id )
+        return 0;
 
     if ( !(ctx = iommu_get_context(d, ctx_id)) )
     {
@@ -888,7 +895,9 @@ int cf_check iommu_attach_context(struct domain *d, device_t *dev, u16 ctx_id)
         goto unlock;
     }
 
-    ret = iommu_call(dom_iommu(d)->platform_ops, attach, d, dev, ctx);
+    /* ignore attach operations on PCIe bridges */
+    if ( dev->type != DEV_TYPE_PCIe_BRIDGE )
+        ret = iommu_call(dom_iommu(d)->platform_ops, attach, d, dev, ctx);
 
     if ( ret )
         goto unlock;
@@ -902,7 +911,7 @@ int cf_check iommu_attach_context(struct domain *d, device_t *dev, u16 ctx_id)
                &dev->sbdf);
 
         if( iommu_call(dom_iommu(d)->platform_ops, detach, d, dev, ctx)
-            || iommu_detach_phantom(d, dev) )
+            || iommu_detach_phantom(d, dev, ctx) )
         {
             printk(XENLOG_ERR "IOMMU: Improperly detached %pp\n", &dev->sbdf);
             WARN();
@@ -927,9 +936,9 @@ unlock:
 int cf_check iommu_detach_context(struct domain *d, device_t *dev)
 {
     struct iommu_context *ctx;
-    int ret, rc;
+    int ret = 0, rc;
 
-    if ( !dev->domain )
+    if ( !dev->domain || dev->context == IOMMU_INVALID_CONTEXT_ID )
     {
         printk(XENLOG_WARNING "IOMMU: Trying to detach a non-attached device\n");
         WARN();
@@ -945,12 +954,14 @@ int cf_check iommu_detach_context(struct domain *d, device_t *dev)
     ASSERT(ctx); /* device is using an invalid context ?
                     dev->context invalid ? */
 
-    ret = iommu_call(dom_iommu(d)->platform_ops, detach, d, dev, ctx);
+    /* ignore detach operations on PCIe bridges */
+    if ( dev->type != DEV_TYPE_PCIe_BRIDGE )
+        ret = iommu_call(dom_iommu(d)->platform_ops, detach, d, dev, ctx);
 
     if ( ret )
         goto unlock;
 
-    rc = iommu_detach_phantom(d, dev);
+    rc = iommu_detach_phantom(d, dev, ctx);
 
     if ( rc )
         printk(XENLOG_WARNING "IOMMU: "
@@ -965,13 +976,13 @@ unlock:
 }
 
 int cf_check iommu_reattach_context(struct domain *prev_dom, struct domain *next_dom,
-                           device_t *dev, u16 ctx_id)
+                                    device_t *dev, u16 ctx_id)
 {
     u16 prev_ctx_id;
     device_t *ctx_dev;
     struct domain_iommu *prev_hd, *next_hd;
     struct iommu_context *prev_ctx = NULL, *next_ctx = NULL;
-    int ret, rc;
+    int ret = 0, rc;
     bool same_domain;
 
     /* Make sure we actually are doing something meaningful */
@@ -1029,8 +1040,10 @@ int cf_check iommu_reattach_context(struct domain *prev_dom, struct domain *next
         goto unlock;
     }
 
-    ret = iommu_call(prev_hd->platform_ops, reattach, next_dom, dev, prev_ctx,
-                     next_ctx);
+    /* ignore reattach operations on PCIe bridges */
+    if ( dev->type != DEV_TYPE_PCIe_BRIDGE )
+        ret = iommu_call(prev_hd->platform_ops, reattach, next_dom, dev,
+                         prev_ctx, next_ctx);
 
     if ( ret )
         goto unlock;
