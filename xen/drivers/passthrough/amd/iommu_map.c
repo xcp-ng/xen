@@ -648,12 +648,14 @@ static int lookup_pagewalk(struct page_info *table, dfn_t dfn, unsigned long lev
             goto out;
         }
 
-        rc = lookup_pagewalk(mfn_to_page(entry.mfn), dfn, entry.next_level, mfn, flags);
+        rmb(); /* Ensure entry is fully read before unmapping the page */
+        unmap_domain_page(pagetable);
+        return lookup_pagewalk(mfn_to_page(entry.mfn), dfn, entry.next_level, mfn, flags);
     }
     else
     {
         /* Terminal mapping (either superpage or PTE) */
-        *mfn = entry.mfn; /* TODO: needs to be ajusted in case of a superpage */
+        *mfn = entry.mfn | (dfn & ((1ULL << (level * PTE_PER_TABLE_SHIFT)) - 1));
     }
 
 out:
@@ -682,7 +684,6 @@ int cf_check amd_iommu_lookup_page(struct domain *d, dfn_t dfn, mfn_t *mfn,
     /*
      * We initially consider the page writable and readable, lookup_pagewalk will
      * remove these flags if it is not actually the case.
-     * TODO: Consider DTE iw and ir flags.
      */
     *flags |= IOMMUF_writable | IOMMUF_readable;
     return lookup_pagewalk(root_table, dfn, level, mfn, flags);
