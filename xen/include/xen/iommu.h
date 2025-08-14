@@ -301,6 +301,8 @@ struct page_info;
  */
 typedef int iommu_grdm_t(xen_pfn_t start, xen_ulong_t nr, u32 id, void *ctxt);
 
+#define IOMMU_INVALID_CONTEXT_ID 0xFFFF
+
 struct iommu_context;
 
 struct iommu_ops {
@@ -319,12 +321,12 @@ struct iommu_ops {
                     struct iommu_context *prev_ctx,
                     struct iommu_context *ctx);
 
-    int (*enable_device)(device_t *dev);
 #ifdef CONFIG_HAS_PCI
     int (*get_device_group_id)(uint16_t seg, uint8_t bus, uint8_t devfn);
     int (*add_devfn)(struct domain *d, struct pci_dev *pdev, u16 devfn,
                      struct iommu_context *ctx);
-    int (*remove_devfn)(struct domain *d, struct pci_dev *pdev, u16 devfn);
+    int (*remove_devfn)(struct domain *d, struct pci_dev *pdev, u16 devfn,
+                        struct iommu_context *prev_ctx);
 #endif /* HAS_PCI */
 
     void (*teardown)(struct domain *d);

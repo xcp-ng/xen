@@ -330,6 +330,7 @@ static struct pci_dev *alloc_pdev(struct pci_seg *pseg, u8 bus, u8 devfn)
     *((u8*) &pdev->bus) = bus;
     *((u8*) &pdev->devfn) = devfn;
     pdev->domain = NULL;
+    pdev->context = ~0;
 
     INIT_LIST_HEAD(&pdev->vf_list);
 
@@ -604,7 +605,6 @@ static void pci_enable_acs(struct pci_dev *pdev)
 }
 
 static int iommu_add_device(struct pci_dev *pdev);
-static int iommu_enable_device(struct pci_dev *pdev);
 static int iommu_remove_device(struct pci_dev *pdev);
 
 unsigned int pci_size_mem_bar(pci_sbdf_t sbdf, unsigned int pos,
@@ -911,7 +911,7 @@ int pci_add_device(u16 seg, u8 bus, u8 devfn,
         }
     }
     else
-        iommu_enable_device(pdev);
+        ret = iommu_add_device(pdev);
 
     pci_enable_acs(pdev);
 
@@ -1444,23 +1444,6 @@ static int iommu_add_device(struct pci_dev *pdev)
         return 0;
 
     return iommu_attach_context(pdev->domain, pci_to_dev(pdev), 0);
-}
-
-static int iommu_enable_device(struct pci_dev *pdev)
-{
-    const struct domain_iommu *hd;
-
-    if ( !pdev->domain )
-        return -EINVAL;
-
-    ASSERT(pcidevs_locked());
-
-    hd = dom_iommu(pdev->domain);
-    if ( !is_iommu_enabled(pdev->domain) ||
-         !hd->platform_ops->enable_device )
-        return 0;
-
-    return iommu_call(hd->platform_ops, enable_device, pci_to_dev(pdev));
 }
 
 static int iommu_remove_device(struct pci_dev *pdev)
