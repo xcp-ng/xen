@@ -67,4 +67,6 @@ static inline bool pci_check_bar(const struct pci_dev *pdev,
     return is_memory_hole(start, end);
 }
 
+void pci_setup(void);
+
 #endif /* __X86_PCI_H__ */
