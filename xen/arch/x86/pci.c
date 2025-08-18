@@ -6,7 +6,10 @@
 
 #include <xen/spinlock.h>
 #include <xen/pci.h>
+
+#include <asm/acpi.h>
 #include <asm/io.h>
+
 #include <xsm/xsm.h>
 
 static DEFINE_SPINLOCK(pci_config_lock);
@@ -97,4 +100,10 @@ int pci_conf_write_intercept(unsigned int seg, unsigned int bdf,
     pcidevs_unlock();
 
     return rc;
+}
+
+void __init pci_setup(void)
+{
+    /* Parse ACPI MMCFG to see if other segments are available. */
+    acpi_mmcfg_init();
 }
