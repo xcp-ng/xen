@@ -1751,6 +1751,12 @@ void __init noreturn __start_xen(unsigned long mbi_p)
     setup_system_domains();
 
     /*
+     * Initialize PCI (create segment 0, setup MMCFG access) ahead of IOMMU
+     * setup, as devices in segment > 0 must also be discoverable.
+     */
+    pci_setup();
+
+    /*
      * IOMMU-related ACPI table parsing has to happen before APIC probing, for
      * check_x2apic_preenabled() to be able to observe respective findings, in
      * particular iommu_intremap having got turned off.
