@@ -22,6 +22,9 @@ boolean_param("asid", opt_asid_enabled);
 bool __read_mostly asid_enabled = false;
 static unsigned long __ro_after_init *asid_bitmap;
 static unsigned long __ro_after_init asid_count;
+
+/* Default minimum ASID to use */
+unsigned long __read_mostly asid_default_min = 0;
 static DEFINE_SPINLOCK(asid_lock);
 
 /*
@@ -66,6 +69,11 @@ int hvm_asid_alloc(struct hvm_asid *asid)
         asid->asid = 1;
         return 0;
     }
+
+    /* Try to allocate above default minimum */
+    if ( asid_default_min &&
+         !hvm_asid_alloc_range(asid, asid_default_min, asid_count) )
+        return 0;
 
     spin_lock(&asid_lock);
     new_asid = find_first_zero_bit(asid_bitmap, asid_count);

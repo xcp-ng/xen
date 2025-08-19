@@ -20,6 +20,7 @@ extern bool asid_enabled;
 #else
 #define asid_enabled (false)
 #endif
+extern unsigned long asid_default_min;
 
 /* Initialise ASID management distributed across all CPUs. */
 int hvm_asid_init(unsigned long nasids);
