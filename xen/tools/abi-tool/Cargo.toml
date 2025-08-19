@@ -1,0 +1,11 @@
+[package]
+name = "abi-tool"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.98"
+bimap = { version = "0.6.3", features = ["serde"] }
+indexmap = { version = "2.10.0", features = ["arbitrary", "serde"] }
+serde = { version = "1.0.219", features = ["derive"] }
+serde_yaml = "0.9.34"
