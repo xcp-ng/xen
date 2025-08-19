@@ -16,6 +16,7 @@ struct hvm_asid {
 };
 
 extern bool asid_enabled;
+extern unsigned long asid_default_min;
 
 /* Initialise ASID management distributed across all CPUs. */
 int hvm_asid_init(unsigned long nasids);
