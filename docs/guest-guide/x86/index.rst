@@ -7,4 +7,5 @@ x86
    :maxdepth: 2
 
    hypercall-abi
+   fastabi
    fixed-memory-layout

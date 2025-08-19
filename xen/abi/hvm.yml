@@ -1,0 +1,50 @@
+name: hvm
+hypercall_index: 34
+
+subops:
+  set_param:
+    index: 0
+    input:
+      domid: 2
+      index: 3
+      value: 4
+    c_lang:
+      struct: xen_hvm_param
+
+  get_param:
+    index: 1
+    input:
+      domid: 2
+      index: 3
+    output:
+      value: 4
+    c_lang:
+      struct: xen_hvm_param
+
+  flush_tlbs:
+    index: 5
+
+  get_time:
+    index: 10
+    output:
+      now: 2
+    c_lang:
+      struct: xen_hvm_get_time
+
+  get_mem_type:
+    index: 15
+    input:
+      domid: 2
+      pfn: 3
+    output:
+      mem_type: 4
+    c_lang:
+      struct: xen_hvm_get_mem_type
+
+  set_evtchn_upcall_vector:
+    index: 23
+    input:
+      vcpu: 2
+      vector: 3
+    c_lang:
+      struct: xen_hvm_evtchn_upcall_vector

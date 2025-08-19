@@ -1,0 +1,11 @@
+name: memory
+hypercall_index: 12
+
+subops:
+  memory_map:
+    index: 9
+    input:
+      nr_entries: 2
+      buffer: 3
+    c_lang:
+      struct: xen_memory_map

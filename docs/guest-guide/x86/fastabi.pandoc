@@ -1,0 +1,50 @@
+# x86 FastABI
+
+## Introduction
+
+FastABI is a alternative hypercall ABI designed with performance and confidential
+computing enabled guests (AMD SEV, Intel TDX, ...) in mind. It provides a minimal
+subset of the traditional ABI that is sufficient for having a working guest.
+
+This hypercall interface is designed around using registers for passing hypercall
+parameters and outputs rather than using pointer to C structures, thus it avoids
+potentially complicated or expensive memory copies from/to the guest.
+
+This ABI currently only supports HVM/PVH and x86 long mode.
+
+Each hypercall operation interface is described in a parsable yaml file, which
+defines each hypercall suboperation inputs and outputs and eventual metadata for
+code generation (e.g C stubs).
+
+## Support
+
+This interface is only supported if XEN_HVM_CPUID_FASTABI is set.
+
+## Semantics
+
+8 registers can be used as either input or output.
+
+Each hypercall operation (or sub-operation) defines its own set of used input and
+output registers. There is no implicit clobbering of unused registers, i.e input
+registers are not allowed to be modified by the hypervisor unless it is explicitely
+also marked as a output (or cloberred register).
+
+- reg0: `rax`: IN: hypercall operation index, OUT: error code
+- reg1: `rdi`: (if operation has sub-operations) IN: hypercall sub-operation index
+- reg2: `rsi`
+- reg3: `r8`
+- reg4: `r9`
+- reg5: `r10`
+- reg6: `r11`
+- reg7: `r12`
+
+`reg0` input is reserved for hypercall index.
+In order to distinguish FastABI with traditional hypercalls or viridian hypercalls,
+reg0 input needs to be OR-ed with 0x40000000 (__HYPERVISOR_FASTABI_MASK).
+
+`reg0` output is reserved for standard hypercall return code (errno) or returned value.
+
+`reg1` input can be used for identifying a sub-operation. output is available for use.
+
+The hypercall uses the native hypercall instruction, which is `vmcall` on Intel platforms
+and `vmmcall` on AMD platforms.

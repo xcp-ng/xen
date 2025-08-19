@@ -106,6 +106,10 @@
  * bound to event channels.
  */
 #define XEN_HVM_CPUID_UPCALL_VECTOR    (1u << 6)
+/*
+ * Support for fast HVM ABI.
+ */
+#define XEN_HVM_CPUID_FASTABI          (1u << 7)
 
 /*
  * Leaf 6 (0x40000x05)
