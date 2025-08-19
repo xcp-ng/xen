@@ -1,0 +1,24 @@
+# Fixed memory layout
+
+When creating a guest with "fixed_mem_layout", the guest has additional special
+pages mapped in advance. These mappings may be required in some cases due to FastABI
+not providing the ability for the guest to modify its physical memory layout (which is
+usually used to map the shared info page or the grant table).
+
+The guest is informed of such mappings and their location through the memory map using
+Xen specific memory map types (in the OEM range of ACPI specification).
+
+It's expected that these mappings stay stable, therefore, the guest shouldn't try to
+modify such mappings as it may be actively used by guest firmware or operating system.
+
+    /* Xen-specific types (OEM-specific range of the ACPI spec) */
+    #define XEN_HVM_MEMMAP_TYPE_SHARED_INFO   0xF0000001 /* Shared info page */
+    #define XEN_HVM_MEMMAP_TYPE_GRANT_TABLE   0xF0000002 /* Grant table pages */
+    #define XEN_HVM_MEMMAP_TYPE_GNTTAB_STATUS 0xF0000003 /* Grant table status page (v2) */
+    #define XEN_HVM_MEMMAP_TYPE_FOREIGN_REG   0xF0000004 /* Suitable region for grant mappings */
+                                                         /* and foreign mappings */
+
+These mappings are likely to be placed outside the 4G range.
+
+XEN_HVM_MEMMAP_TYPE_FOREIGN_REG is a special region which doesn't contain any mapping,
+but is safe to use for placing grant and foreign mappings.
