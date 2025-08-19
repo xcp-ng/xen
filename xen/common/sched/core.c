@@ -1437,20 +1437,12 @@ static void vcpu_block_enable_events(void)
     vcpu_block();
 }
 
-static long do_poll(const struct sched_poll *sched_poll)
+static long vcpu_poll(unsigned int nr_ports, uint64_t timeout, evtchn_port_t *ports)
 {
     struct vcpu   *v = current;
     struct domain *d = v->domain;
-    evtchn_port_t  port = 0;
     long           rc;
     unsigned int   i;
-
-    /* Fairly arbitrary limit. */
-    if ( sched_poll->nr_ports > 128 )
-        return -EINVAL;
-
-    if ( !guest_handle_okay(sched_poll->ports, sched_poll->nr_ports) )
-        return -EFAULT;
 
     set_bit(_VPF_blocked, &v->pause_flags);
     v->poll_evtchn = -1;
@@ -1478,13 +1470,9 @@ static long do_poll(const struct sched_poll *sched_poll)
     if ( local_events_need_delivery() )
         goto out;
 
-    for ( i = 0; i < sched_poll->nr_ports; i++ )
+    for ( i = 0; i < nr_ports; i++ )
     {
-        rc = -EFAULT;
-        if ( __copy_from_guest_offset(&port, sched_poll->ports, i, 1) )
-            goto out;
-
-        rc = evtchn_port_poll(d, port);
+        rc = evtchn_port_poll(d, ports[i]);
         if ( rc )
         {
             if ( rc > 0 )
@@ -1493,11 +1481,11 @@ static long do_poll(const struct sched_poll *sched_poll)
         }
     }
 
-    if ( sched_poll->nr_ports == 1 )
-        v->poll_evtchn = port;
+    if ( nr_ports == 1 )
+        v->poll_evtchn = ports[0];
 
-    if ( sched_poll->timeout != 0 )
-        set_timer(&v->poll_timer, sched_poll->timeout);
+    if ( timeout != 0 )
+        set_timer(&v->poll_timer, timeout);
 
     TRACE_TIME(TRC_SCHED_BLOCK, d->domain_id, v->vcpu_id);
     raise_softirq(SCHEDULE_SOFTIRQ);
@@ -1509,6 +1497,20 @@ static long do_poll(const struct sched_poll *sched_poll)
     clear_bit(v->vcpu_id, d->poll_mask);
     clear_bit(_VPF_blocked, &v->pause_flags);
     return rc;
+}
+
+static long do_poll(struct sched_poll *sched_poll)
+{
+    evtchn_port_t ports[128];
+
+    /* Fairly arbitrary limit */
+    if ( sched_poll->nr_ports > 128 )
+        return -EINVAL;
+
+    if ( copy_from_guest(ports, sched_poll->ports, sched_poll->nr_ports) )
+        return -EFAULT;
+
+    return vcpu_poll(sched_poll->nr_ports, sched_poll->timeout, ports);
 }
 
 /* Voluntarily yield the processor for this allocation. */
