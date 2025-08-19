@@ -22,6 +22,7 @@
 #include <xen/domain.h>
 #include <xen/delay.h>
 #include <xen/event.h>
+#include <xen/fastabi.h>
 #include <xen/time.h>
 #include <xen/timer.h>
 #include <xen/perfc.h>
@@ -1896,6 +1897,110 @@ void domain_update_node_aff(struct domain *d, struct affinity_masks *affinity)
 
 typedef long ret_t;
 
+#ifdef CONFIG_FASTABI
+void do_sched_fast_op(struct cpu_user_regs *regs)
+{
+    long ret = 0;
+    unsigned long cmd = fastabi_value_n(regs, 1);
+
+    switch ( cmd )
+    {
+    case SCHEDOP_yield:
+    {
+        ret = vcpu_yield();
+        break;
+    }
+
+    case SCHEDOP_block:
+    {
+        vcpu_block_enable_events();
+        break;
+    }
+
+    case SCHEDOP_shutdown:
+    {
+        struct sched_shutdown sched_shutdown = {
+            .reason = fastabi_value_n(regs, 2)
+        };
+
+        TRACE_TIME(TRC_SCHED_SHUTDOWN, current->domain->domain_id,
+                   current->vcpu_id, sched_shutdown.reason);
+        ret = domain_shutdown(current->domain, (u8)sched_shutdown.reason);
+
+        break;
+    }
+
+    case SCHEDOP_shutdown_code:
+    {
+        struct sched_shutdown sched_shutdown = {
+            .reason = fastabi_value_n(regs, 2)
+        };
+        struct domain *d = current->domain;
+
+        TRACE_TIME(TRC_SCHED_SHUTDOWN_CODE, d->domain_id, current->vcpu_id,
+                   sched_shutdown.reason);
+
+        spin_lock(&d->shutdown_lock);
+        if ( d->shutdown_code == SHUTDOWN_CODE_INVALID )
+            d->shutdown_code = (u8)sched_shutdown.reason;
+        spin_unlock(&d->shutdown_lock);
+
+        ret = 0;
+        break;
+    }
+
+    case SCHEDOP_poll:
+    {
+        uint64_t timeout = fastabi_value_n(regs, 2);
+        evtchn_port_t port = fastabi_value_n(regs, 3);
+
+        ret = vcpu_poll(1, timeout, &port);
+
+        break;
+    }
+
+    case SCHEDOP_watchdog:
+    {
+        struct sched_watchdog sched_watchdog = {
+            .id = fastabi_value_n(regs, 2),
+            .timeout = fastabi_value_n(regs, 3)
+        };
+
+        ret = domain_watchdog(
+            current->domain, sched_watchdog.id, sched_watchdog.timeout);
+        break;
+    }
+
+    case SCHEDOP_pin_override:
+    {
+        struct sched_pin_override sched_pin_override = {
+            .pcpu = fastabi_value_n(regs, 2),
+        };
+        unsigned int cpu;
+
+        ret = -EPERM;
+        if ( !is_hardware_domain(current->domain) )
+            break;
+
+        ret = -EINVAL;
+        if ( sched_pin_override.pcpu >= NR_CPUS )
+           break;
+
+        cpu = sched_pin_override.pcpu < 0 ? NR_CPUS : sched_pin_override.pcpu;
+        ret = vcpu_temporary_affinity(current, cpu, VCPU_AFFINITY_OVERRIDE);
+
+        break;
+    }
+
+    default:
+        ret = -ENOSYS;
+        break;
+    }
+
+    fastabi_value_n(regs, 0) = ret;
+}
+#endif
+
 #endif /* !COMPAT */
 
 ret_t do_sched_op(int cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
@@ -1961,7 +2066,6 @@ ret_t do_sched_op(int cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
             break;
 
         ret = do_poll(&sched_poll);
-
         break;
     }
 
