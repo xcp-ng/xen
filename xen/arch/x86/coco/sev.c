@@ -94,7 +94,7 @@ static int sev_domain_prepare_initial_mem(struct domain *d, gfn_t gfn, size_t co
                     return rc;
                 }
 
-                mfn_base = mfn_x(mfn);
+                mfn_base = mfn;
                 segment_size = 0;
             }
         }  
