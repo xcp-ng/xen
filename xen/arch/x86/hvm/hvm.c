@@ -4581,7 +4581,7 @@ static int hvmop_get_param(struct xen_hvm_param *op)
 
     rc = -EINVAL;
     if ( is_hvm_domain(d) && !(rc = hvm_get_param(d, op->index, &op->value)) )
-        HVM_DBG_LOG(DBG_LEVEL_HCALL, "get param %u = %"PRIx64, a.index, a.value);
+        HVM_DBG_LOG(DBG_LEVEL_HCALL, "get param %u = %"PRIx64, op->index, op->value);
 
     rcu_unlock_domain(d);
     return rc;

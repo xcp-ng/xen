@@ -161,11 +161,11 @@ int hvm_hypercall(struct cpu_user_regs *regs)
     {
         unsigned long index = eax & ~0x40000000U;
         HVM_DBG_LOG(DBG_LEVEL_HCALL,
-                    "fasthcall%lu(%lx, %lx, %lx, %lx, %lx, %lx, %lx, %lx)",
+                    "fasthcall%lu(%lx, %lx, %lx, %lx, %lx, %lx, %lx)",
                     index, fastabi_value_n(regs, 1), fastabi_value_n(regs, 2),
                     fastabi_value_n(regs, 3), fastabi_value_n(regs, 4),
                     fastabi_value_n(regs, 5), fastabi_value_n(regs, 6),
-                    fastabi_value_n(regs, 7), fastabi_value_n(regs, 8));
+                    fastabi_value_n(regs, 7));
 
         fastabi_dispatch(index, regs);
 
