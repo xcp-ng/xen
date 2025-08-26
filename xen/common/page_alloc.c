@@ -485,6 +485,9 @@ static unsigned long node_need_scrub[MAX_NUMNODES];
 static unsigned long *avail[MAX_NUMNODES];
 static long total_avail_pages;
 
+/* Per-NUMA-node counts of free pages */
+static unsigned long per_node_avail_pages[MAX_NUMNODES];
+
 static DEFINE_SPINLOCK(heap_lock);
 static long outstanding_claims; /* total outstanding claims by all domains */
 
@@ -1017,6 +1020,8 @@ static struct page_info *alloc_heap_pages(
 
     ASSERT(avail[node][zone] >= request);
     avail[node][zone] -= request;
+    ASSERT(per_node_avail_pages[node] >= request);
+    per_node_avail_pages[node] -= request;
     total_avail_pages -= request;
     ASSERT(total_avail_pages >= 0);
 
@@ -1199,6 +1204,8 @@ static int reserve_offlined_page(struct page_info *head)
             continue;
 
         avail[node][zone]--;
+        ASSERT(per_node_avail_pages[node] > 0);
+        per_node_avail_pages[node]--;
         total_avail_pages--;
         ASSERT(total_avail_pages >= 0);
 
@@ -1530,6 +1537,7 @@ static void free_heap_pages(
     }
 
     avail[node][zone] += 1 << order;
+    per_node_avail_pages[node] += 1 << order;
     total_avail_pages += 1 << order;
     if ( need_scrub )
     {
