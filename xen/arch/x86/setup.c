@@ -31,6 +31,7 @@
 #include <asm/alternative.h>
 #include <asm/apic.h>
 #include <asm/bootinfo.h>
+#include <asm/broadcast_tlb.h>
 #include <asm/bzimage.h>
 #include <asm/cpu-policy.h>
 #include <asm/e820.h>
@@ -2003,6 +2004,8 @@ void asmlinkage __init noreturn __start_xen(void)
 
     if ( hypervisor_name )
         hypervisor_setup();
+
+    broadcast_tlb_setup();
 
     /* Low mappings were only needed for some BIOS table parsing. */
     zap_low_mappings();

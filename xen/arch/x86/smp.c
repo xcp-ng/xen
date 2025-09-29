@@ -16,6 +16,7 @@
 #include <xen/spinlock.h>
 
 #include <asm/apic.h>
+#include <asm/broadcast_tlb.h>
 #include <asm/current.h>
 #include <asm/genapic.h>
 #include <asm/guest.h>
@@ -275,6 +276,12 @@ void flush_area_mask(const cpumask_t *mask, const void *va, unsigned int flags)
     if ( (flags & ~FLUSH_ORDER_MASK) &&
          !cpumask_subset(mask, cpumask_of(cpu)) )
     {
+        if ( use_broadcast_tlb &&
+             !(flags & ~(FLUSH_TLB | FLUSH_TLB_GLOBAL | FLUSH_VA_VALID |
+                         FLUSH_ORDER_MASK)) &&
+             !broadcast_flush_tlb(mask, va, flags) )
+            return;
+
         if ( cpu_has_hypervisor &&
              !(flags & ~(FLUSH_TLB | FLUSH_TLB_GLOBAL | FLUSH_VA_VALID |
                          FLUSH_ORDER_MASK)) &&

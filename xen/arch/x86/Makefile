@@ -15,6 +15,7 @@ obj-y += x86_emulate/
 obj-y += alternative.o
 obj-y += apic.o
 obj-y += bhb-thunk.o
+obj-y += broadcast_tlb.o
 obj-y += bitops.o
 obj-bin-y += bzimage.init.o
 obj-bin-y += clear_page.o
