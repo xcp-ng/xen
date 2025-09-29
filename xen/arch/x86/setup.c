@@ -1982,8 +1982,6 @@ void asmlinkage __init noreturn __start_xen(void)
     if ( hypervisor_name )
         hypervisor_setup();
 
-    broadcast_tlb_setup();
-
     /* Low mappings were only needed for some BIOS table parsing. */
     zap_low_mappings();
 
@@ -2067,6 +2065,8 @@ void asmlinkage __init noreturn __start_xen(void)
     early_time_init();
 
     arch_init_memory();
+
+    broadcast_tlb_setup();
 
     alternative_instructions();
 
