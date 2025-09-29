@@ -31,6 +31,7 @@
 #include <asm/alternative.h>
 #include <asm/apic.h>
 #include <asm/bootinfo.h>
+#include <asm/broadcast_tlb.h>
 #include <asm/bzimage.h>
 #include <asm/cpu-policy.h>
 #include <asm/e820.h>
@@ -2043,6 +2044,8 @@ void asmlinkage __init noreturn __start_xen(void)
 
     if ( opt_invpcid && cpu_has_invpcid )
         use_invpcid = true;
+
+    broadcast_tlb_setup();
 
     if ( cpu_has_pks )
         wrpkrs_and_cache(0); /* Must be before setting CR4.PKS */
