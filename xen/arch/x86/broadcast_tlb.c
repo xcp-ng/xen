@@ -14,14 +14,25 @@
 #include <asm/cpufeature.h>
 #include <asm/alternative-call.h>
 #include <asm/broadcast_tlb.h>
+#include <asm/invlpgb.h>
 
 bool __read_mostly use_broadcast_tlb = true;
 boolean_param("tlb-broadcast", use_broadcast_tlb);
+
+static bool __initdata opt_invlpgb = true;
+boolean_param("invlpgb", opt_invlpgb);
+bool __read_mostly use_invlpgb;
 
 static struct broadcast_tlb_ops __ro_after_init ops;
 
 void __init broadcast_tlb_setup(void)
 {
+    if ( use_invlpgb && cpu_has_invlpgb )
+    {
+        ops.name = "invlpgb";
+        ops.flush_tlb = invlpgb_flush_tlb;
+    }
+
     if ( ops.name )
         printk(XENLOG_INFO "Using broadcast TLB flushing method '%s', "
                "HVM guest TLB flushing is %savailable",
