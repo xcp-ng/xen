@@ -17,6 +17,8 @@ struct vcpu;
 unsigned long *svm_msrbit(unsigned long *msr_bitmap, uint32_t msr);
 void __update_guest_eip(struct cpu_user_regs *regs, unsigned int inst_len);
 
+void sev_es_do_vmgexit(struct vcpu *v);
+
 static inline void svm_vmload_pa(paddr_t vmcb)
 {
     asm volatile ( "vmload" :: "a" (vmcb) : "memory" );

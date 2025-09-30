@@ -28,6 +28,7 @@
 #include <asm/hvm/support.h>
 #include <asm/hvm/asid.h>
 #include <asm/hvm/svm/sev.h>
+#include <asm/hvm/svm/sev_es.h>
 #include <asm/hvm/svm/svm.h>
 #include <asm/hvm/svm/svmdebug.h>
 #include <asm/hvm/svm/vmcb.h>
@@ -1171,6 +1172,10 @@ static int cf_check svm_vcpu_initialise(struct vcpu *v)
 
 static void cf_check svm_vcpu_destroy(struct vcpu *v)
 {
+    UNMAP_DOMAIN_PAGE(v->arch.hvm.svm.ghcb_map);
+    if ( v->arch.hvm.svm.ghcb_page )
+        put_page(v->arch.hvm.svm.ghcb_page);
+
     svm_destroy_vmcb(v);
     passive_domain_destroy(v);
 }
@@ -2137,11 +2142,19 @@ static void svm_vmexit_do_hlt(struct vmcb_struct *vmcb,
 {
     unsigned int inst_len;
 
-    if ( (inst_len = svm_get_insn_len(current, INSTR_HLT)) == 0 )
-        return;
-    __update_guest_eip(regs, inst_len);
+    if ( is_sev_es_domain(current->domain) )
+    {
+        /* SEV-ES domains advances RIP on VMEXIT_HLT and has IF in guest_intr_mask */
+        hvm_hlt(vmcb->int_stat.guest_intr_mask ? X86_EFLAGS_IF : 0);
+    }
+    else
+    {
+        if ( (inst_len = svm_get_insn_len(current, INSTR_HLT)) == 0 )
+            return;
+        __update_guest_eip(regs, inst_len);
 
-    hvm_hlt(regs->eflags);
+        hvm_hlt(regs->eflags);
+    }
 }
 
 static void svm_vmexit_do_rdtsc(struct cpu_user_regs *regs, bool rdtscp)
@@ -2172,9 +2185,13 @@ static void svm_vmexit_do_pause(struct cpu_user_regs *regs)
 {
     unsigned int inst_len;
 
-    if ( (inst_len = svm_get_insn_len(current, INSTR_PAUSE)) == 0 )
-        return;
-    __update_guest_eip(regs, inst_len);
+    /* SEV-ES domains advances RIP on VMEXIT_PAUSE */
+    if ( !is_sev_es_domain(current->domain) )
+    {
+        if ( (inst_len = svm_get_insn_len(current, INSTR_PAUSE)) == 0 )
+            return;
+        __update_guest_eip(regs, inst_len);
+    }
 
     /*
      * The guest is running a contended spinlock and we've detected it.
@@ -2579,16 +2596,19 @@ void asmlinkage svm_vmexit_handler(void)
     bool vcpu_guestmode = false;
     struct vlapic *vlapic = vcpu_vlapic(v);
 
-    regs->rax = vmcb->rax;
-    regs->rip = vmcb->rip;
-    regs->rsp = vmcb->rsp;
-    regs->rflags = vmcb->rflags;
-
-    hvm_sanitize_regs_fields(
-        regs, !(vmcb_get_efer(vmcb) & EFER_LMA) || !(vmcb->cs.l));
-
-    if ( paging_mode_hap(v->domain) )
-        v->arch.hvm.guest_cr[3] = v->arch.hvm.hw_cr[3] = vmcb_get_cr3(vmcb);
+    if ( !is_sev_es_domain(v->domain) )
+    {
+        regs->rax = vmcb->rax;
+        regs->rip = vmcb->rip;
+        regs->rsp = vmcb->rsp;
+        regs->rflags = vmcb->rflags;
+        
+        hvm_sanitize_regs_fields(
+            regs, !(vmcb_get_efer(vmcb) & EFER_LMA) || !(vmcb->cs.l));
+            
+        if ( paging_mode_hap(v->domain) )
+            v->arch.hvm.guest_cr[3] = v->arch.hvm.hw_cr[3] = vmcb_get_cr3(vmcb);
+    }
 
     if ( nestedhvm_enabled(v->domain) && nestedhvm_vcpu_in_guestmode(v) )
         vcpu_guestmode = 1;
@@ -2707,6 +2727,13 @@ void asmlinkage svm_vmexit_handler(void)
          hvm_event_needs_reinjection(vmcb->exit_int_info.type,
                                      vmcb->exit_int_info.vector) )
         vmcb->event_inj = vmcb->exit_int_info;
+
+    if ( is_sev_es_domain(v->domain) && !is_sev_es_vmexit_ae(exit_reason) )
+    {
+        gprintk(XENLOG_ERR, "unexpected SEV-ES AE exitcode: %08"PRIx64"\n", exit_reason);
+        domain_crash(v->domain);
+        goto out;
+    }
 
     switch ( exit_reason )
     {
@@ -3045,6 +3072,11 @@ void asmlinkage svm_vmexit_handler(void)
                          "%pv: Error %d handling NPF (gpa=%08lx ec=%04lx)\n",
                          v, rc, vmcb->ei.npf.gpa, vmcb->ei.npf.ec);
         v->arch.hvm.svm.cached_insn_len = 0;
+        break;
+    
+    case VMEXIT_VMGEXIT:
+        ASSERT(is_sev_es_domain(v->domain));
+        sev_es_do_vmgexit(v);
         break;
 
     case VMEXIT_IRET:

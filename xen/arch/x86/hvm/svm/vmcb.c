@@ -17,6 +17,7 @@
 #include <asm/cpu-policy.h>
 #include <asm/guest-msr.h>
 #include <asm/hvm/svm/sev.h>
+#include <asm/hvm/svm/sev_es.h>
 #include <asm/hvm/svm/svm.h>
 #include <asm/hvm/svm/svmdebug.h>
 #include <asm/hvm/svm/vmcb.h>
@@ -67,21 +68,42 @@ static int construct_vmcb(struct vcpu *v)
         GENERAL2_INTERCEPT_XSETBV      | GENERAL2_INTERCEPT_ICEBP       |
         GENERAL2_INTERCEPT_RDPRU;
 
-    /* Intercept all debug-register writes. */
-    vmcb->_dr_intercepts = ~0u;
+    if ( is_sev_es_domain(v->domain) )
+    {
+        /* Only intercept DR7 read and writes */
+        vmcb->_dr_intercepts = DR_INTERCEPT_DR7_READ | DR_INTERCEPT_DR7_WRITE;
+    }
+    else
+    {
+        /* Intercept all debug-register writes. */
+        vmcb->_dr_intercepts = ~0u;
+        
+        /* Intercept all control-register accesses except for CR2 and CR8. */
+        vmcb->_cr_intercepts = ~(CR_INTERCEPT_CR2_READ |
+                                 CR_INTERCEPT_CR2_WRITE |
+                                 CR_INTERCEPT_CR8_READ |
+                                 CR_INTERCEPT_CR8_WRITE);
+    }
 
-    /* Intercept all control-register accesses except for CR2 and CR8. */
-    vmcb->_cr_intercepts = ~(CR_INTERCEPT_CR2_READ |
-                             CR_INTERCEPT_CR2_WRITE |
-                             CR_INTERCEPT_CR8_READ |
-                             CR_INTERCEPT_CR8_WRITE);
+    if ( is_sev_es_domain(v->domain) )
+    {
+        svm->vmsa_page = alloc_domheap_page(v->domain, MEMF_no_owner);
+        if ( !svm->vmsa_page )
+            return -ENOMEM;
+
+        vmcb->vmsa_pa = page_to_maddr(svm->vmsa_page);
+    }
 
     svm->vmcb_sync_state = vmcb_needs_vmload;
 
     /* I/O and MSR permission bitmaps. */
     svm->msrpm = alloc_xenheap_pages(get_order_from_bytes(MSRPM_SIZE), 0);
     if ( svm->msrpm == NULL )
+    {
+        if ( is_sev_es_domain(v->domain) )
+            free_domheap_pages(svm->vmsa_page, 0);
         return -ENOMEM;
+    }
     memset(svm->msrpm, 0xff, MSRPM_SIZE);
 
     svm_disable_intercept_for_msr(v, MSR_FS_BASE);
@@ -178,6 +200,7 @@ static int construct_vmcb(struct vcpu *v)
     if ( default_xen_spec_ctrl == SPEC_CTRL_STIBP )
         v->arch.msrs->spec_ctrl.raw = SPEC_CTRL_STIBP;
 
+    
     if ( is_sev_domain(v->domain) )
     {
         vmcb_set_sev(vmcb, true);
@@ -188,6 +211,29 @@ static int construct_vmcb(struct vcpu *v)
             /* Intercept not implementable under SEV/SEV-ES */
             GENERAL1_INTERCEPT_TASK_SWITCH
         );
+    }
+
+    if ( is_sev_es_domain(v->domain) )
+    {
+        vmcb_set_sev_es(vmcb, true);
+
+        vmcb->virt_ext.fields.lbr_enable = 1;
+        svm_disable_intercept_for_msr(v, MSR_IA32_DEBUGCTLMSR);
+        svm_disable_intercept_for_msr(v, MSR_IA32_LASTBRANCHFROMIP);
+        svm_disable_intercept_for_msr(v, MSR_IA32_LASTBRANCHTOIP);
+        svm_disable_intercept_for_msr(v, MSR_IA32_LASTINTFROMIP);
+        svm_disable_intercept_for_msr(v, MSR_IA32_LASTINTTOIP);
+
+        vmcb->_general2_intercepts &= ~GENERAL2_INTERCEPT_XSETBV;
+
+        /* We can't intercept SEV-ES guest EFER */
+        svm_disable_intercept_for_msr(v, MSR_EFER);
+
+        svm_disable_intercept_for_msr(v, MSR_AMD64_SEV_ES_GHCB);
+
+        svm->vmcb->ghcb_msr = GHCB_MSR_SEV_INFO(GHCB_VERSION_MAX,
+                                                GHCB_VERSION_MIN,
+                                                raw_cpu_policy.extd.c_bit_pos);
     }
 
     return 0;

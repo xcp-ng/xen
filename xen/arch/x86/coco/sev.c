@@ -4,18 +4,22 @@
  * Copyright (c) Vates SAS
  */
 
+#include <xen/config.h>
+#include <xen/coco.h>
+#include <xen/mm.h>
+
 #include <asm/cpu-policy.h>
 #include <asm/cpufeature.h>
+#include <asm/flushtlb.h>
 #include <asm/p2m.h>
+#include <asm/psp-sev.h>
 #include <asm/hvm/asid.h>
 #include <asm/hvm/svm/sev.h>
+#include <asm/hvm/svm/sev_es.h>
+#include <asm/hvm/svm/svmdebug.h>
 #include <asm/msr.h>
  
 #include <public/hvm/coco.h>
-
-#include <xen/config.h>
-#include <xen/coco.h>
-#include <asm/psp-sev.h>
 
 static int sev_domain_initialise(struct domain *d)
 {
@@ -27,10 +31,13 @@ static int sev_domain_initialise(struct domain *d)
     sd_ls.handle = 0; /* generate new one */
     sd_ls.policy = (struct sev_guest_policy){
         .no_key_sharing = true,
-        .no_debug = true,
+        //.no_debug = true,
         .no_send = true, /* To change when SEV live migration is something */
     };
     sd_ls.dh_cert_address = 0; /* do not DH stuff */
+
+    if ( is_sev_es_domain(d) )
+        sd_ls.policy.es = true;
 
     rc = sev_do_cmd(SEV_CMD_LAUNCH_START, (void *)(&sd_ls), &psp_ret, true);
     if ( rc )
@@ -234,6 +241,88 @@ static struct coco_domain_ops sev_domain_ops = {
     .asid_alloc = sev_asid_alloc,
 };
 
+static int sev_es_asid_alloc(struct domain *d, struct hvm_asid *asid)
+{
+    if ( WARN_ON(!raw_cpu_policy.extd.min_no_es_asid) )
+        return -ENOSPC;
+
+    return hvm_asid_alloc_range(asid, 1, raw_cpu_policy.extd.min_no_es_asid - 1);
+}
+
+static int sev_es_domain_creation_finished(struct domain *d)
+{
+    struct vcpu *v;
+    struct sev_data_launch_update_vmsa sd_luv = {};
+    sd_luv.handle = d->arch.hvm.svm.sev.asp_handle;
+    sd_luv.reserved = 0;
+
+    for_each_vcpu(d, v)
+    {
+        int rc;
+        unsigned int psp_ret;
+        struct vmcb_struct *vmcb = v->arch.hvm.svm.vmcb;
+        struct cpu_user_regs *regs = &v->arch.user_regs;
+        void *vmsa;
+        
+        /* Stash guest CPU registers into VMCB including VMSA fields */
+        vmcb->rax = regs->rax;
+        vmcb->vmsa_regs.rbx = regs->rbx;
+        vmcb->vmsa_regs.rcx = regs->rcx;
+        vmcb->vmsa_regs.rdx = regs->rdx;
+        vmcb->vmsa_regs.rbp = regs->rbp;
+        vmcb->vmsa_regs.rsi = regs->rsi;
+        vmcb->vmsa_regs.rdi = regs->rdi;
+        vmcb->vmsa_regs.r8 = regs->r8;
+        vmcb->vmsa_regs.r9 = regs->r9;
+        vmcb->vmsa_regs.r10 = regs->r10;
+        vmcb->vmsa_regs.r11 = regs->r11;
+        vmcb->vmsa_regs.r12 = regs->r12;
+        vmcb->vmsa_regs.r13 = regs->r13;
+        vmcb->vmsa_regs.r14 = regs->r14;
+        vmcb->vmsa_regs.r15 = regs->r15;
+        vmcb->rip = regs->rip;
+        vmcb->rsp = regs->rsp;
+        vmcb->rflags = regs->rflags | X86_EFLAGS_MBS;
+
+        vmcb->vmsa_regs.xcr0 = X86_XCR0_X87; /* must be set */
+
+        /*
+         * Copy VMCB Save Area into VMSA page.
+         * SEV-ES VMSA uses the same layout as VMCB save area.
+         */
+        vmsa = __map_domain_page(v->arch.hvm.svm.vmsa_page);
+        memcpy(vmsa, &vmcb->vmsa_start,
+               sizeof(struct vmcb_struct) - offsetof(struct vmcb_struct, vmsa_start));
+        cache_flush(vmsa, PAGE_SIZE);
+        unmap_domain_page(vmsa);
+        
+        /* Clear VMSA-specific fields from VMCB (marked as reserved). */
+        memset(&vmcb->vmsa_regs, 0, sizeof(vmcb->vmsa_regs));
+
+        sd_luv.address = page_to_maddr(v->arch.hvm.svm.vmsa_page);
+        sd_luv.len = PAGE_SIZE_4K;
+        
+        rc = sev_do_cmd(SEV_CMD_LAUNCH_UPDATE_VMSA, (void *)(&sd_luv), &psp_ret, true);
+        if ( rc )
+        {
+            printk(XENLOG_ERR "asp: failed to LAUNCH_UPDATE_VMSA d%huv%d: err %u\n",
+                   d->domain_id, v->vcpu_id, psp_ret);
+            return rc;
+        }
+    }
+
+    return sev_domain_creation_finished(d);
+}
+
+static struct coco_domain_ops sev_es_domain_ops = {
+    .prepare_initial_mem = sev_domain_prepare_initial_mem,
+    .domain_initialise = sev_domain_initialise,
+    .domain_creation_finished = sev_es_domain_creation_finished,
+    .domain_destroy = sev_domain_destroy,
+    .asid_alloc = sev_es_asid_alloc,
+    .show_execution_state = sev_vmsa_dump,
+};
+
 static int sev_init(void)
 {
     unsigned long syscfg, hwcr;
@@ -265,12 +354,20 @@ static int sev_init(void)
     printk(XENLOG_INFO "sev: Supports up to %"PRIu32" SEV guests\n",
             raw_cpu_policy.extd.max_sev_guests - raw_cpu_policy.extd.min_no_es_asid);
 
+    if ( cpu_has_sev_es )
+        printk(XENLOG_INFO "sev-es: Supports up to %"PRIu32" SEV-ES guests\n",
+            raw_cpu_policy.extd.min_no_es_asid - 1);
+
     return 0;
 }
 
 static int sev_get_platform_status(struct coco_platform_status *status)
 {
     status->platform = COCO_PLATFORM_amd_sev;
+
+    if ( cpu_has_sev_es )
+        status->platform_flags |= COCO_PLATFORM_FLAG_sev_es;
+
     status->flags = COCO_STATUS_FLAG_supported;
 
     return 0;
@@ -278,7 +375,11 @@ static int sev_get_platform_status(struct coco_platform_status *status)
 
 static struct coco_domain_ops *sev_get_domain_ops(struct domain *d)
 {
-    return &sev_domain_ops;
+    // TODO: Proper SEV-ES and SEV-SNP support
+    if ( is_sev_es_domain(d) )
+        return &sev_es_domain_ops;
+    else
+        return &sev_domain_ops;
 }
 
 struct coco_ops sev_coco_ops = {

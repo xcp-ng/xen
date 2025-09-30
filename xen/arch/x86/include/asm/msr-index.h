@@ -250,6 +250,7 @@
 #define  VM_CR_SVM_DISABLE                  (_AC(1, ULL) <<  4)
 
 #define MSR_VIRT_SPEC_CTRL                  _AC(0xc001011f, U) /* Layout matches MSR_SPEC_CTRL */
+#define MSR_AMD64_SEV_ES_GHCB               _AC(0xc0010130, U)
 #define MSR_AMD64_SEV			              _AC(0xc0010131, U)
 
 #define MSR_AMD_CSTATE_CFG                  0xc0010296U

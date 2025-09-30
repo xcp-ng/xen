@@ -16,4 +16,10 @@ void svm_vmcb_dump(const char *from, const struct vmcb_struct *vmcb);
 bool svm_vmcb_isvalid(const char *from, const struct vmcb_struct *vmcb,
                       const struct vcpu *v, bool verbose);
 
+#ifdef CONFIG_COCO_AMD_SEV
+bool sev_vmsa_dump(struct vcpu *v);
+#else
+static inline bool sev_vmsa_dump(struct vcpu *v) {}
+#endif
+
 #endif /* __ASM_X86_HVM_SVM_SVMDEBUG_H__ */
