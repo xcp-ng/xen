@@ -27,6 +27,7 @@
 #include <asm/hvm/hvm.h>
 #include <asm/hvm/monitor.h>
 #include <asm/hvm/support.h>
+#include <asm/hvm/svm/sev.h>
 #include <asm/iocap.h>
 #include <asm/vm_event.h>
 
@@ -703,6 +704,9 @@ static void *hvmemul_map_linear_addr(
         goto unhandleable;
     }
 
+    if ( is_sev_domain(curr->domain) && (nr_frames > 1) )
+        goto unhandleable;
+
     for ( i = 0; i < nr_frames; i++ )
     {
         enum hvm_translation_result res;
@@ -717,8 +721,16 @@ static void *hvmemul_map_linear_addr(
         /* Error checking.  Confirm that the current slot is clean. */
         ASSERT(mfn_x(*mfn) == 0);
 
-        res = hvm_translate_get_page(curr, addr, true, pfec,
+        if ( is_sev_domain(curr->domain) )
+        {
+            struct hvm_vcpu_io *hvio = &curr->arch.hvm.hvm_io;
+            unsigned long gpa = pfn_to_paddr(hvio->mmio_gpfn) | (addr & ~PAGE_MASK);
+            res = hvm_translate_get_page(curr, gpa, false, pfec,
                                      &pfinfo, &page, &gfn, &p2mt);
+        }
+        else
+            res = hvm_translate_get_page(curr, addr, true, pfec,
+                                         &pfinfo, &page, &gfn, &p2mt);
 
         switch ( res )
         {
@@ -1187,6 +1199,7 @@ static int hvmemul_linear_mmio_access(
                                                            dir, buffer_offset);
     paddr_t gpa;
     unsigned long one_rep = 1;
+    unsigned int chunk;
     int rc;
 
     if ( cache == NULL )
@@ -1197,21 +1210,50 @@ static int hvmemul_linear_mmio_access(
         ASSERT_UNREACHABLE();
         return X86EMUL_UNHANDLEABLE;
     }
+    
+    chunk = min_t(unsigned int, size, PAGE_SIZE - offset);
 
     if ( known_gpfn )
         gpa = pfn_to_paddr(hvio->mmio_gpfn) | offset;
     else
     {
-        rc = hvmemul_linear_to_phys(gla, &gpa, size, &one_rep, pfec,
-                                    hvmemul_ctxt);
-        if ( rc != X86EMUL_OKAY )
-            return rc;
+        if ( is_sev_domain(current->domain) )
+            gpa = pfn_to_paddr(hvio->mmio_gpfn) | offset;
+        else
+        {
+            rc = hvmemul_linear_to_phys(gla, &gpa, chunk, &one_rep, pfec,
+                                        hvmemul_ctxt);
+            if ( rc != X86EMUL_OKAY )
+                return rc;
+        }
 
         latch_linear_to_phys(hvio, gla, gpa, dir == IOREQ_WRITE);
     }
 
-    return hvmemul_phys_mmio_access(cache, gpa, size, dir, buffer,
-                                    buffer_offset);
+    for ( ;; )
+    {
+        rc = hvmemul_phys_mmio_access(cache, gpa, chunk, dir, buffer, buffer_offset);
+        if ( rc != X86EMUL_OKAY )
+            break;
+
+        gla += chunk;
+        buffer_offset += chunk;
+        size -= chunk;
+
+        if ( size == 0 )
+            break;
+
+        if ( is_sev_domain(current->domain) )
+            return X86EMUL_UNHANDLEABLE;
+
+        chunk = min_t(unsigned int, size, PAGE_SIZE);
+        rc = hvmemul_linear_to_phys(gla, &gpa, chunk, &one_rep, pfec,
+                                    hvmemul_ctxt);
+        if ( rc != X86EMUL_OKAY )
+            return rc;
+    }
+
+    return rc;
 }
 
 static inline int hvmemul_linear_mmio_read(
@@ -1268,6 +1310,9 @@ static int linear_read(unsigned long addr, unsigned int bytes, void *p_data,
     {
         unsigned int part1 = PAGE_SIZE - offset;
 
+        if ( is_sev_domain(current->domain) )
+            return X86EMUL_UNHANDLEABLE;
+
         /* Split the access at the page boundary. */
         rc = linear_read(addr, part1, p_data, pfec, hvmemul_ctxt);
         if ( rc != X86EMUL_OKAY )
@@ -1292,11 +1337,25 @@ static int linear_read(unsigned long addr, unsigned int bytes, void *p_data,
      * upon replay) the RAM access for anything that's ahead of or past MMIO,
      * i.e. in RAM.
      */
-    cache = hvmemul_find_mmio_cache(hvio, start, IOREQ_READ, ~0);
-    if ( !cache ||
-         addr + bytes <= start + cache->skip ||
-         addr >= start + cache->size )
-        rc = hvm_copy_from_guest_linear(p_data, addr, bytes, pfec, &pfinfo);
+     cache = hvmemul_find_mmio_cache(hvio, start, IOREQ_READ, ~0);
+     if ( !cache ||
+          addr + bytes <= start + cache->skip ||
+          addr >= start + cache->size )
+     {
+        if ( is_sev_domain(current->domain) )
+        {
+            if ( hvio->mmio_gpfn )
+            {
+                paddr_t gpa;
+                gpa = pfn_to_paddr(hvio->mmio_gpfn) | (addr & ~PAGE_MASK);
+                rc = hvm_copy_from_guest_phys(p_data, gpa, bytes);
+            }
+            else
+                return X86EMUL_UNHANDLEABLE;
+        }
+        else
+            rc = hvm_copy_from_guest_linear(p_data, addr, bytes, pfec, &pfinfo);
+    }
 
     switch ( rc )
     {
@@ -1339,6 +1398,9 @@ static int linear_write(unsigned long addr, unsigned int bytes, void *p_data,
     {
         unsigned int part1 = PAGE_SIZE - offset;
 
+        if ( is_sev_domain(current->domain) )
+            return X86EMUL_UNHANDLEABLE;
+
         /* Split the access at the page boundary. */
         rc = linear_write(addr, part1, p_data, pfec, hvmemul_ctxt);
         if ( rc != X86EMUL_OKAY )
@@ -1354,9 +1416,23 @@ static int linear_write(unsigned long addr, unsigned int bytes, void *p_data,
     /* See commentary in linear_read(). */
     cache = hvmemul_find_mmio_cache(hvio, start, IOREQ_WRITE, ~0);
     if ( !cache ||
-         addr + bytes <= start + cache->skip ||
-         addr >= start + cache->size )
-        rc = hvm_copy_to_guest_linear(addr, p_data, bytes, pfec, &pfinfo);
+        addr + bytes <= start + cache->skip ||
+        addr >= start + cache->size )
+    {
+        if ( is_sev_domain(current->domain) )
+        {
+            if ( hvio->mmio_gpfn )
+            {
+                paddr_t gpa;
+                gpa = pfn_to_paddr(hvio->mmio_gpfn) | (addr & ~PAGE_MASK);
+                rc = hvm_copy_to_guest_phys(gpa, p_data, bytes, current);
+            }
+            else
+                return X86EMUL_UNHANDLEABLE;
+        }
+        else
+            rc = hvm_copy_to_guest_linear(addr, p_data, bytes, pfec, &pfinfo);
+    }
 
     switch ( rc )
     {
@@ -1444,7 +1520,12 @@ int cf_check hvmemul_insn_fetch(
     if ( !bytes ||
          unlikely((insn_off + bytes) > hvmemul_ctxt->insn_buf_bytes) )
     {
-        int rc = __hvmemul_read(x86_seg_cs, offset, p_data, bytes,
+        int rc;
+
+        if ( is_sev_domain(current->domain) )
+            return X86EMUL_UNHANDLEABLE;
+
+        rc = __hvmemul_read(x86_seg_cs, offset, p_data, bytes,
                                 hvm_access_insn_fetch, hvmemul_ctxt);
 
         if ( rc == X86EMUL_OKAY && bytes )
@@ -1499,6 +1580,7 @@ static int cf_check hvmemul_write(
     if ( !known_gla(addr, bytes, pfec) )
     {
         mapping = hvmemul_map_linear_addr(addr, bytes, pfec, hvmemul_ctxt);
+
         if ( IS_ERR(mapping) )
              return ~PTR_ERR(mapping);
     }
@@ -1736,6 +1818,9 @@ static int cf_check hvmemul_cmpxchg(
     int rc;
     void *mapping = NULL;
 
+    if ( is_sev_domain(current->domain) )
+        return X86EMUL_UNHANDLEABLE;
+
     rc = hvmemul_virtual_to_linear(
         seg, offset, bytes, NULL, hvm_access_write, hvmemul_ctxt, &addr);
     if ( rc != X86EMUL_OKAY )
@@ -1838,6 +1923,9 @@ static int cf_check hvmemul_rep_ins(
     p2m_type_t p2mt;
     int rc;
 
+    if ( is_sev_domain(current->domain) )
+        return X86EMUL_UNHANDLEABLE;
+
     rc = hvmemul_virtual_to_linear(
         dst_seg, dst_offset, bytes_per_rep, reps, hvm_access_write,
         hvmemul_ctxt, &addr);
@@ -1917,6 +2005,9 @@ static int cf_check hvmemul_rep_outs(
     p2m_type_t p2mt;
     int rc;
 
+    if ( is_sev_domain(current->domain) )
+        return X86EMUL_UNHANDLEABLE;
+
     if ( unlikely(hvmemul_ctxt->set_context) )
         return hvmemul_rep_outs_set_context(dst_port, bytes_per_rep, reps);
 
@@ -1961,6 +2052,9 @@ static int cf_check hvmemul_rep_movs(
     p2m_type_t sp2mt, dp2mt;
     int rc, df = !!(ctxt->regs->eflags & X86_EFLAGS_DF);
     char *buf;
+
+    if ( is_sev_domain(current->domain) )
+        return X86EMUL_UNHANDLEABLE;
 
     rc = hvmemul_virtual_to_linear(
         src_seg, src_offset, bytes_per_rep, reps, hvm_access_read,
@@ -2127,9 +2221,13 @@ static int cf_check hvmemul_rep_stos(
     paddr_t gpa;
     p2m_type_t p2mt;
     bool df = ctxt->regs->eflags & X86_EFLAGS_DF;
-    int rc = hvmemul_virtual_to_linear(seg, offset, bytes_per_rep, reps,
-                                       hvm_access_write, hvmemul_ctxt, &addr);
+    int rc;
 
+    if ( is_sev_domain(current->domain) )
+        return X86EMUL_UNHANDLEABLE;
+
+    rc = hvmemul_virtual_to_linear(seg, offset, bytes_per_rep, reps,
+                                   hvm_access_write, hvmemul_ctxt, &addr);
     if ( rc != X86EMUL_OKAY )
         return rc;
 
@@ -2736,6 +2834,7 @@ static int _hvm_emulate_one(struct hvm_emulate_ctxt *hvmemul_ctxt,
     struct vcpu *curr = current;
     uint32_t new_intr_shadow;
     struct hvm_vcpu_io *hvio = &curr->arch.hvm.hvm_io;
+
     int rc;
 
     /*
@@ -2978,6 +3077,9 @@ void hvm_emulate_init_per_insn(
         unsigned int pfec = PFEC_page_present | PFEC_insn_fetch;
         unsigned long addr;
 
+        if ( is_sev_domain(current->domain) )
+            goto out;
+
         if ( hvmemul_ctxt->seg_reg[x86_seg_ss].dpl == 3 )
             pfec |= PFEC_user_mode;
 
@@ -2995,6 +3097,7 @@ void hvm_emulate_init_per_insn(
             sizeof(hvmemul_ctxt->insn_buf) : 0;
     }
 
+out:
     hvmemul_ctxt->is_mem_access = false;
 }
 
