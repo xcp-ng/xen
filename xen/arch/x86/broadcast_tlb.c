@@ -33,6 +33,9 @@ void __init broadcast_tlb_setup(void)
     {
         ops.name = "invlpgb";
         ops.flush_tlb = invlpgb_flush_tlb;
+
+        if ( cpu_has_invlpgb_np )
+            ops.flush_tlb_hvm = invlpgb_flush_tlb_hvm;
     }
 
     if ( ops.name )
