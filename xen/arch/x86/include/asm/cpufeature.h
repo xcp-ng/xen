@@ -223,6 +223,7 @@ static inline bool boot_cpu_has(unsigned int feat)
 
 /* CPUID level 0x80000008.ebx */
 #define cpu_has_invlpgb         boot_cpu_has(X86_FEATURE_INVLPGB)
+#define cpu_has_invlpgb_np      boot_cpu_has(X86_FEATURE_INVLPGB_NP)
 #define cpu_has_amd_ssbd        boot_cpu_has(X86_FEATURE_AMD_SSBD)
 #define cpu_has_virt_ssbd       boot_cpu_has(X86_FEATURE_VIRT_SSBD)
 #define cpu_has_ssb_no          boot_cpu_has(X86_FEATURE_SSB_NO)

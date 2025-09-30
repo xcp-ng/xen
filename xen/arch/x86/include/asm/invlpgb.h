@@ -3,6 +3,7 @@
 
 #include <xen/page-defs.h>
 #include <xen/cpumask.h>
+#include <xen/sched.h>
 
 #include <asm/flushtlb.h>
 
@@ -82,6 +83,14 @@ static inline int invlpgb_flush_tlb(const cpumask_t *mask, const void *va, unsig
     }
 
     invlpgb(rax, ecx, edx);
+    tlbsync();
+    return 0;
+}
+
+static inline int invlpgb_flush_tlb_hvm(const cpumask_t *mask, struct domain *d)
+{
+    invlpgb(INVLPGB_RAX_VALID_ASID | INVLPGB_RAX_INCLUDE_GLOBAL | INVLPGB_RAX_INCLUDE_NESTED,
+            0, d->arch.hvm.asid.asid);
     tlbsync();
     return 0;
 }
