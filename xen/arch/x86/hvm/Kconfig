@@ -24,6 +24,16 @@ config AMD_SVM
 	  If your system includes a processor with AMD-V support, say Y.
 	  If in doubt, say Y.
 
+config COCO_AMD_SEV
+	bool "AMD SEV (UNSUPPORTED)" if AMD && AMD_SVM && COCO && UNSUPPORTED
+	default y
+	select AMD_SP
+	help
+		Enables support for AMD Secure Encrypted Virtualization technology.
+		This option is needed if you want to run confidential guests on a
+		AMD platform that supports it.
+		If in doubt, say N.
+
 config INTEL_VMX
 	bool "Intel VT-x" if EXPERT
 	default INTEL

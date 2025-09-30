@@ -27,6 +27,7 @@
 #include <asm/hvm/nestedhvm.h>
 #include <asm/hvm/support.h>
 #include <asm/hvm/asid.h>
+#include <asm/hvm/svm/sev.h>
 #include <asm/hvm/svm/svm.h>
 #include <asm/hvm/svm/svmdebug.h>
 #include <asm/hvm/svm/vmcb.h>
@@ -592,8 +593,8 @@ static void cf_check svm_cpuid_policy_changed(struct vcpu *v)
     const struct cpu_policy *cp = v->domain->arch.cpu_policy;
     u32 bitmap = vmcb_get_exception_intercepts(vmcb);
 
-    if ( opt_hvm_fep ||
-         (v->domain->arch.cpuid->x86_vendor != boot_cpu_data.x86_vendor) )
+    if ( !is_sev_domain(v->domain) && (opt_hvm_fep ||
+         (v->domain->arch.cpuid->x86_vendor != boot_cpu_data.x86_vendor)) )
         bitmap |= (1U << X86_EXC_UD);
     else
         bitmap &= ~(1U << X86_EXC_UD);
@@ -1878,6 +1879,11 @@ static int cf_check svm_msr_read_intercept(
         break;
 
     case MSR_K8_SYSCFG:
+        if ( is_sev_domain(d) )
+        {
+            *msr_content = SYSCFG_MEM_ENCRYPT;
+            break;
+        }
     case MSR_K8_TOP_MEM1:
     case MSR_K8_TOP_MEM2:
     case MSR_K8_VM_CR:

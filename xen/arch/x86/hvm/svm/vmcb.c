@@ -14,7 +14,9 @@
 #include <xen/sched.h>
 #include <xen/softirq.h>
 
+#include <asm/cpu-policy.h>
 #include <asm/guest-msr.h>
+#include <asm/hvm/svm/sev.h>
 #include <asm/hvm/svm/svm.h>
 #include <asm/hvm/svm/svmdebug.h>
 #include <asm/hvm/svm/vmcb.h>
@@ -175,6 +177,18 @@ static int construct_vmcb(struct vcpu *v)
      */
     if ( default_xen_spec_ctrl == SPEC_CTRL_STIBP )
         v->arch.msrs->spec_ctrl.raw = SPEC_CTRL_STIBP;
+
+    if ( is_sev_domain(v->domain) )
+    {
+        vmcb_set_sev(vmcb, true);
+
+        vmcb->_general1_intercepts &= ~(
+            /* SEV guests needs cache management */
+            GENERAL1_INTERCEPT_INVD | 
+            /* Intercept not implementable under SEV/SEV-ES */
+            GENERAL1_INTERCEPT_TASK_SWITCH
+        );
+    }
 
     return 0;
 }

@@ -19,6 +19,10 @@
 
 #include "cpu.h"
 
+#ifdef CONFIG_COCO_AMD_SEV
+#include <asm/coco.h>
+#endif
+
 /*
  * Pre-canned values for overriding the CPUID features 
  * and extended features masks.
@@ -1387,6 +1391,11 @@ static void cf_check init_amd(struct cpuinfo_x86 *c)
 	check_syscfg_dram_mod_en();
 
 	amd_log_freq(c);
+
+#ifdef CONFIG_COCO_AMD_SEV
+	if ( cpu_has_sev )
+		coco_register_ops(&sev_coco_ops);
+#endif
 }
 
 const struct cpu_dev __initconst_cf_clobber amd_cpu_dev = {

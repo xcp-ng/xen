@@ -9,6 +9,9 @@
 #ifndef __ASM_X86_HVM_SVM_H__
 #define __ASM_X86_HVM_SVM_H__
 
+#include <xen/stdint.h>
+#include <asm/psp-sev.h>
+
 void svm_asid_init(void);
 void svm_vcpu_assign_asid(struct vcpu *v);
 void svm_vcpu_set_tlb_control(struct vcpu *v);
@@ -26,6 +29,16 @@ bool svm_load_segs(unsigned int ldt_ents, unsigned long ldt_base,
                    unsigned long fs_base, unsigned long gs_base,
                    unsigned long gs_shadow);
 
+struct sev_state {
+  uint32_t asp_handle;
+  struct sev_guest_policy asp_policy;
+  uint8_t  measure[96];
+  uint32_t measure_len; /* 96 bytes */
+  uint8_t  state;
+
+  unsigned long flags;
+};
+                
 struct svm_domain {
     /* OSVW MSRs */
     union {
@@ -35,6 +48,10 @@ struct svm_domain {
             uint64_t status;
         };
     } osvw;
+
+    #ifdef CONFIG_COCO_AMD_SEV
+    struct sev_state sev;
+    #endif
 };
 
 extern u32 svm_feature_flags;
