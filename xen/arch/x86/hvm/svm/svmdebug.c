@@ -44,6 +44,8 @@ void svm_vmcb_dump(const char *from, const struct vmcb_struct *vmcb)
            vmcb_get_exception_intercepts(vmcb));
     printk("general1_intercepts = %#x general2_intercepts = %#x\n",
            vmcb_get_general1_intercepts(vmcb), vmcb_get_general2_intercepts(vmcb));
+    printk("pause_filter_threshold = %u pause_filter_count = %u\n",
+           vmcb_get_pause_filter_thresh(vmcb), vmcb_get_pause_filter_count(vmcb));
     printk("iopm_base_pa = %#"PRIx64" msrpm_base_pa = %#"PRIx64" tsc_offset = %#"PRIx64"\n",
            vmcb_get_iopm_base_pa(vmcb), vmcb_get_msrpm_base_pa(vmcb),
            vmcb_get_tsc_offset(vmcb));
@@ -58,13 +60,21 @@ void svm_vmcb_dump(const char *from, const struct vmcb_struct *vmcb)
            vmcb->exitcode, vmcb->exit_int_info.raw);
     printk("exitinfo1 = %#"PRIx64" exitinfo2 = %#"PRIx64"\n",
            vmcb->exitinfo1, vmcb->exitinfo2);
-    printk("asid = %#x np_ctrl = %#"PRIx64":%s%s%s\n",
+    printk("asid = %#x np_ctrl = %#"PRIx64":%s%s%s%s%s%s\n",
            vmcb_get_asid(vmcb), vmcb_get_np_ctrl(vmcb),
            vmcb_get_np(vmcb)     ? " NP"     : "",
            vmcb_get_sev(vmcb)    ? " SEV"    : "",
-           vmcb_get_sev_es(vmcb) ? " SEV_ES" : "");
+           vmcb_get_sev_es(vmcb) ? " SEV_ES ": "",
+           vmcb_get_gmet(vmcb)   ? " GMET "  : "",
+           vmcb_get_np_sss(vmcb) ? " NP_SSS ": "",
+           vmcb_get_vte(vmcb)    ? " VTE"    : "");
+    printk("vmsa_pa = %#"PRIx64" ghcb_msr = %#"PRIx64"\n",
+           vmcb->vmsa_pa, vmcb->ghcb_msr);
+    printk("vmgexit_rax = %#"PRIx64" vmgexit_cpl = %u\n",
+           vmcb->vmgexit_rax, vmcb->vmgexit_cpl);
     printk("virtual vmload/vmsave = %d, virt_ext = %#"PRIx64"\n",
            vmcb->virt_ext.fields.vloadsave_enable, vmcb->virt_ext.bytes);
+    
     if ( is_sev_es_domain(curr->domain) )
     {
         sev_vmsa_dump(curr);
@@ -91,6 +101,12 @@ void svm_vmcb_dump(const char *from, const struct vmcb_struct *vmcb)
            vmcb->_ssp, vmcb->_msr_s_cet, vmcb->_msr_isst);
     printk("H_CR3 = 0x%016"PRIx64" CleanBits = %#x\n",
            vmcb_get_h_cr3(vmcb), vmcb->cleanbits.raw);
+    printk("lbrv: DebugCtl: %"PRIx64" LBFI: %"PRIx64" LBTI: %"PRIx64"\n",
+           vmcb_get_debugctlmsr(vmcb), vmcb_get_lastbranchfromip(vmcb),
+           vmcb_get_lastbranchtoip(vmcb));
+    printk("       LIFI: %"PRIx64" LITI: %"PRIx64"\n",
+           vmcb_get_lastintfromip(vmcb), vmcb_get_lastinttoip(vmcb));
+    printk("SPEC_CTRL = %"PRIx64"\n", vmcb->spec_ctrl);
 
     /* print out all the selectors */
     printk("       sel attr  limit   base\n");
