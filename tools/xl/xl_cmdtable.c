@@ -641,6 +641,11 @@ const struct cmd_spec cmd_table[] = {
       "Issue a qemu monitor command to the device model of a domain",
       "<Domain> <Command>",
     },
+    { "attestation",
+      &main_attestation, 0, 0,
+      "get attestation and put it into a file",
+      "<Domain> <File>",
+    },
 #ifdef LIBXL_HAVE_DT_OVERLAY
     { "dt-overlay",
       &main_dt_overlay, 0, 1,

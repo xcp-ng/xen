@@ -60,6 +60,8 @@ static int sev_domain_prepare_initial_mem(struct domain *d, gfn_t gfn, size_t co
     mfn_t mfn, mfn_base = INVALID_MFN;
     size_t segment_size = 0;
 
+    flush_all(FLUSH_CACHE_WRITEBACK);
+
     do {
         page = get_page_from_gfn(d, gfn_x(gfn), NULL, P2M_ALLOC);
         if ( unlikely(!page) )
@@ -218,10 +220,39 @@ static int sev_asid_alloc(struct domain *d, struct hvm_asid *asid)
     return hvm_asid_alloc_range(asid, asid_min, asid_max);
 }
 
+static int sev_attestation_report(struct domain *d, struct coco_attestation_report args, void *response_buffer) {
+    struct sev_data_attestation_report report;
+    int psp_ret;
+    int rc;
+
+
+    report.handle = d->arch.hvm.svm.sev.asp_handle;
+    report.len = args.len;
+    report.reserved = 0;
+    report.address = (uint64_t) virt_to_maddr(response_buffer);
+    for (size_t i =0; i < 16; i++) { // or memcpy ?
+        report.mnonce[i] = args.mnonce[i];
+    }
+    printk(XENLOG_DEBUG
+           "asp: ATTESTATION_REPORT d%d: size=%u\n", d->domain_id, args.len);
+    rc = sev_do_cmd(SEV_CMD_ATTESTATION_REPORT, (void *)(&report),
+        &psp_ret, true);
+   
+    if (!rc && !psp_ret) {
+        return 0;
+    }
+    printk(XENLOG_ERR "asp: failed to get ATTESTATION for d%hu: psp_ret %d\n",
+           d->domain_id, psp_ret);
+    return rc;
+}
+
+
+
 static struct coco_domain_ops sev_domain_ops = {
     .prepare_initial_mem = sev_domain_prepare_initial_mem,
     .domain_initialise = sev_domain_initialise,
     .domain_creation_finished = sev_domain_creation_finished,
+    .domain_attestation_report = sev_attestation_report,
     .domain_destroy = sev_domain_destroy,
     .asid_alloc = sev_asid_alloc,
 };

@@ -1531,6 +1531,22 @@ int xc_coco_prepare_initial_mem(xc_interface *handle, coco_prepare_initial_mem_t
     xc_hypercall_buffer_free(handle, arg);
     return rc;
 }
+int xc_coco_get_attestation(xc_interface *handle, struct coco_attestation_report_t *cmd)
+{
+    DECLARE_HYPERCALL_BUFFER(struct coco_attestation_report_t, arg);
+    int rc;
+
+    arg = xc_hypercall_buffer_alloc(handle, arg, sizeof(*arg));
+    if ( arg == NULL )
+        return -1;
+    memcpy(arg, cmd, sizeof(struct coco_attestation_report_t));
+
+    rc = xencall2(handle->xcall, __HYPERVISOR_coco_op, XEN_COCO_attestation_report,
+                  HYPERCALL_BUFFER_AS_ARG(arg));
+
+    xc_hypercall_buffer_free(handle, arg);
+    return rc;
+}
 
 int xc_domain_setdebugging(xc_interface *xch,
                            uint32_t domid,

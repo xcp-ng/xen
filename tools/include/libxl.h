@@ -3007,6 +3007,11 @@ static inline int libxl_qemu_monitor_command_0x041200(libxl_ctx *ctx,
  */
 int libxl_clear_domid_history(libxl_ctx *ctx);
 
+/*
+ * Used to retrieve for a domain using coco
+ */
+int libxl_domain_attestation(libxl_ctx *ctx, uint32_t domain_id, char *file);
+
 #endif /* LIBXL_H */
 
 /*

@@ -363,6 +363,17 @@ int main_config_update(int argc, char **argv)
     return 0;
 }
 
+int main_attestation(int argc, char **argv) {
+    int rc = 0;
+    //check for segfault if wrong number of args
+    char *dst_file = argv[optind + 1];
+    uint32_t domain_id = find_domain(argv[optind]);
+    //check file, open it ?
+    rc = libxl_domain_attestation(ctx, domain_id, dst_file);
+
+    return rc;
+}
+
 /*
  * Local variables:
  * mode: C

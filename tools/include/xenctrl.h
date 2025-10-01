@@ -1685,6 +1685,7 @@ int xc_get_hvm_param(xc_interface *handle, uint32_t dom, int param, unsigned lon
 
 int xc_coco_platform_status(xc_interface *handle, coco_platform_status_t *status);
 int xc_coco_prepare_initial_mem(xc_interface *handle, coco_prepare_initial_mem_t *cmd);
+int xc_coco_get_attestation(xc_interface *handle, struct coco_attestation_report_t *attestation_report);
 
 /* HVM guest pass-through */
 int xc_assign_device(xc_interface *xch,

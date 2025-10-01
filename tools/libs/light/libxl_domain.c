@@ -2621,6 +2621,37 @@ out:
     libxl__ao_complete(egc, ao, rc);
 }
 
+int libxl_domain_attestation(libxl_ctx *ctx, uint32_t domain_id, char *file) {
+    //file is supposed to be valid
+    struct coco_attestation_report_t report;
+    char result[208];
+    report.handle = domain_id;
+    report.address = &result;
+    report.mnonce[0] = 0x11;
+    report.mnonce[1] = 0x22;
+    report.mnonce[14] = 0xAA;
+    report.mnonce[15] = 0x55;
+    report.len = 208;
+    int rc;
+    rc = xc_coco_get_attestation(ctx->xch, &report);
+
+    FILE *fp = fopen(file, "wb");  // open file in binary write mode
+    if (!fp) {
+        perror("fopen");
+        return -1;
+    }
+
+    size_t written = fwrite(&result, 1, report.len, fp);
+    if (written != report.len) {
+        perror("fwrite");
+        fclose(fp);
+        return -1;
+    }
+
+    fclose(fp);
+    return rc;
+}
+
 /*
  * Local variables:
  * mode: C

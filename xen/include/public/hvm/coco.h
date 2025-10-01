@@ -62,4 +62,18 @@ struct coco_prepare_initial_mem {
 typedef struct coco_prepare_initial_mem coco_prepare_initial_mem_t;
 DEFINE_XEN_GUEST_HANDLE(coco_prepare_initial_mem_t);
 
+struct coco_attestation_report {
+	uint32_t handle;				/* IN */
+	XEN_GUEST_HANDLE(void) address;	/* In */
+	uint8_t mnonce[16];				/* In */
+	uint32_t len;				/* In/Out */
+};
+struct coco_attestation_report_t {
+	uint32_t handle;				/* IN */
+	void* address;	/* In */
+	uint8_t mnonce[16];				/* In */
+	uint32_t len;				/* In/Out */
+};
+#define XEN_COCO_attestation_report 2
+
 #endif /* __XEN_PUBLIC_HVM_COCO_H__ */

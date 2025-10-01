@@ -101,6 +101,24 @@ out:
     return rc;
 }
 
+static long coco_op_get_attestation_report(struct coco_attestation_report report) {
+    struct domain *d;
+    int rc;
+
+    char resp[208];
+    d = get_domain_by_id(report.handle);
+    rc = d->coco_ops->domain_attestation_report(d, report, resp);
+
+    if (!rc) {
+        if (copy_to_guest(report.address, &resp, 1)) {
+            return -EFAULT;
+        }
+    }
+    return rc;
+
+}
+
+
 long do_coco_op(unsigned int cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
 {
     if ( !is_hardware_domain(current->domain) )
@@ -124,6 +142,15 @@ long do_coco_op(unsigned int cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
                 return -EFAULT;
 
             return coco_op_prepare_initial_mem(prepare_initial_mem);
+        }
+        case XEN_COCO_attestation_report:
+        {
+            struct coco_attestation_report report;
+            if ( copy_from_guest(&report, arg, 1) ) {
+                return -EFAULT;
+            }
+
+            return coco_op_get_attestation_report(report);
         }
 
         default:
