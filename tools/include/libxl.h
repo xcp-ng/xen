@@ -3010,7 +3010,7 @@ int libxl_clear_domid_history(libxl_ctx *ctx);
 /*
  * Used to retrieve for a domain using coco
  */
-int libxl_domain_attestation(libxl_ctx *ctx, uint32_t domain_id, char *file);
+int libxl_domain_attestation(libxl_ctx *ctx, uint32_t domain_id, FILE *file, bool is_mmonce_file, char *mmonce);
 
 #endif /* LIBXL_H */
 

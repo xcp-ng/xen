@@ -2621,34 +2621,62 @@ out:
     libxl__ao_complete(egc, ao, rc);
 }
 
-int libxl_domain_attestation(libxl_ctx *ctx, uint32_t domain_id, char *file) {
-    //file is supposed to be valid
+static int hex_char_to_int(char c) {
+    if ('0' <= c && c <= '9') return c - '0';
+    if ('a' <= c && c <= 'f') return c - 'a' + 10;
+    if ('A' <= c && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+int libxl_domain_attestation(libxl_ctx *ctx, uint32_t domain_id, FILE *file, bool is_mmonce_file, char *mmonce) {
     struct coco_attestation_report_t report;
     char result[208];
+    int rc, r;
+    
+    if (is_mmonce_file) {
+        int datalen = 0;
+        void *data = NULL;
+        
+        r = libxl_read_file_contents(ctx, mmonce, &data, &datalen);
+        
+        if (datalen != 16) {
+            fprintf(stderr, "Error: invalid mmonce length\n");
+            return ERROR_INVAL;
+        }
+        memcpy(&report.mnonce, data, 16);
+        free(data);
+    } else {
+        if (strnlen(mmonce, 33) != 32) {
+            fprintf(stderr, "Error: invalid mmonce length\n");
+        }
+        for (int i = 0; i < 16; i++) {
+            int hi = hex_char_to_int(mmonce[2*i]);
+            int lo = hex_char_to_int(mmonce[2*i + 1]);
+
+            if (hi < 0 || lo < 0) {
+                fprintf(stderr, "Error: invalid hex character\n");
+                return -1;
+            }
+
+            report.mnonce[i] = (hi << 4) | lo;
+        }
+
+    }
+
     report.handle = domain_id;
     report.address = &result;
-    report.mnonce[0] = 0x11;
-    report.mnonce[1] = 0x22;
-    report.mnonce[14] = 0xAA;
-    report.mnonce[15] = 0x55;
     report.len = 208;
-    int rc;
+
     rc = xc_coco_get_attestation(ctx->xch, &report);
 
-    FILE *fp = fopen(file, "wb");  // open file in binary write mode
-    if (!fp) {
-        perror("fopen");
-        return -1;
-    }
-
-    size_t written = fwrite(&result, 1, report.len, fp);
+    size_t written = fwrite(&result, 1, report.len, file);
     if (written != report.len) {
         perror("fwrite");
-        fclose(fp);
+        fclose(file);
         return -1;
     }
 
-    fclose(fp);
+    fclose(file);
     return rc;
 }
 

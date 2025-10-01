@@ -364,12 +364,50 @@ int main_config_update(int argc, char **argv)
 }
 
 int main_attestation(int argc, char **argv) {
-    int rc = 0;
-    //check for segfault if wrong number of args
-    char *dst_file = argv[optind + 1];
-    uint32_t domain_id = find_domain(argv[optind]);
-    //check file, open it ?
-    rc = libxl_domain_attestation(ctx, domain_id, dst_file);
+    int rc;
+    FILE *dst_file = stdout;
+    char * mmonce = NULL;
+    uint32_t domain_id;
+    bool is_mmonce_file = false;
+    
+    int opt;
+    static struct option opts[] = {
+        {"file", 1, 0, 'f'},
+        {"print", 0, 0, 'p'},
+        {"mmonce", 1, 0, 'm'},
+        {"mmonce-file", 1, 0, 'n'},
+        COMMON_LONG_OPTS
+    };
+
+    SWITCH_FOREACH_OPT(opt, "f:pm:n:", opts, "attestation", 0) {
+    case 'p':
+        dst_file = stdout;
+        break;
+    case 'f':
+        dst_file = fopen(optarg, "wb");  // open file in binary write mode
+        if (!dst_file) {
+            perror("fopen");
+            return -1;
+        }
+        break;
+    case 'm':
+        mmonce = optarg;
+        is_mmonce_file = false;
+        break;
+    case 'n':
+        mmonce = optarg;
+        is_mmonce_file = true;
+        break;
+    }
+
+    if (mmonce == NULL) {
+        fprintf(stderr, "Error: no mmonce provided\n");
+        return 1;
+    }
+
+    domain_id = find_domain(argv[optind]);
+
+    rc = libxl_domain_attestation(ctx, domain_id, dst_file, is_mmonce_file, mmonce);
 
     return rc;
 }
