@@ -384,8 +384,8 @@ typedef union
     u64 bytes;
     struct
     {
-        u64 lbr_enable:1;
-        u64 vloadsave_enable:1;
+        bool lbr_enable:1;
+        bool vloadsave_enable:1;
     } fields;
 } virt_ext_t;
 
@@ -760,6 +760,7 @@ VMCB_ACCESSORS_(np, bool, np)
 VMCB_ACCESSORS_(sev, bool, np)
 VMCB_ACCESSORS_(sev_es, bool, np)
 VMCB_ACCESSORS_(gmet, bool, np)
+VMCB_ACCESSORS_(np_sss, bool, np)
 VMCB_ACCESSORS_(vte, bool, np)
 VMCB_ACCESSORS(h_cr3, np)
 VMCB_ACCESSORS(g_pat, np)
