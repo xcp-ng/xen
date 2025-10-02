@@ -2669,11 +2669,13 @@ int libxl_domain_attestation(libxl_ctx *ctx, uint32_t domain_id, FILE *file, boo
 
     rc = xc_coco_get_attestation(ctx->xch, &report);
 
-    size_t written = fwrite(&result, 1, report.len, file);
-    if (written != report.len) {
-        perror("fwrite");
-        fclose(file);
-        return -1;
+    if (!rc) {
+        size_t written = fwrite(&result, 1, report.len, file);
+        if (written != report.len) {
+            perror("fwrite");
+            fclose(file);
+            return -1;
+        }
     }
 
     fclose(file);

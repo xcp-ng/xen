@@ -104,8 +104,8 @@ out:
 static long coco_op_get_attestation_report(struct coco_attestation_report report) {
     struct domain *d;
     int rc;
-
     char resp[208];
+
     d = get_domain_by_id(report.handle);
     rc = d->coco_ops->domain_attestation_report(d, report, resp);
 
@@ -114,8 +114,8 @@ static long coco_op_get_attestation_report(struct coco_attestation_report report
             return -EFAULT;
         }
     }
-    return rc;
 
+    return rc;
 }
 
 

@@ -220,12 +220,13 @@ static int sev_asid_alloc(struct domain *d, struct hvm_asid *asid)
     return hvm_asid_alloc_range(asid, asid_min, asid_max);
 }
 
-static int sev_attestation_report(struct domain *d, struct coco_attestation_report args, void *response_buffer) {
+static int sev_attestation_report(struct domain *d,
+    struct coco_attestation_report args, void *response_buffer) {
     struct sev_data_attestation_report report;
     int psp_ret;
     int rc;
 
-
+    //from coco struct to sev specific
     report.handle = d->arch.hvm.svm.sev.asp_handle;
     report.len = args.len;
     report.reserved = 0;
@@ -233,16 +234,19 @@ static int sev_attestation_report(struct domain *d, struct coco_attestation_repo
     for (size_t i =0; i < 16; i++) { // or memcpy ?
         report.mnonce[i] = args.mnonce[i];
     }
+    
     printk(XENLOG_DEBUG
            "asp: ATTESTATION_REPORT d%d: size=%u\n", d->domain_id, args.len);
+    
     rc = sev_do_cmd(SEV_CMD_ATTESTATION_REPORT, (void *)(&report),
         &psp_ret, true);
    
     if (!rc && !psp_ret) {
         return 0;
     }
-    printk(XENLOG_ERR "asp: failed to get ATTESTATION for d%hu: psp_ret %d\n",
+    printk(XENLOG_ERR "asp: failed to ATTESTATION for d%hu: psp_ret %d\n",
            d->domain_id, psp_ret);
+
     return rc;
 }
 

@@ -384,7 +384,7 @@ int main_attestation(int argc, char **argv) {
         dst_file = stdout;
         break;
     case 'f':
-        dst_file = fopen(optarg, "wb");  // open file in binary write mode
+        dst_file = fopen(optarg, "wb");
         if (!dst_file) {
             perror("fopen");
             return -1;

@@ -17,7 +17,8 @@ struct coco_domain_ops {
     /* HVM domain hooks */
     int (*domain_initialise)(struct domain *d);
     int (*domain_creation_finished)(struct domain *d);
-    int (*domain_attestation_report)(struct domain *d, struct coco_attestation_report report, void* response_buffer);
+    int (*domain_attestation_report)(struct domain *d, 
+        struct coco_attestation_report report, void* response_buffer);
     void (*domain_destroy)(struct domain *d);
 
 #ifdef CONFIG_X86

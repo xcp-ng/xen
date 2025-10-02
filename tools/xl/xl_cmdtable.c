@@ -643,8 +643,8 @@ const struct cmd_spec cmd_table[] = {
     },
     { "attestation",
       &main_attestation, 0, 0,
-      "get attestation and put it into a file",
-      "<Domain> <File>",
+      "request attestation for a coco and put it into a file",
+      "<options> <Domain>",
     },
 #ifdef LIBXL_HAVE_DT_OVERLAY
     { "dt-overlay",
