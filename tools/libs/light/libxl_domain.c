@@ -15,6 +15,8 @@
 #include "libxl_osdeps.h"
 
 #include "libxl_internal.h"
+#include "xenctrl.h"
+#include <stdint.h>
 
 #define PAGE_TO_MEMKB(pages) ((pages) * 4)
 
@@ -2628,17 +2630,16 @@ static int hex_char_to_int(char c) {
     return -1;
 }
 
-int libxl_domain_attestation(libxl_ctx *ctx, uint32_t domain_id, FILE *file, bool is_mmonce_file, char *mmonce) {
-    struct coco_attestation_report_t report;
-    char result[208];
+int libxl_domain_attestation(libxl_ctx *ctx, uint32_t domid, int file, bool is_mmonce_file, char *mmonce) {
+    coco_attestation_report_t report;
     int rc, r;
-    
+
     if (is_mmonce_file) {
         int datalen = 0;
         void *data = NULL;
-        
+
         r = libxl_read_file_contents(ctx, mmonce, &data, &datalen);
-        
+
         if (datalen != 16) {
             fprintf(stderr, "Error: invalid mmonce length\n");
             return ERROR_INVAL;
@@ -2663,22 +2664,22 @@ int libxl_domain_attestation(libxl_ctx *ctx, uint32_t domain_id, FILE *file, boo
 
     }
 
-    report.handle = domain_id;
-    report.address = &result;
-    report.len = 208;
+    report.domid = domid;
+    report.len = 0;
 
     rc = xc_coco_get_attestation(ctx->xch, &report);
 
     if (!rc) {
-        size_t written = fwrite(&result, 1, report.len, file);
+        size_t written = write(file, &report.sev, report.len);
+        // the union used does not matter, we use the pointer
         if (written != report.len) {
-            perror("fwrite");
-            fclose(file);
+            perror("write");
+            close(file);
             return -1;
         }
     }
 
-    fclose(file);
+    close(file);
     return rc;
 }
 

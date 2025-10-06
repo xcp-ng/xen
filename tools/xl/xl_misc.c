@@ -12,6 +12,7 @@
  * GNU Lesser General Public License for more details.
  */
 
+#include <fcntl.h>
 #include <limits.h>
 #include <stdlib.h>
 
@@ -365,11 +366,11 @@ int main_config_update(int argc, char **argv)
 
 int main_attestation(int argc, char **argv) {
     int rc;
-    FILE *dst_file = stdout;
+    int dst_file = 1;
     char * mmonce = NULL;
-    uint32_t domain_id;
+    uint32_t domid;
     bool is_mmonce_file = false;
-    
+
     int opt;
     static struct option opts[] = {
         {"file", 1, 0, 'f'},
@@ -381,12 +382,12 @@ int main_attestation(int argc, char **argv) {
 
     SWITCH_FOREACH_OPT(opt, "f:pm:n:", opts, "attestation", 0) {
     case 'p':
-        dst_file = stdout;
+        dst_file = 1;
         break;
     case 'f':
-        dst_file = fopen(optarg, "wb");
+        dst_file = open(optarg, O_WRONLY | O_CREAT, 0644);
         if (!dst_file) {
-            perror("fopen");
+            perror("open");
             return -1;
         }
         break;
@@ -405,9 +406,9 @@ int main_attestation(int argc, char **argv) {
         return 1;
     }
 
-    domain_id = find_domain(argv[optind]);
+    domid = find_domain(argv[optind]);
 
-    rc = libxl_domain_attestation(ctx, domain_id, dst_file, is_mmonce_file, mmonce);
+    rc = libxl_domain_attestation(ctx, domid, dst_file, is_mmonce_file, mmonce);
 
     return rc;
 }

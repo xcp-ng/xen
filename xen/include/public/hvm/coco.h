@@ -43,13 +43,14 @@ typedef struct coco_platform_status coco_platform_status_t;
 DEFINE_XEN_GUEST_HANDLE(coco_platform_status_t);
 
 #define XEN_COCO_prepare_initial_mem 1
+#define XEN_COCO_attestation_report 2
 
 /**
  * XEN_COCO_prepare_initial_mem: Prepare early memory pages of a guest
- * 
+ *
  * During guest construction, the confidential computing platform may require memory
  * to be prepared (e.g., encrypted) before the guest is started.
- * 
+ *
  * After preparation, any further access to these pages is invalid, as they may be
  * encrypted, sealed, or tracked by the platform.
  */
@@ -62,18 +63,31 @@ struct coco_prepare_initial_mem {
 typedef struct coco_prepare_initial_mem coco_prepare_initial_mem_t;
 DEFINE_XEN_GUEST_HANDLE(coco_prepare_initial_mem_t);
 
+
+struct sev_attestation_report_response {
+	uint8_t mnonce[16];
+	uint8_t launch_digest[32];
+	uint32_t policy;
+	uint32_t sig_usage;
+	uint32_t sig_algo;
+	uint32_t reserved;
+	uint8_t sig[144];
+}  __attribute__((packed));
+
+/**
+ * len is the size used by the attestation
+ * the union is used to make sure the struct is big enough to handle all attestation
+ */
 struct coco_attestation_report {
-	uint32_t handle;				/* IN */
-	XEN_GUEST_HANDLE(void) address;	/* In */
-	uint8_t mnonce[16];				/* In */
-	uint32_t len;				/* In/Out */
+    domid_t domid;          /* IN */
+	uint8_t mnonce[16];     /* IN */
+	uint32_t len;           /* OUT */
+    union {
+        struct sev_attestation_report_response sev;
+    } /* OUT */;
 };
-struct coco_attestation_report_t {
-	uint32_t handle;				/* IN */
-	void* address;	/* In */
-	uint8_t mnonce[16];				/* In */
-	uint32_t len;				/* In/Out */
-};
-#define XEN_COCO_attestation_report 2
+typedef struct coco_attestation_report coco_attestation_report_t;
+DEFINE_XEN_GUEST_HANDLE(coco_attestation_report_t);
+
 
 #endif /* __XEN_PUBLIC_HVM_COCO_H__ */

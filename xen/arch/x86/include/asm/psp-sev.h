@@ -512,7 +512,8 @@ struct sev_data_attestation_report {
 
 
 /**
- * SEV platform commands
+ * SEV platform command} attestation;
+s
  */
 enum {
     SEV_FACTORY_RESET = 0,

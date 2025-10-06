@@ -2,7 +2,9 @@
 /*
  * General confidential computing functions.
  */
- 
+
+#include "xen/config.h"
+#include "xen/lib.h"
 #include <xen/coco.h>
 #include <xen/errno.h>
 #include <xen/domain.h>
@@ -40,7 +42,7 @@ int __init coco_init(void)
     if ( coco_ops->init )
     {
         rc = coco_ops->init();
-        
+
         if ( rc )
         {
             printk("coco: Unable to initialize coco platform (%d)", rc);
@@ -76,7 +78,7 @@ int coco_prepare_initial_memory(struct domain *d, gfn_t gfn, size_t page_count)
 
     if ( d->coco_ops->prepare_initial_mem )
         return d->coco_ops->prepare_initial_mem(d, gfn, page_count);
-    
+
     return 0;
 }
 
@@ -87,7 +89,7 @@ long coco_op_prepare_initial_mem(struct coco_prepare_initial_mem arg)
 
     if ( !d )
         return -ENOENT;
-    
+
     if ( !is_coco_domain(d) )
     {
         rc = -EOPNOTSUPP;
@@ -101,19 +103,22 @@ out:
     return rc;
 }
 
-static long coco_op_get_attestation_report(struct coco_attestation_report report) {
+static long coco_op_get_attestation_report(coco_attestation_report_t *report) {
     struct domain *d;
     int rc;
-    char resp[208];
 
-    d = get_domain_by_id(report.handle);
-    rc = d->coco_ops->domain_attestation_report(d, report, resp);
+    d = get_domain_by_id(report->domid);
 
-    if (!rc) {
-        if (copy_to_guest(report.address, &resp, 1)) {
-            return -EFAULT;
-        }
-    }
+    if (!d)
+        return -ENOENT;
+
+    if (!is_coco_domain(d))
+        return -EOPNOTSUPP;
+
+    if (!d->coco_ops || !d->coco_ops->domain_attestation_report)
+        return -EOPNOTSUPP;
+
+    rc = d->coco_ops->domain_attestation_report(d, report);
 
     return rc;
 }
@@ -133,7 +138,7 @@ long do_coco_op(unsigned int cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
 
             return 0;
         }
-        
+
         case XEN_COCO_prepare_initial_mem:
         {
             struct coco_prepare_initial_mem prepare_initial_mem;
@@ -145,12 +150,20 @@ long do_coco_op(unsigned int cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
         }
         case XEN_COCO_attestation_report:
         {
-            struct coco_attestation_report report;
-            if ( copy_from_guest(&report, arg, 1) ) {
-                return -EFAULT;
-            }
+            coco_attestation_report_t report;
+            int rc = 0;
 
-            return coco_op_get_attestation_report(report);
+            if ( copy_from_guest(&report, arg, 1) )
+                return -EFAULT;
+
+            rc = coco_op_get_attestation_report(&report);
+            if (rc)
+                return rc;
+
+            if (copy_to_guest(arg, &report, 1))
+                return -EFAULT;
+
+            return 0;
         }
 
         default:

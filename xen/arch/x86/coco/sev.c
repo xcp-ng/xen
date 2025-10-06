@@ -8,7 +8,7 @@
 #include <asm/cpufeature.h>
 #include <asm/p2m.h>
 #include <asm/hvm/asid.h>
- 
+
 #include <public/hvm/coco.h>
 
 #include <xen/config.h>
@@ -81,7 +81,7 @@ static int sev_domain_prepare_initial_mem(struct domain *d, gfn_t gfn, size_t co
                 printk(XENLOG_DEBUG
                        "asp: LAUNCH_UPDATE_DATA d%d: base=%"PRI_xen_pfn", size=%zx\n",
                        d->domain_id, mfn_x(mfn_base), segment_size);
-                
+
                 sd_lud.reserved = 0;
                 sd_lud.handle = d->arch.hvm.svm.sev.asp_handle;
                 sd_lud.address = mfn_x(mfn_base) << PAGE_SHIFT;
@@ -99,7 +99,7 @@ static int sev_domain_prepare_initial_mem(struct domain *d, gfn_t gfn, size_t co
                 mfn_base = mfn;
                 segment_size = 0;
             }
-        }  
+        }
 
         gfn = gfn_add(gfn, 1);
         segment_size++;
@@ -141,7 +141,7 @@ static int sev_domain_creation_finished(struct domain *d)
     {
         printk(XENLOG_ERR "asp: failed to LAUNCH_MEASURE for d%hu: psp_ret %hu, rc %ld\n",
                d->domain_id, psp_ret, rc);
-        
+
         if (psp_ret == SEV_RET_INVALID_LEN)
             printk(XENLOG_ERR "asp: Expected %"PRIu32" bytes\n", sd_lm.len);
         return rc;
@@ -221,26 +221,27 @@ static int sev_asid_alloc(struct domain *d, struct hvm_asid *asid)
 }
 
 static int sev_attestation_report(struct domain *d,
-    struct coco_attestation_report args, void *response_buffer) {
+    struct coco_attestation_report *args) {
     struct sev_data_attestation_report report;
     int psp_ret;
     int rc;
 
     //from coco struct to sev specific
     report.handle = d->arch.hvm.svm.sev.asp_handle;
-    report.len = args.len;
+    report.len = 208; // size of AMD-SEV attestation
+    args->len = 208;
     report.reserved = 0;
-    report.address = (uint64_t) virt_to_maddr(response_buffer);
+    report.address = (uint64_t) virt_to_maddr(&args->sev);
     for (size_t i =0; i < 16; i++) { // or memcpy ?
-        report.mnonce[i] = args.mnonce[i];
+        report.mnonce[i] = args->mnonce[i];
     }
-    
-    printk(XENLOG_DEBUG
-           "asp: ATTESTATION_REPORT d%d: size=%u\n", d->domain_id, args.len);
-    
+
+    printk(XENLOG_ERR
+           "asp: ATTESTATION_REPORT d%d: size=%u\n", d->domain_id, args->len);
+
     rc = sev_do_cmd(SEV_CMD_ATTESTATION_REPORT, (void *)(&report),
         &psp_ret, true);
-   
+
     if (!rc && !psp_ret) {
         return 0;
     }
@@ -275,7 +276,7 @@ static int sev_init(void)
     printk(XENLOG_INFO "sev: Supports up to %"PRIu32" guests\n",
             raw_cpu_policy.extd.max_sev_guests);
 
-    /* Enable AMD SME */	
+    /* Enable AMD SME */
     rdmsrl(MSR_K8_SYSCFG, syscfg);
 
     if ( !(syscfg & SYSCFG_MEM_ENCRYPT) )
