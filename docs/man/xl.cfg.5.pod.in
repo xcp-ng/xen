@@ -3198,6 +3198,13 @@ option.
 
 If using this option is necessary to fix an issue, please report a bug.
 
+=item B<x2apic_force=BOOLEAN>
+
+Force the LAPIC in x2APIC mode and prevent the guest from disabling
+it or switching to xAPIC mode.
+
+This option is disabled by default.
+
 =back
 
 =head1 SEE ALSO

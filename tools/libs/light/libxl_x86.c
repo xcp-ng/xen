@@ -9,7 +9,8 @@ int libxl__arch_domain_prepare_config(libxl__gc *gc,
 {
     switch(d_config->c_info.type) {
     case LIBXL_DOMAIN_TYPE_HVM:
-        config->arch.emulation_flags = (XEN_X86_EMU_ALL & ~XEN_X86_EMU_VPCI);
+        config->arch.emulation_flags =
+            (XEN_X86_EMU_ALL & ~(XEN_X86_EMU_VPCI | XEN_X86_EMU_FORCE_X2APIC));
         if (!libxl_defbool_val(d_config->b_info.u.hvm.pirq))
             config->arch.emulation_flags &= ~XEN_X86_EMU_USE_PIRQ;
         break;
@@ -26,6 +27,9 @@ int libxl__arch_domain_prepare_config(libxl__gc *gc,
     config->arch.misc_flags = 0;
     if (libxl_defbool_val(d_config->b_info.arch_x86.msr_relaxed))
         config->arch.misc_flags |= XEN_X86_MSR_RELAXED;
+
+    if (libxl_defbool_val(d_config->b_info.arch_x86.x2apic_force))
+        config->arch.emulation_flags |= XEN_X86_EMU_FORCE_X2APIC;
 
     if (libxl_defbool_val(d_config->b_info.trap_unmapped_accesses)) {
             LOG(ERROR, "trap_unmapped_accesses is not supported on x86\n");
@@ -888,6 +892,7 @@ int libxl__arch_domain_build_info_setdefault(libxl__gc *gc,
 {
     libxl_defbool_setdefault(&b_info->acpi, true);
     libxl_defbool_setdefault(&b_info->arch_x86.msr_relaxed, false);
+    libxl_defbool_setdefault(&b_info->arch_x86.x2apic_force, false);
     libxl_defbool_setdefault(&b_info->trap_unmapped_accesses, false);
     libxl_defbool_setdefault(&b_info->arch_x86.fixed_mem_layout, false);
 

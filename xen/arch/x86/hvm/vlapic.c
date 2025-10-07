@@ -1116,6 +1116,20 @@ int guest_wrmsr_apic_base(struct vcpu *v, uint64_t val)
     if ( !has_vlapic(v->domain) )
         return X86EMUL_EXCEPTION;
 
+    if ( has_force_x2apic(v->domain) )
+    {
+        /*
+         * We implement the same semantics as MSR_IA32_XAPIC_DISABLE_STATUS:
+         * LEGACY_XAPIC_DISABLED which rejects any attempt at clearing
+         * IA32_APIC_BASE.EXTD, thus forcing the LAPIC in x2APIC mode.
+         */
+        if ( !(val & APIC_BASE_EXTD) )
+        {
+            gdprintk(XENLOG_WARNING, "%pv tried to disable x2APIC while forced on\n", v);
+            return X86EMUL_EXCEPTION;
+        }
+    }
+
     /* Attempting to set reserved bits? */
     if ( val & ~(APIC_BASE_ADDR_MASK | APIC_BASE_ENABLE | APIC_BASE_BSP |
                  (cp->basic.x2apic ? APIC_BASE_EXTD : 0)) )
@@ -1474,7 +1488,14 @@ void vlapic_reset(struct vlapic *vlapic)
     if ( v->vcpu_id == 0 )
         vlapic->hw.apic_base_msr |= APIC_BASE_BSP;
 
-    vlapic_set_reg(vlapic, APIC_ID, (v->vcpu_id * 2) << 24);
+    if ( has_force_x2apic(v->domain) )
+    {
+        vlapic->hw.apic_base_msr |= APIC_BASE_EXTD;
+        set_x2apic_id(vlapic);
+    }
+    else
+        vlapic_set_reg(vlapic, APIC_ID, (v->vcpu_id * 2) << 24);
+    
     vlapic_do_init(vlapic);
 }
 

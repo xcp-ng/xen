@@ -800,20 +800,22 @@ static bool emulation_flags_ok(const struct domain *d, uint32_t emflags)
         {
             .caps   = CAP_HVM | CAP_HWDOM,
             .min    = X86_EMU_LAPIC | X86_EMU_IOAPIC | X86_EMU_VPCI,
+            .opt    = X86_EMU_FORCE_X2APIC,
         },
 
         /* PVH domU */
         {
             .caps   = CAP_HVM | CAP_DOMU,
             .min    = X86_EMU_LAPIC,
+            .opt    = X86_EMU_FORCE_X2APIC,
         },
 
         /* HVM domU */
         {
             .caps   = CAP_HVM | CAP_DOMU,
-            .min    = X86_EMU_ALL & ~(X86_EMU_VPCI | X86_EMU_USE_PIRQ),
+            .min    = X86_EMU_ALL & ~(X86_EMU_VPCI | X86_EMU_USE_PIRQ | X86_EMU_FORCE_X2APIC),
             /* HVM PIRQ feature is user-selectable. */
-            .opt    = X86_EMU_USE_PIRQ,
+            .opt    = X86_EMU_USE_PIRQ | X86_EMU_FORCE_X2APIC,
         },
 #endif /* #ifdef CONFIG_HVM */
     };
