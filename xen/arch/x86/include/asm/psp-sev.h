@@ -197,25 +197,28 @@ struct sev_data_deactivate {
     uint32_t handle; /* In */
 } __packed;
 
-struct sev_guest_policy {
-    /* Disable debugging mode (NODBG) */
-    bool no_debug: 1;
-    /* Disallow sharing key with other guests (NOKS) */
-    bool no_key_sharing: 1;
-    /* SEV-ES guest (ES) */
-    bool es: 1;
-    /* Disallow guest live migration (NOSEND) */
-    bool no_send: 1;
-    /* Check domain certificate in live migrations (DOMAIN) */
-    bool check_domain_cert: 1;
-    /* Check platform certificates in live migration (SEV) */
-    bool check_platform_cert: 1;
-    uint8_t rsvd0: 2;
-    uint8_t rsvd1;
-    /* Minumum API major for live migration */
-    uint8_t api_major;
-    /* Minimum API minor for live migration */
-    uint8_t api_minor;
+union sev_guest_policy {
+    uint32_t raw;
+    struct {
+        /* Disable debugging mode (NODBG) */
+        bool no_debug: 1;
+        /* Disallow sharing key with other guests (NOKS) */
+        bool no_key_sharing: 1;
+        /* SEV-ES guest (ES) */
+        bool es: 1;
+        /* Disallow guest live migration (NOSEND) */
+        bool no_send: 1;
+        /* Check domain certificate in live migrations (DOMAIN) */
+        bool check_domain_cert: 1;
+        /* Check platform certificates in live migration (SEV) */
+        bool check_platform_cert: 1;
+        uint8_t rsvd0: 2;
+        uint8_t rsvd1;
+        /* Minumum API major for live migration */
+        uint8_t api_major;
+        /* Minimum API minor for live migration */
+        uint8_t api_minor;
+    };
 } __packed;
 
 /**
@@ -228,7 +231,7 @@ struct sev_guest_policy {
  */
 struct sev_data_guest_status {
     uint32_t handle; /* In */
-    struct sev_guest_policy policy; /* Out */
+    union sev_guest_policy policy; /* Out */
     uint32_t asid;   /* Out */
     uint8_t state;   /* Out */
 } __packed;
@@ -245,7 +248,7 @@ struct sev_data_guest_status {
  */
 struct sev_data_launch_start {
     uint32_t handle;          /* In/Out */
-    struct sev_guest_policy policy; /* In */
+    union sev_guest_policy policy; /* In */
     uint64_t dh_cert_address; /* In */
     uint32_t dh_cert_len;     /* In */
     uint32_t reserved;        /* In */
@@ -344,7 +347,7 @@ struct sev_data_launch_finish {
  */
 struct sev_data_send_start {
     uint32_t handle;           /* In */
-    struct sev_guest_policy policy; /* Out */
+    union sev_guest_policy policy; /* Out */
     uint64_t pdh_cert_address; /* In */
     uint32_t pdh_cert_len;     /* In */
     uint32_t reserved1;
@@ -434,7 +437,7 @@ struct sev_data_send_cancel {
  */
 struct sev_data_receive_start {
     uint32_t handle;           /* In/Out */
-    struct sev_guest_policy policy; /* In */
+    union sev_guest_policy policy; /* In */
     uint64_t pdh_cert_address; /* In */
     uint32_t pdh_cert_len;     /* In */
     uint32_t reserved1;

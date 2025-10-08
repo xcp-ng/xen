@@ -18,26 +18,39 @@
 #include <asm/hvm/svm/sev_es.h>
 #include <asm/hvm/svm/svmdebug.h>
 #include <asm/msr.h>
- 
+
+#include <public/domctl.h>
 #include <public/hvm/coco.h>
 
 static int sev_domain_initialise(struct domain *d)
 {
-    struct sev_data_launch_start sd_ls;
-    struct sev_data_activate sd_a;
+    struct sev_data_launch_start sd_ls = {};
+    struct sev_data_activate sd_a = {};
+    union sev_guest_policy sev_policy = d->arch.hvm.svm.sev.asp_policy;
     unsigned int psp_ret = 0;
     long rc = 0;
 
+    if ( sev_policy.rsvd0 || sev_policy.rsvd1 )
+    {
+        printk(XENLOG_ERR "sev: Reserved bits set in policy\n");
+        return -EINVAL;
+    }
+    
+    if ( sev_policy.es && !cpu_has_sev_es )
+    {
+        printk(XENLOG_ERR "sev: SEV-ES is not supported\n");
+        return -EINVAL;
+    }
+    
+    if ( !(d->arch.emulation_flags & XEN_X86_EMU_FORCE_X2APIC) )
+    {
+        printk(XENLOG_ERR "sev: Guest must have forced x2apic\n");
+        return -EINVAL;
+    }
+    
     sd_ls.handle = 0; /* generate new one */
-    sd_ls.policy = (struct sev_guest_policy){
-        .no_key_sharing = true,
-        //.no_debug = true,
-        .no_send = true, /* To change when SEV live migration is something */
-    };
+    sd_ls.policy = sev_policy;
     sd_ls.dh_cert_address = 0; /* do not DH stuff */
-
-    if ( is_sev_es_domain(d) )
-        sd_ls.policy.es = true;
 
     rc = sev_do_cmd(SEV_CMD_LAUNCH_START, (void *)(&sd_ls), &psp_ret, true);
     if ( rc )
@@ -59,8 +72,6 @@ static int sev_domain_initialise(struct domain *d)
     }
 
     d->arch.hvm.svm.sev.asp_handle = sd_ls.handle;
-    d->arch.hvm.svm.sev.asp_policy = sd_ls.policy;
-
     return 0;
 }
 
@@ -373,13 +384,24 @@ static int sev_get_platform_status(struct coco_platform_status *status)
     return 0;
 }
 
-static struct coco_domain_ops *sev_get_domain_ops(struct domain *d)
+static struct coco_domain_ops *sev_get_domain_ops(struct domain *d,
+    const struct xen_domctl_createdomain *config)
 {
-    // TODO: Proper SEV-ES and SEV-SNP support
-    if ( is_sev_es_domain(d) )
-        return &sev_es_domain_ops;
+    /* We need to set a valid policy for the initialization. */
+    union sev_guest_policy *sev_policy = &d->arch.hvm.svm.sev.asp_policy;
+
+    if ( config->arch.coco.sev.flags & XEN_X86_SEV_POLICY_VALID )
+        sev_policy->raw = (uint32_t)config->arch.coco.sev.policy;
     else
-        return &sev_domain_ops;
+        /* Use a reasonable default policy */
+        *sev_policy = (union sev_guest_policy){
+            .no_key_sharing = true,
+            .no_debug = true,
+            .no_send = true, /* To change when SEV live migration is something */
+            .es = cpu_has_sev_es, /* Use SEV-ES if available */
+        };
+
+    return sev_policy->es ? &sev_es_domain_ops : &sev_domain_ops;
 }
 
 struct coco_ops sev_coco_ops = {

@@ -11,6 +11,7 @@
 #include <asm/msr.h>
 #include <asm/hvm/emulate.h>
 #include <asm/hvm/hvm.h>
+#include <asm/hvm/svm/sev.h>
 #include <asm/hvm/svm/svm.h>
 #include <asm/hvm/svm/vmcb.h>
 
@@ -69,6 +70,10 @@ unsigned int svm_get_insn_len(struct vcpu *v, unsigned int instr_enc)
     else if ( nrip_len != 0 )
         return nrip_len;
 #endif
+
+    /* Under SEV, we have no way to fetch the instruction, stop here. */
+    if ( is_sev_domain(v->domain) )
+        return nrip_len;
 
     ASSERT(v == current);
     hvm_emulate_init_once(&ctxt, NULL, guest_cpu_user_regs());

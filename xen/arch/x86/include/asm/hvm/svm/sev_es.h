@@ -8,6 +8,7 @@
 #ifndef X86_HVM_SVM_SEV_ES_H
 #define X86_HVM_SVM_SEV_ES_H
 
+#include <asm/hvm/svm/sev.h>
 #include <asm/nospec.h>
 #include <asm/cpufeature.h>
 
@@ -15,7 +16,7 @@
 
 static always_inline bool is_sev_es_domain(const struct domain *d)
 {
-  return cpu_has_sev_es && evaluate_nospec(d->options & XEN_DOMCTL_CDF_coco);
+  return is_sev_domain(d) && d->arch.hvm.svm.sev.asp_policy.es;
 }
 
 #define GHCB_VERSION_MAX	1ULL

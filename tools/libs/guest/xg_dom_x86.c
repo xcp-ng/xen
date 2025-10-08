@@ -1937,8 +1937,7 @@ static int bootlate_hvm(struct xc_dom_image *dom)
     start_info->magic = XEN_HVM_START_MAGIC_VALUE;
     start_info->version = 1;
 
-    if ( dom->coco )
-        /* TODO: Check for AMD SEV-ES/SNP */
+    if ( dom->coco && dom->use_ghcb )
         start_info->flags |= SIF_HVM_GHCB;
 
     munmap(start_info, dom->start_info_seg.pages << XC_DOM_PAGE_SHIFT(dom));
