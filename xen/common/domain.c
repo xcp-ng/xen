@@ -899,7 +899,7 @@ struct domain *domain_create(domid_t domid,
     d->cdf = flags;
 
     if ( is_coco_domain(d) )
-        coco_set_domain_ops(d);
+        coco_set_domain_ops(d, config);
 
     TRACE_TIME(TRC_DOM0_DOM_ADD, d->domain_id);
 

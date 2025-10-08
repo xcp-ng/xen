@@ -6,6 +6,7 @@
 #include <xen/stdint.h>
 #include <xen/sched.h>
 
+#include <public/domctl.h>
 #include <public/hvm/coco.h>
 
 extern __read_mostly struct coco_platform_status platform_status;
@@ -32,12 +33,13 @@ struct coco_ops {
     
     int (*init)(void);
     int (*get_platform_status)(coco_platform_status_t *status);
-    struct coco_domain_ops *(*get_domain_ops)(struct domain *d);
+    struct coco_domain_ops *(*get_domain_ops)(struct domain *d,
+        const struct xen_domctl_createdomain *config);
 };
 
 void __init coco_register_ops(struct coco_ops *ops);
 int __init coco_init(void);
-void coco_set_domain_ops(struct domain *d);
+void coco_set_domain_ops(struct domain *d, const struct xen_domctl_createdomain *config);
 
 #ifdef CONFIG_COCO
 static inline bool coco_is_supported(void)

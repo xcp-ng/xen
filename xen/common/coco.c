@@ -15,6 +15,7 @@
 
 #include <asm/p2m.h>
 
+#include <public/domctl.h>
 #include <public/hvm/coco.h>
 
 static __ro_after_init struct coco_ops *coco_ops;
@@ -63,11 +64,11 @@ err:
     return rc;
 }
 
-void coco_set_domain_ops(struct domain *d)
+void coco_set_domain_ops(struct domain *d, const struct xen_domctl_createdomain *config)
 {
     ASSERT(is_coco_domain(d));
 
-    d->coco_ops = coco_ops->get_domain_ops(d);
+    d->coco_ops = coco_ops->get_domain_ops(d, config);
 }
 
 int coco_prepare_initial_memory(struct domain *d, gfn_t gfn, size_t page_count)
