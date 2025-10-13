@@ -655,16 +655,21 @@ struct ghcb {
 	u32 ghcb_usage;
 };
 
+struct sev_vcpu {
+    struct page_info *vmsa_page;
+    struct page_info *ghcb_page;
+    uint64_t ghcb_gfn;
+    struct ghcb *ghcb_map;
+};
+
 struct svm_vcpu {
     struct vmcb_struct *vmcb;
     u64    vmcb_pa;
     unsigned long *msrpm;
     int    launch_core;
 
-    struct page_info *vmsa_page;
-    struct page_info *ghcb_page;
-    uint64_t ghcb_gfn;
-    struct ghcb *ghcb_map;
+    struct sev_vcpu sev;
+
     uint8_t vmcb_sync_state; /* enum vmcb_sync_state */
 
     /* VMCB has a cached instruction from #PF/#NPF Decode Assist? */

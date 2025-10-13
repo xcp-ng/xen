@@ -195,13 +195,17 @@ static void sev_domain_destroy(struct domain *d)
 
     /* FIXME: Why do I need that here and not in vcpu_destroy ? */
     for_each_vcpu( d, v )
-        if ( v->arch.hvm.svm.ghcb_page )
+    {
+        struct sev_vcpu *sev = &v->arch.hvm.svm.sev;
+
+        if ( v->arch.hvm.svm.sev.ghcb_page )
         {
-            UNMAP_DOMAIN_PAGE(v->arch.hvm.svm.ghcb_map);
-            put_page(v->arch.hvm.svm.ghcb_page);
-            v->arch.hvm.svm.ghcb_page = NULL;
-            v->arch.hvm.svm.ghcb_gfn = 0;
+            UNMAP_DOMAIN_PAGE(sev->ghcb_map);
+            put_page(sev->ghcb_page);
+            sev->ghcb_page = NULL;
+            sev->ghcb_gfn = 0;
         }
+    }
 
     sd_da.handle = d->arch.hvm.svm.sev.asp_handle;
 
@@ -311,7 +315,7 @@ static int sev_es_domain_creation_finished(struct domain *d)
          * Copy VMCB Save Area into VMSA page.
          * SEV-ES VMSA uses the same layout as VMCB save area.
          */
-        vmsa = __map_domain_page(v->arch.hvm.svm.vmsa_page);
+        vmsa = __map_domain_page(v->arch.hvm.svm.sev.vmsa_page);
         memcpy(vmsa, &vmcb->vmsa_start,
                sizeof(struct vmcb_struct) - offsetof(struct vmcb_struct, vmsa_start));
         cache_flush(vmsa, PAGE_SIZE);
@@ -320,7 +324,7 @@ static int sev_es_domain_creation_finished(struct domain *d)
         /* Clear VMSA-specific fields from VMCB (marked as reserved). */
         memset(&vmcb->vmsa_regs, 0, sizeof(vmcb->vmsa_regs));
 
-        sd_luv.address = page_to_maddr(v->arch.hvm.svm.vmsa_page);
+        sd_luv.address = page_to_maddr(v->arch.hvm.svm.sev.vmsa_page);
         sd_luv.len = PAGE_SIZE_4K;
         
         rc = sev_do_cmd(SEV_CMD_LAUNCH_UPDATE_VMSA, (void *)(&sd_luv), &psp_ret, true);

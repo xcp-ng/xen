@@ -82,11 +82,11 @@ static int construct_vmcb(struct vcpu *v)
 
     if ( is_sev_es_domain(v->domain) )
     {
-        svm->vmsa_page = alloc_domheap_page(v->domain, MEMF_no_owner);
-        if ( svm->vmsa_page == NULL )
+        svm->sev.vmsa_page = alloc_domheap_page(v->domain, MEMF_no_owner);
+        if ( svm->sev.vmsa_page == NULL )
             return -ENOMEM;
 
-        vmcb->vmsa_pa = page_to_maddr(svm->vmsa_page);
+        vmcb->vmsa_pa = page_to_maddr(svm->sev.vmsa_page);
     }
 
     svm->vmcb_sync_state = vmcb_needs_vmload;
@@ -96,7 +96,7 @@ static int construct_vmcb(struct vcpu *v)
     if ( svm->msrpm == NULL )
     {
         if ( is_sev_es_domain(v->domain) )
-            free_domheap_page(svm->vmsa_page);
+            free_domheap_page(svm->sev.vmsa_page);
         return -ENOMEM;
     }
     memset(svm->msrpm, 0xff, MSRPM_SIZE);
@@ -278,10 +278,10 @@ void svm_destroy_vmcb(struct vcpu *v)
         svm->msrpm = NULL;
     }
 
-    if ( svm->vmsa_page != NULL )
+    if ( svm->sev.vmsa_page != NULL )
     {
-        free_domheap_page(svm->vmsa_page);
-        svm->vmsa_page = NULL;
+        free_domheap_page(svm->sev.vmsa_page);
+        svm->sev.vmsa_page = NULL;
     }
 
     nv->nv_n1vmcx = NULL;

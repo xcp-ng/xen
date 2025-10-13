@@ -313,7 +313,7 @@ struct sev_es_save_area {
 bool sev_vmsa_dump(struct vcpu *v)
 {
     struct domain *d = v->domain;
-    struct page_info *vmsa_page = v->arch.hvm.svm.vmsa_page;
+    struct page_info *vmsa_page = v->arch.hvm.svm.sev.vmsa_page;
     struct sev_es_save_area *vmsa_dec = NULL;
     struct sev_data_dbg sd_dbg = {};
     struct cpu_user_regs *regs = &v->arch.user_regs;

@@ -1172,14 +1172,6 @@ static int cf_check svm_vcpu_initialise(struct vcpu *v)
 
 static void cf_check svm_vcpu_destroy(struct vcpu *v)
 {
-    if ( v->arch.hvm.svm.ghcb_page )
-    {
-        UNMAP_DOMAIN_PAGE(v->arch.hvm.svm.ghcb_map);
-        put_page(v->arch.hvm.svm.ghcb_page);
-        v->arch.hvm.svm.ghcb_page = NULL;
-        v->arch.hvm.svm.ghcb_gfn = 0;
-    }
-
     svm_destroy_vmcb(v);
     passive_domain_destroy(v);
 }

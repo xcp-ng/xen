@@ -236,6 +236,7 @@ static void sev_es_ghcb_call(struct vcpu *v, struct ghcb *ghcb)
 void sev_es_do_vmgexit(struct vcpu *v)
 {
     struct vmcb_struct *vmcb = v->arch.hvm.svm.vmcb;
+    struct sev_vcpu *sev = &v->arch.hvm.svm.sev;
     struct page_info *ghcb_page;
     struct ghcb *ghcb_map;
     
@@ -305,10 +306,10 @@ void sev_es_do_vmgexit(struct vcpu *v)
     }
 
     /* Standard GHCB call */
-    if ( likely(v->arch.hvm.svm.ghcb_page && ghcb_data == v->arch.hvm.svm.ghcb_gfn) )
+    if ( likely(sev->ghcb_page && ghcb_data == sev->ghcb_gfn) )
     {
         /* GHCB is already mapped and hasn't moved */
-        sev_es_ghcb_call(v, v->arch.hvm.svm.ghcb_map);
+        sev_es_ghcb_call(v, sev->ghcb_map);
         return;
     }
 
@@ -324,16 +325,16 @@ void sev_es_do_vmgexit(struct vcpu *v)
         return;
     }
 
-    if ( v->arch.hvm.svm.ghcb_page )
+    if ( sev->ghcb_page )
     {
-        UNMAP_DOMAIN_PAGE(v->arch.hvm.svm.ghcb_map);
-        put_page(v->arch.hvm.svm.ghcb_page);
+        UNMAP_DOMAIN_PAGE(sev->ghcb_map);
+        put_page(sev->ghcb_page);
     }
 
     ghcb_map = __map_domain_page(ghcb_page);
-    v->arch.hvm.svm.ghcb_map = ghcb_map;
-    v->arch.hvm.svm.ghcb_page = ghcb_page;
-    v->arch.hvm.svm.ghcb_gfn = ghcb_data;
+    sev->ghcb_map = ghcb_map;
+    sev->ghcb_page = ghcb_page;
+    sev->ghcb_gfn = ghcb_data;
 
     sev_es_ghcb_call(v, ghcb_map);
 }
