@@ -68,12 +68,7 @@ static int construct_vmcb(struct vcpu *v)
         GENERAL2_INTERCEPT_XSETBV      | GENERAL2_INTERCEPT_ICEBP       |
         GENERAL2_INTERCEPT_RDPRU;
 
-    if ( is_sev_es_domain(v->domain) )
-    {
-        /* Only intercept DR7 read and writes */
-        vmcb->_dr_intercepts = DR_INTERCEPT_DR7_READ | DR_INTERCEPT_DR7_WRITE;
-    }
-    else
+    if ( !is_sev_es_domain(v->domain) )
     {
         /* Intercept all debug-register writes. */
         vmcb->_dr_intercepts = ~0u;
@@ -88,7 +83,7 @@ static int construct_vmcb(struct vcpu *v)
     if ( is_sev_es_domain(v->domain) )
     {
         svm->vmsa_page = alloc_domheap_page(v->domain, MEMF_no_owner);
-        if ( !svm->vmsa_page )
+        if ( svm->vmsa_page == NULL )
             return -ENOMEM;
 
         vmcb->vmsa_pa = page_to_maddr(svm->vmsa_page);
@@ -101,7 +96,7 @@ static int construct_vmcb(struct vcpu *v)
     if ( svm->msrpm == NULL )
     {
         if ( is_sev_es_domain(v->domain) )
-            free_domheap_pages(svm->vmsa_page, 0);
+            free_domheap_page(svm->vmsa_page);
         return -ENOMEM;
     }
     memset(svm->msrpm, 0xff, MSRPM_SIZE);
@@ -207,10 +202,12 @@ static int construct_vmcb(struct vcpu *v)
 
         vmcb->_general1_intercepts &= ~(
             /* SEV guests needs cache management */
-            GENERAL1_INTERCEPT_INVD | 
+            GENERAL1_INTERCEPT_INVD |
             /* Intercept not implementable under SEV/SEV-ES */
             GENERAL1_INTERCEPT_TASK_SWITCH
         );
+
+        vmcb->_general2_intercepts &= ~GENERAL2_INTERCEPT_WBINVD;
     }
 
     if ( is_sev_es_domain(v->domain) )
@@ -279,6 +276,12 @@ void svm_destroy_vmcb(struct vcpu *v)
         free_xenheap_pages(
             svm->msrpm, get_order_from_bytes(MSRPM_SIZE));
         svm->msrpm = NULL;
+    }
+
+    if ( svm->vmsa_page != NULL )
+    {
+        free_domheap_page(svm->vmsa_page);
+        svm->vmsa_page = NULL;
     }
 
     nv->nv_n1vmcx = NULL;

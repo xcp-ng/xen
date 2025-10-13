@@ -192,6 +192,17 @@ static void sev_domain_destroy(struct domain *d)
     struct sev_data_decommission sd_de;
     unsigned int psp_ret;
     long rc = 0;
+    struct vcpu *v;
+
+    /* FIXME: Why do I need that here and not in vcpu_destroy ? */
+    for_each_vcpu( d, v )
+        if ( v->arch.hvm.svm.ghcb_page )
+        {
+            UNMAP_DOMAIN_PAGE(v->arch.hvm.svm.ghcb_map);
+            put_page(v->arch.hvm.svm.ghcb_page);
+            v->arch.hvm.svm.ghcb_page = NULL;
+            v->arch.hvm.svm.ghcb_gfn = 0;
+        }
 
     sd_da.handle = d->arch.hvm.svm.sev.asp_handle;
 
@@ -267,7 +278,7 @@ static int sev_es_domain_creation_finished(struct domain *d)
     sd_luv.handle = d->arch.hvm.svm.sev.asp_handle;
     sd_luv.reserved = 0;
 
-    for_each_vcpu(d, v)
+    for_each_vcpu ( d, v )
     {
         int rc;
         unsigned int psp_ret;

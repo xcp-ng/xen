@@ -317,7 +317,7 @@ static void svm_save_dr(struct vcpu *v)
     struct vmcb_struct *vmcb = v->arch.hvm.svm.vmcb;
     unsigned int flag_dr_dirty = v->arch.hvm.flag_dr_dirty;
 
-    if ( !flag_dr_dirty )
+    if ( is_sev_es_domain(v->domain) || !flag_dr_dirty )
         return;
 
     /* Clear the DR dirty flag and re-enable intercepts for DR accesses. */
@@ -351,7 +351,7 @@ static void svm_save_dr(struct vcpu *v)
 
 static void __restore_debug_registers(struct vmcb_struct *vmcb, struct vcpu *v)
 {
-    if ( v->arch.hvm.flag_dr_dirty )
+    if ( is_sev_es_domain(v->domain) || v->arch.hvm.flag_dr_dirty )
         return;
 
     v->arch.hvm.flag_dr_dirty = 1;
@@ -1172,9 +1172,13 @@ static int cf_check svm_vcpu_initialise(struct vcpu *v)
 
 static void cf_check svm_vcpu_destroy(struct vcpu *v)
 {
-    UNMAP_DOMAIN_PAGE(v->arch.hvm.svm.ghcb_map);
     if ( v->arch.hvm.svm.ghcb_page )
+    {
+        UNMAP_DOMAIN_PAGE(v->arch.hvm.svm.ghcb_map);
         put_page(v->arch.hvm.svm.ghcb_page);
+        v->arch.hvm.svm.ghcb_page = NULL;
+        v->arch.hvm.svm.ghcb_gfn = 0;
+    }
 
     svm_destroy_vmcb(v);
     passive_domain_destroy(v);

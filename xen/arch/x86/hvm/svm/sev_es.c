@@ -1,3 +1,10 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/*
+ * sev_es.c: handling SEV-ES specific logic
+ *
+ * Copyright (c) 2025 Vates SAS.
+ */
+
 #include <xen/trace.h>
 #include <xen/fastabi.h>
 #include <xen/lib.h>
@@ -14,24 +21,74 @@
 #include <asm/hvm/svm/sev_es.h>
 #include <asm/hvm/support.h>
 
+#define GHCB_VALID_BIT(field) \
+({ \
+    const unsigned long _offset_bit = offsetof(struct ghcb_save_area, field) / 8; \
+    BUILD_BUG_ON(_offset_bit >= 128); \
+    _offset_bit; \
+})
+
+#define GHCB_TEST_VALID(ghcb, field) \
+    test_bit(GHCB_VALID_BIT(field), (ghcb)->save.valid_bitmap)
+
+#define GHCB_SET_VALID(ghcb, field) \
+    __set_bit(GHCB_VALID_BIT(field), (ghcb)->save.valid_bitmap)
+
+#define GHCB_SET_FIELD(ghcb, field, value) do { \
+    GHCB_SET_VALID(ghcb, field); \
+    ghcb->save.field = value; \
+} while (0);
+
+#define GHCB_CLEAR_VALID(ghcb) \
+    bitmap_clear((ghcb)->save.valid_bitmap, 0, 128)
+
 static void sev_es_ghcb_call(struct vcpu *v, struct ghcb *ghcb)
 {
+    #ifdef CONFIG_COCO_SEV_STRICT_GHCB
+    if ( !GHCB_TEST_VALID(ghcb, sw_exitcode) ||
+         !GHCB_TEST_VALID(ghcb, sw_exitinfo1) ||
+         !GHCB_TEST_VALID(ghcb, sw_exitinfo2) )
+        goto malformed;
+    #endif
+
     switch ( ghcb->save.sw_exitcode )
     {
     case VMEXIT_CPUID:
     {
-        uint32_t leaf = ghcb->save.rax, subleaf = ghcb->save.rcx;
+        uint32_t leaf, subleaf;
         struct cpuid_leaf res;
+
+        #ifdef CONFIG_COCO_SEV_STRICT_GHCB
+        if ( !GHCB_TEST_VALID(ghcb, rax) || !GHCB_TEST_VALID(ghcb, rcx) )
+            goto malformed;
+        #endif
+
+        leaf = ghcb->save.rax;
+        subleaf = ghcb->save.rcx;
+
         smp_rmb();
+
+        if ( leaf == 0x0d )
+        {
+            /* XCR0 handling */
+            if ( GHCB_VALID_BIT(xcr0) )
+                v->arch.xcr0 = ghcb->save.xcr0;
+        }
 
         guest_cpuid(v, leaf, subleaf, &res);
         TRACE(TRC_HVM_CPUID, leaf, subleaf, res.a, res.b, res.c, res.d);
 
-        ghcb->save.rax = res.a;
-        ghcb->save.rbx = res.b;
-        ghcb->save.rcx = res.c;
-        ghcb->save.rdx = res.d;
-        ghcb->save.sw_exitinfo1 = 0;
+        v->arch.xcr0 = 0;
+
+        GHCB_CLEAR_VALID(ghcb);
+
+        GHCB_SET_FIELD(ghcb, rax, res.a);
+        GHCB_SET_FIELD(ghcb, rbx, res.b);
+        GHCB_SET_FIELD(ghcb, rcx, res.c);
+        GHCB_SET_FIELD(ghcb, rdx, res.d);
+
+        GHCB_SET_FIELD(ghcb, sw_exitinfo1, 0);
+        GHCB_SET_FIELD(ghcb, sw_exitinfo2, 0);
         smp_wmb();
         break;
     }
@@ -40,30 +97,47 @@ static void sev_es_ghcb_call(struct vcpu *v, struct ghcb *ghcb)
     {
         int rc;
         bool rdmsr = ghcb->save.sw_exitinfo1 == 0;
-        uint64_t rcx = ghcb->save.rcx;
-        /* Compute msr_content even if we end up performing a rdmsr. */
-        uint64_t msr_content = ghcb->save.rdx << 32 | (uint32_t)ghcb->save.rax;
+        uint32_t ecx = (uint32_t)ghcb->save.rcx;
+        uint64_t msr_content = 0;
+
+        #ifdef CONFIG_COCO_SEV_STRICT_GHCB
+        if ( !GHCB_TEST_VALID(ghcb, rcx) )
+            goto malformed;
+        #endif
         smp_rmb();
 
         if ( rdmsr )
-            rc = guest_rdmsr(v, rcx, &msr_content);
+            rc = hvm_msr_read_intercept(ecx, &msr_content);
         else
         {
-            rc = guest_wrmsr(v, rcx, msr_content);
+            #ifdef CONFIG_COCO_SEV_STRICT_GHCB
+            if ( !GHCB_TEST_VALID(ghcb, rcx) )
+                goto malformed;
+            #endif
 
-            if ( rc == X86EMUL_OKAY )
+            msr_content = (ghcb->save.rdx << 32) | (uint32_t)ghcb->save.rax;
+            smp_rmb();
+            rc = hvm_msr_write_intercept(ecx, msr_content, false);
+        }
+
+        GHCB_CLEAR_VALID(ghcb);
+
+        if ( rc == X86EMUL_OKAY )
+        {
+            if ( rdmsr )
             {
-                ghcb->save.rdx = msr_content >> 32;
-                ghcb->save.rax = (uint32_t)msr_content;
-                ghcb->save.sw_exitinfo1 = 0;
+                GHCB_SET_FIELD(ghcb, rdx, (uint32_t)(msr_content >> 32));
+                GHCB_SET_FIELD(ghcb, rax, (uint32_t)msr_content);
             }
-            else if ( rc == X86EMUL_EXCEPTION )
-            {
-                /* Inject #GP */
-                ghcb->save.sw_exitinfo1 = 1;
-                ghcb->save.sw_exitinfo2 = X86_EXC_GP;
-            }
-            smp_wmb();
+
+            GHCB_SET_FIELD(ghcb, sw_exitinfo1, 0);
+            GHCB_SET_FIELD(ghcb, sw_exitinfo2, 0);
+        }
+        else
+        {
+            /* Inject #GP */
+            GHCB_SET_FIELD(ghcb, sw_exitinfo1, 1);
+            GHCB_SET_FIELD(ghcb, sw_exitinfo2, X86_EXC_GP);
         }
         break;
     }
@@ -72,17 +146,31 @@ static void sev_es_ghcb_call(struct vcpu *v, struct ghcb *ghcb)
     {
         /* Only copy FastABI registers */
         struct cpu_user_regs regs;
-        smp_rmb();
-        
-        #define ghcb_fastabi_reg(ghcb, n) (ghcb)->save. fastabi_param_reg##n
-        fastabi_value_n(&regs, 0) = ghcb_fastabi_reg(ghcb, 0);
-        fastabi_value_n(&regs, 1) = ghcb_fastabi_reg(ghcb, 1);
-        fastabi_value_n(&regs, 2) = ghcb_fastabi_reg(ghcb, 2);
-        fastabi_value_n(&regs, 3) = ghcb_fastabi_reg(ghcb, 3);
-        fastabi_value_n(&regs, 4) = ghcb_fastabi_reg(ghcb, 4);
-        fastabi_value_n(&regs, 5) = ghcb_fastabi_reg(ghcb, 5);
-        fastabi_value_n(&regs, 6) = ghcb_fastabi_reg(ghcb, 6);
-        fastabi_value_n(&regs, 7) = ghcb_fastabi_reg(ghcb, 7);
+
+        /*
+         * We avoid here checking for valid_bitmap to avoid excessive branching;
+         * the ABI already enforces which registers are actually meaningful, we
+         * don't need actually need this extra info.
+         */
+        #define GHCB_GET_FASTABI_REG(ghcb, regs, n) \
+            fastabi_value_n(regs, n) = ghcb->save. fastabi_param_reg##n;
+
+        /*
+         * We set all ABI registers as valid in the bitmap. Even though some
+         * registers will not be actually meaningful, security-wise, the guest is
+         * only expected to honor those described in the hypercall ABI.
+         */
+        #define GHCB_SET_FASTABI_REG(ghcb, regs, n) \
+            GHCB_SET_FIELD(ghcb, fastabi_param_reg##n, fastabi_value_n(regs, n))
+
+        GHCB_GET_FASTABI_REG(ghcb, &regs, 0);
+        GHCB_GET_FASTABI_REG(ghcb, &regs, 1);
+        GHCB_GET_FASTABI_REG(ghcb, &regs, 2);
+        GHCB_GET_FASTABI_REG(ghcb, &regs, 3);
+        GHCB_GET_FASTABI_REG(ghcb, &regs, 4);
+        GHCB_GET_FASTABI_REG(ghcb, &regs, 5);
+        GHCB_GET_FASTABI_REG(ghcb, &regs, 6);
+        GHCB_GET_FASTABI_REG(ghcb, &regs, 7);
         smp_rmb();
 
         HVM_DBG_LOG(DBG_LEVEL_HCALL,
@@ -94,29 +182,55 @@ static void sev_es_ghcb_call(struct vcpu *v, struct ghcb *ghcb)
 
         fastabi_dispatch(regs.rax & ~0x40000000U, &regs);
 
-        ghcb_fastabi_reg(ghcb, 0) = fastabi_value_n(&regs, 0);
-        ghcb_fastabi_reg(ghcb, 1) = fastabi_value_n(&regs, 1);
-        ghcb_fastabi_reg(ghcb, 2) = fastabi_value_n(&regs, 2);
-        ghcb_fastabi_reg(ghcb, 3) = fastabi_value_n(&regs, 3);
-        ghcb_fastabi_reg(ghcb, 4) = fastabi_value_n(&regs, 4);
-        ghcb_fastabi_reg(ghcb, 5) = fastabi_value_n(&regs, 5);
-        ghcb_fastabi_reg(ghcb, 6) = fastabi_value_n(&regs, 6);
-        ghcb_fastabi_reg(ghcb, 7) = fastabi_value_n(&regs, 7);
+        GHCB_SET_FASTABI_REG(ghcb, &regs, 0);
+        GHCB_SET_FASTABI_REG(ghcb, &regs, 1);
+        GHCB_SET_FASTABI_REG(ghcb, &regs, 2);
+        GHCB_SET_FASTABI_REG(ghcb, &regs, 3);
+        GHCB_SET_FASTABI_REG(ghcb, &regs, 4);
+        GHCB_SET_FASTABI_REG(ghcb, &regs, 5);
+        GHCB_SET_FASTABI_REG(ghcb, &regs, 6);
+        GHCB_SET_FASTABI_REG(ghcb, &regs, 7);
 
-        ghcb->save.sw_exitinfo1 = 0;
-        smp_wmb();
-
-        #undef ghcb_fastabi_reg
+        #undef GHCB_GET_FASTABI_REG
+        #undef GHCB_SET_FASTABI_REG
         break;
+
+        GHCB_SET_FIELD(ghcb, sw_exitinfo1, 0);
+        GHCB_SET_FIELD(ghcb, sw_exitinfo2, 0);
     }
+
+    case VMEXIT_IOIO:
+        gdprintk(XENLOG_WARNING, "SEV-ES: Ignoring IOIO request (exitinfo1=0x%"PRIx64")\n",
+                 ghcb->save.sw_exitinfo1);
+        GHCB_CLEAR_VALID(ghcb);
+        
+        /* Hypervisor must set rax if it is a input request. */
+        if ( ghcb->save.sw_exitinfo1 & 0x1 )
+            GHCB_SET_FIELD(ghcb, rax, 0);
+        GHCB_SET_FIELD(ghcb, sw_exitinfo1, 0);
+        GHCB_SET_FIELD(ghcb, sw_exitinfo2, 0);
+        break;
 
     default:
-        gprintk(XENLOG_G_WARNING, "Got unexpected GHCB call: %"PRIx64"\n",
+        gprintk(XENLOG_G_WARNING, "Got unexpected GHCB call: 0x%"PRIx64"\n",
                 ghcb->save.sw_exitcode);
-        ghcb->save.sw_exitinfo1 = 2; /* Malformed input */
-        ghcb->save.sw_exitinfo2 = 6; /* Invalid NAE event */
+        GHCB_SET_FIELD(ghcb, sw_exitinfo1, 2); /* Malformed input */
+        GHCB_SET_FIELD(ghcb, sw_exitinfo2, 6); /* Invalid NAE event */
         break;
     }
+
+    smp_wmb();
+    return;
+
+    #ifdef CONFIG_COCO_SEV_STRICT_GHCB
+    malformed:
+        gdprintk(XENLOG_WARNING, "Rejecting malformed GHCB call\n");
+        GHCB_CLEAR_VALID(ghcb);
+        GHCB_SET_FIELD(ghcb, sw_exitinfo1, 2); /* Malformed input */
+        GHCB_SET_FIELD(ghcb, sw_exitinfo2, 4); /* Invalid bitmap */
+        smp_wmb();
+        return;
+    #endif
 }
 
 void sev_es_do_vmgexit(struct vcpu *v)
@@ -136,7 +250,7 @@ void sev_es_do_vmgexit(struct vcpu *v)
         {
         case GHCB_MSR_SEV_INFO_REQ:
             vmcb->ghcb_msr = GHCB_MSR_SEV_INFO(GHCB_VERSION_MAX, GHCB_VERSION_MIN,
-                raw_cpu_policy.extd.c_bit_pos);
+                                               raw_cpu_policy.extd.c_bit_pos);
             break;
         
         case GHCB_MSR_CPUID_REQ:
@@ -147,7 +261,7 @@ void sev_es_do_vmgexit(struct vcpu *v)
             struct cpuid_leaf res;
 
             if ( reg > GHCB_CPUID_REQ_EDX )
-                gprintk(XENLOG_G_WARNING, "Invalid GHCB CPUID register requested: %u", reg);
+                gprintk(XENLOG_G_WARNING, "Invalid GHCB CPUID register requested: 0x%x", reg);
             else 
             {
                 guest_cpuid(v, leaf, 0, &res);
@@ -170,19 +284,20 @@ void sev_es_do_vmgexit(struct vcpu *v)
                 }
             }
 
+            gdprintk(XENLOG_DEBUG, "GHCB MSR CPUID: %08x[reg%u] = %08x\n", leaf, reg, value);
             vmcb->ghcb_msr = GHCB_CPUID_RESP(value, reg);
             break;
         }
         
         case GHCB_MSR_TERM_REQ:
         {
-            gprintk(XENLOG_G_INFO, "GHCB termination requested: data=%"PRIx64"\n", ghcb_data);
+            gprintk(XENLOG_INFO, "GHCB termination requested: data=0x%"PRIx64"\n", ghcb_data);
             domain_shutdown(v->domain, 0);
             break;
         }
         
         default:
-            gprintk(XENLOG_G_WARNING, "Unknown GHCB request %lu\n", ghcb_info);
+            gprintk(XENLOG_WARNING, "Unknown GHCB request %lu\n", ghcb_info);
             break;
         }
 
@@ -190,6 +305,13 @@ void sev_es_do_vmgexit(struct vcpu *v)
     }
 
     /* Standard GHCB call */
+    if ( likely(v->arch.hvm.svm.ghcb_page && ghcb_data == v->arch.hvm.svm.ghcb_gfn) )
+    {
+        /* GHCB is already mapped and hasn't moved */
+        sev_es_ghcb_call(v, v->arch.hvm.svm.ghcb_map);
+        return;
+    }
+
     ghcb_page = get_page_from_gfn(v->domain, ghcb_data, &p2m_type, P2M_ALLOC | P2M_UNSHARE);
 
     if ( p2m_type != p2m_ram_rw )
@@ -202,21 +324,16 @@ void sev_es_do_vmgexit(struct vcpu *v)
         return;
     }
 
-    if ( ghcb_page != v->arch.hvm.svm.ghcb_page )
+    if ( v->arch.hvm.svm.ghcb_page )
     {
-        /* GHCB is no longer at the same location, remap it */
-        if ( v->arch.hvm.svm.ghcb_page )
-        {
-            unmap_domain_page(v->arch.hvm.svm.ghcb_map);
-            put_page(v->arch.hvm.svm.ghcb_page);
-        }
-
-        ghcb_map = __map_domain_page(ghcb_page);
-        v->arch.hvm.svm.ghcb_map = ghcb_map;
-        v->arch.hvm.svm.ghcb_page = ghcb_page;
+        UNMAP_DOMAIN_PAGE(v->arch.hvm.svm.ghcb_map);
+        put_page(v->arch.hvm.svm.ghcb_page);
     }
-    else
-        ghcb_map = v->arch.hvm.svm.ghcb_map;
+
+    ghcb_map = __map_domain_page(ghcb_page);
+    v->arch.hvm.svm.ghcb_map = ghcb_map;
+    v->arch.hvm.svm.ghcb_page = ghcb_page;
+    v->arch.hvm.svm.ghcb_gfn = ghcb_data;
 
     sev_es_ghcb_call(v, ghcb_map);
 }

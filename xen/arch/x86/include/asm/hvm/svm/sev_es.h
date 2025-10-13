@@ -53,14 +53,14 @@ static always_inline bool is_sev_es_domain(const struct domain *d)
 #define GHCB_MSR_CPUID_FUNC_POS		32
 #define GHCB_MSR_CPUID_FUNC_MASK	0xffffffff
 #define GHCB_MSR_CPUID_FUNC(data) \
-	(((unsigned long)data) << (GHCB_MSR_CPUID_FUNC_POS - GHCB_DATA_LOW) & \
+	(((unsigned long)data) >> (GHCB_MSR_CPUID_FUNC_POS - GHCB_DATA_LOW) & \
 	GHCB_MSR_CPUID_FUNC_MASK)
 #define GHCB_MSR_CPUID_VALUE_POS	32
 #define GHCB_MSR_CPUID_VALUE_MASK	0xffffffff
 #define GHCB_MSR_CPUID_REG_POS		30
 #define GHCB_MSR_CPUID_REG_MASK		0x3
 #define GHCB_MSR_CPUID_REG(data) \
-	(((unsigned long)data) << (GHCB_MSR_CPUID_REG_POS - GHCB_DATA_LOW) & \
+	(((unsigned long)data) >> (GHCB_MSR_CPUID_REG_POS - GHCB_DATA_LOW) & \
 	GHCB_MSR_CPUID_REG_MASK)
 #define GHCB_CPUID_REQ_EAX		0
 #define GHCB_CPUID_REQ_EBX		1

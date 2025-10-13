@@ -640,7 +640,7 @@ struct ghcb_save_area {
     uint64_t sw_scratch;
     uint8_t rsvd6[0x38];
     uint64_t xcr0;
-    uint8_t valid_bitmap[10];
+    uint64_t valid_bitmap[2]; /* 0x10 / sizeof(uint64_t) */
     uint64_t x87_state_gpa;
     uint8_t rsvd7[0x3f8];
 };
@@ -653,7 +653,7 @@ struct ghcb {
 	u8 reserved_1[10];
 	u16 protocol_version;	/* negotiated SEV-ES/GHCB protocol version */
 	u32 ghcb_usage;
-} __packed;
+};
 
 struct svm_vcpu {
     struct vmcb_struct *vmcb;
@@ -663,6 +663,7 @@ struct svm_vcpu {
 
     struct page_info *vmsa_page;
     struct page_info *ghcb_page;
+    uint64_t ghcb_gfn;
     struct ghcb *ghcb_map;
     uint8_t vmcb_sync_state; /* enum vmcb_sync_state */
 
