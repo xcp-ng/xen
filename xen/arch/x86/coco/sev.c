@@ -99,10 +99,9 @@ static int sev_domain_prepare_initial_mem(struct domain *d, gfn_t gfn, size_t co
             mfn_base = mfn;
         else
         {
-            // Check for a break.
+            /* Check for a break. */
             if (mfn_x(mfn_base) + segment_size != mfn_x(mfn) || segment_size == 512)
             {
-                // Make launch update data.
                 printk(XENLOG_DEBUG
                        "asp: LAUNCH_UPDATE_DATA d%hu: base=%"PRI_xen_pfn", size=%zx\n",
                        d->domain_id, mfn_x(mfn_base), segment_size);
@@ -352,7 +351,7 @@ static int sev_init(void)
     if ( WARN_ON(!cpu_has_sme || !cpu_has_sev) )
         return -ENOSYS;
 
-    /* Check for AMD SME and SmmLock */	
+    /* AMD SME and SmmLock are required for SEV. */	
     rdmsrl(MSR_K8_SYSCFG, syscfg);
 
     if ( !(syscfg & SYSCFG_MEM_ENCRYPT) )
