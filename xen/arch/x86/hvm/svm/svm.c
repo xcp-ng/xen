@@ -553,6 +553,9 @@ static unsigned cf_check int svm_get_interrupt_shadow(struct vcpu *v)
     if ( vmcb->int_stat.intr_shadow )
         intr_shadow |= HVM_INTR_SHADOW_MOV_SS | HVM_INTR_SHADOW_STI;
 
+    if ( is_sev_es_domain(v->domain) && v->arch.hvm.svm.sev.in_nmi )
+        intr_shadow |= HVM_INTR_SHADOW_NMI;
+    
     if ( vmcb_get_general1_intercepts(vmcb) & GENERAL1_INTERCEPT_IRET )
         intr_shadow |= HVM_INTR_SHADOW_NMI;
 
@@ -567,6 +570,10 @@ static void cf_check svm_set_interrupt_shadow(
 
     vmcb->int_stat.intr_shadow =
         !!(intr_shadow & (HVM_INTR_SHADOW_MOV_SS|HVM_INTR_SHADOW_STI));
+
+    if ( WARN_ON(is_sev_es_domain(v->domain)) )
+        /* Don't enable GENERAL1_INTERCEPT_IRET in SEV-ES domain. */
+        return;
 
     general1_intercepts &= ~GENERAL1_INTERCEPT_IRET;
     if ( intr_shadow & HVM_INTR_SHADOW_NMI )

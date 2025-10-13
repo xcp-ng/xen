@@ -309,6 +309,15 @@ enum VMEXIT_EXITCODE
     VMEXIT_BUSY             =  -2, /* BUSY bit set in VMSA */
 };
 
+enum VMGEXIT_EXITCODE
+{
+    VMGEXIT_NPF_MMIO_READ   = 0x80000001,
+    VMGEXIT_NPF_MMIO_WRITE  = 0x80000002,
+    VMGEXIT_NMI_COMPLETE    = 0x80000003,
+    VMGEXIT_AP_RESET_HOLD   = 0x80000004,
+    VMGEXIT_AP_JUMP_TABLE   = 0x80000005,
+};
+
 enum
 {
     /* Available on all SVM-capable hardware. */
@@ -660,6 +669,12 @@ struct sev_vcpu {
     struct page_info *ghcb_page;
     uint64_t ghcb_gfn;
     struct ghcb *ghcb_map;
+
+    /*
+     * Track if vCPU is in NMI, only used for SEV-ES.
+     * This is used to implement GHCB 4.4 Non-Maskable Interrupts.
+     */
+    bool in_nmi;
 };
 
 struct svm_vcpu {

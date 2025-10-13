@@ -210,6 +210,12 @@ static void sev_es_ghcb_call(struct vcpu *v, struct ghcb *ghcb)
         GHCB_SET_FIELD(ghcb, sw_exitinfo1, 0);
         GHCB_SET_FIELD(ghcb, sw_exitinfo2, 0);
         break;
+    
+    case VMGEXIT_NMI_COMPLETE:
+        v->arch.hvm.svm.sev.in_nmi = false;
+        GHCB_SET_FIELD(ghcb, sw_exitinfo1, 0);
+        GHCB_SET_FIELD(ghcb, sw_exitinfo2, 0);
+        break;
 
     default:
         gprintk(XENLOG_G_WARNING, "Got unexpected GHCB call: 0x%"PRIx64"\n",
