@@ -2148,6 +2148,7 @@ static void svm_vmexit_do_hlt(struct vmcb_struct *vmcb,
     if ( is_sev_es_domain(current->domain) )
     {
         /* SEV-ES domains advances RIP on VMEXIT_HLT and has IF in guest_intr_mask */
+        vmcb->int_stat.intr_shadow = 0;
         hvm_hlt(vmcb->int_stat.guest_intr_mask ? X86_EFLAGS_IF : 0);
     }
     else

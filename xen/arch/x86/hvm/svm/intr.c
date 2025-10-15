@@ -116,7 +116,7 @@ static void svm_enable_intr_window(struct vcpu *v, struct hvm_intack intack)
      * we inject a VINTR, ...).
      */
     if ( (intack.source == hvm_intsrc_nmi) &&
-         (general1_intercepts & GENERAL1_INTERCEPT_IRET ||
+         ((general1_intercepts & GENERAL1_INTERCEPT_IRET) ||
           (is_sev_es_domain(v->domain) && v->arch.hvm.svm.sev.in_nmi)) )
         return;
 
