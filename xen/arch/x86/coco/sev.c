@@ -383,6 +383,9 @@ static int sev_init(void)
         printk(XENLOG_INFO "sev-es: Supports up to %"PRIu32" SEV-ES guests\n",
             raw_cpu_policy.extd.min_no_es_asid - 1);
 
+    /* Make non-SEV ASIDs allocated above max_sev_guests if possible. */
+    if ( asid_default_min < raw_cpu_policy.extd.max_sev_guests )
+        asid_default_min = raw_cpu_policy.extd.max_sev_guests;
     return 0;
 }
 

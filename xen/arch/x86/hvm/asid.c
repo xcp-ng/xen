@@ -24,17 +24,20 @@ static unsigned long __ro_after_init *asid_bitmap;
 static unsigned long __ro_after_init asid_count;
 
 /* Default minimum ASID to use */
-static unsigned long __ro_after_init asid_default_min = 0;
+unsigned long __read_mostly asid_default_min = 0;
 static DEFINE_SPINLOCK(asid_lock);
 
 /*
  * Sketch of the Implementation:
- * ASIDs are assigned uniquely per domain and doesn't change during
- * the lifecycle of the domain. Once vcpus are initialized and are up,
- * we assign the same ASID to all vcpus of that domain at the first VMRUN.
- * In order to process a TLB flush on a vcpu, we set needs_tlb_flush
- * to schedule a TLB flush for the next VMRUN (e.g using tlb control field
- * of VMCB).
+ * ASIDs are assigned uniquely per domain and doesn't change during the lifecycle of the
+ * domain. Once vcpus are initialized and are up, we assign the same ASID to all vcpus
+ * of that domain at the first VMRUN. In order to process a TLB flush on a vcpu, we set
+ * needs_tlb_flush to schedule a TLB flush for the next VMRUN (e.g using tlb control 
+ * field of VMCB).
+ *
+ * We reserve ASID=1 as being the ASID used when none other is available (or with asid
+ * use disabled). Multiples domains may use this ASID, thus we need to systematically
+ * flush the TLB for this one when switching between vCPUs with ASID=1.
  */
 
 int __init hvm_asid_init(unsigned long nasids)
@@ -44,14 +47,15 @@ int __init hvm_asid_init(unsigned long nasids)
     asid_count = nasids;
     asid_enabled = opt_asid_enabled || (nasids <= 1);
 
-    asid_bitmap = xvzalloc_array(unsigned long, BITS_TO_LONGS(asid_count));
+    asid_bitmap = xvzalloc_array(unsigned long, BITS_TO_LONGS(asid_count + 1));
     if ( !asid_bitmap )
         return -ENOMEM;
 
     printk("HVM: ASIDs %sabled (count=%lu)\n", asid_enabled ? "en" : "dis", asid_count);
 
-    /* ASID 0 is reserved, mark it as permanently used */
+    /* ASID 0 and 1 are reserved, mark it as permanently used */
     set_bit(0, asid_bitmap);
+    set_bit(1, asid_bitmap);
 
     return 0;
 }
@@ -109,7 +113,7 @@ void hvm_asid_free(struct hvm_asid *asid)
 {
     ASSERT( asid->asid );
 
-    if ( !asid_enabled )
+    if ( !asid_enabled || asid->asid == 1 )
         return;
 
     ASSERT( asid->asid < asid_count );

@@ -73,6 +73,7 @@
 #include <public/vm_event.h>
 
 #include <compat/hvm/hvm_op.h>
+#include "asm/hvm/svm/sev_es.h"
 
 bool __read_mostly hvm_enabled;
 
@@ -522,11 +523,13 @@ static bool hvm_get_pending_event(struct vcpu *v, struct x86_event *info)
 
 void hvm_do_resume(struct vcpu *v)
 {
+    struct domain *currd = v->domain;;
+
     check_wakeup_from_wait();
 
     pt_restore_timer(v);
 
-    if ( has_vpci(v->domain) && vpci_process_pending(v) )
+    if ( has_vpci(currd) && vpci_process_pending(v) )
     {
         raise_softirq(SCHEDULE_SOFTIRQ);
         return;
@@ -560,6 +563,13 @@ void hvm_do_resume(struct vcpu *v)
             v->arch.monitor.next_interrupt_enabled = false;
         }
     }
+
+    if ( unlikely(currd->arch.hvm.asid.asid == 1) )
+        /*
+         * As ASID=1 may be shared across multiples domains, we can't easily track the
+         * state of the TLB, we always flush the TLB before resuming this vCPU.
+         */
+        v->needs_tlb_flush = true;
 }
 
 static int cf_check hvm_print_line(
@@ -709,9 +719,23 @@ int hvm_domain_initialise(struct domain *d,
         goto fail2;
 
     if ( is_coco_domain(d) && d->coco_ops && d->coco_ops->asid_alloc )
+    {
         rc = d->coco_ops->asid_alloc(d, &d->arch.hvm.asid);
+
+        if ( rc )
+            printk(XENLOG_ERR "Unable to allocate guest ASID (rc=%d)\n", rc);
+    }
     else
+    {
         rc = hvm_asid_alloc(&d->arch.hvm.asid);
+        if ( rc == -ENOSPC )
+        {
+            printk(XENLOG_WARNING
+                   "d%d: Out of ASID, disabling use of ASID for this domain\n",
+                   d->domain_id);
+            d->arch.hvm.asid.asid = 1;
+        }
+    }
 
     if ( rc )
         goto fail2;
@@ -3980,7 +4004,8 @@ enum hvm_intblk hvm_interrupt_blocked(struct vcpu *v, struct hvm_intack intack)
     }
 
     if ( (intack.source != hvm_intsrc_nmi) &&
-         !(guest_cpu_user_regs()->eflags & X86_EFLAGS_IF) )
+         !((guest_cpu_user_regs()->eflags & X86_EFLAGS_IF) ||
+           (is_sev_es_domain(v->domain) && v->arch.hvm.svm.vmcb->int_stat.guest_intr_mask)) )
         return hvm_intblk_rflags_ie;
 
     intr_shadow = alternative_call(hvm_funcs.get_interrupt_shadow, v);
