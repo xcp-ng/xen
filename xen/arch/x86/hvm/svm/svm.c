@@ -2143,22 +2143,25 @@ static void svm_do_msr_access(struct cpu_user_regs *regs)
 static void svm_vmexit_do_hlt(struct vmcb_struct *vmcb,
                               struct cpu_user_regs *regs)
 {
-    unsigned int inst_len;
+    struct vcpu *v = current;
 
-    if ( is_sev_es_domain(current->domain) )
+    if ( is_sev_es_domain(v->domain) )
     {
-        /* SEV-ES domains advances RIP on VMEXIT_HLT and has IF in guest_intr_mask */
-        vmcb->int_stat.intr_shadow = 0;
-        hvm_hlt(vmcb->int_stat.guest_intr_mask ? X86_EFLAGS_IF : 0);
+        /* We need to unlock what could prevent interrupts from being injected,
+           as otherwise, the vcpu would get stuck to the blocked state. */
+        v->arch.hvm.svm.sev.in_nmi = false;
+        vmcb->int_stat.intr_shadow = false;
     }
     else
     {
-        if ( (inst_len = svm_get_insn_len(current, INSTR_HLT)) == 0 )
+        unsigned int inst_len;
+
+        if ( (inst_len = svm_get_insn_len(v, INSTR_HLT)) == 0 )
             return;
         __update_guest_eip(regs, inst_len);
-
-        hvm_hlt(regs->eflags);
     }
+
+    hvm_hlt(regs->eflags);
 }
 
 static void svm_vmexit_do_rdtsc(struct cpu_user_regs *regs, bool rdtscp)
@@ -2600,7 +2603,14 @@ void asmlinkage svm_vmexit_handler(void)
     bool vcpu_guestmode = false;
     struct vlapic *vlapic = vcpu_vlapic(v);
 
-    if ( !is_sev_es_domain(v->domain) )
+    if ( is_sev_es_domain(v->domain) )
+    {
+        if ( vmcb->int_stat.guest_intr_mask )
+            regs->eflags |= X86_EFLAGS_IF;
+        else
+            regs->eflags &= ~X86_EFLAGS_IF;
+    }
+    else
     {
         regs->rax = vmcb->rax;
         regs->rip = vmcb->rip;

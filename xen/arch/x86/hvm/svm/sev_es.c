@@ -212,7 +212,6 @@ static void sev_es_ghcb_call(struct vcpu *v, struct ghcb *ghcb)
         break;
     
     case VMGEXIT_NMI_COMPLETE:
-        v->arch.hvm.svm.vmcb->int_stat.intr_shadow = false;
         v->arch.hvm.svm.sev.in_nmi = false;
         GHCB_SET_FIELD(ghcb, sw_exitinfo1, 0);
         GHCB_SET_FIELD(ghcb, sw_exitinfo2, 0);

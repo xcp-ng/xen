@@ -4004,8 +4004,7 @@ enum hvm_intblk hvm_interrupt_blocked(struct vcpu *v, struct hvm_intack intack)
     }
 
     if ( (intack.source != hvm_intsrc_nmi) &&
-         !((guest_cpu_user_regs()->eflags & X86_EFLAGS_IF) ||
-           (is_sev_es_domain(v->domain) && v->arch.hvm.svm.vmcb->int_stat.guest_intr_mask)) )
+         !(guest_cpu_user_regs()->eflags & X86_EFLAGS_IF) )
         return hvm_intblk_rflags_ie;
 
     intr_shadow = alternative_call(hvm_funcs.get_interrupt_shadow, v);
