@@ -45,7 +45,7 @@ int __init hvm_asid_init(unsigned long nasids)
     ASSERT(nasids);
 
     asid_count = nasids;
-    asid_enabled = opt_asid_enabled || (nasids <= 1);
+    asid_enabled = opt_asid_enabled && (nasids > 1);
 
     asid_bitmap = xvzalloc_array(unsigned long, BITS_TO_LONGS(asid_count + 1));
     if ( !asid_bitmap )
