@@ -1592,8 +1592,12 @@ gic_acpi_parse_madt_cpu(struct acpi_subtable_header *header,
     struct acpi_madt_generic_interrupt *processor =
                container_of(header, struct acpi_madt_generic_interrupt, header);
 
+    printk("%s: 1\n", __func__);
+
     if ( BAD_MADT_GICC_ENTRY(processor, end) )
         return -EINVAL;
+
+    printk("%s: 1\n", __func__);
 
     /* Read from APIC table and fill up the GIC variables */
     if ( !cpu_base_assigned )
