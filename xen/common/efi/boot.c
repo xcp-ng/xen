@@ -1362,11 +1362,15 @@ void EFIAPI __init noreturn efi_start(EFI_HANDLE ImageHandle,
 
     efi_arch_relocate_image(0);
 
+    PrintStr(L"0\r\n");
+
     if ( use_cfg_file )
     {
         EFI_FILE_HANDLE dir_handle;
         EFI_HANDLE gop_handle;
         UINTN depth, cols, rows;
+
+        PrintStr(L"1\r\n");
 
         cols = rows = depth = 0;
 
@@ -1498,6 +1502,8 @@ void EFIAPI __init noreturn efi_start(EFI_HANDLE ImageHandle,
         }
     }
 
+    PrintStr(L"2\r\n");
+
     /* Get the number of boot modules specified on the DT or an error (<0) */
     dt_modules_found = efi_check_dt_boot(loaded_image);
 
@@ -1508,6 +1514,8 @@ void EFIAPI __init noreturn efi_start(EFI_HANDLE ImageHandle,
     /* Check if at least one of Dom0 or DomU(s) is specified */
     if ( !dt_modules_found && !kernel.ptr )
         blexit(L"No initial domain kernel specified.");
+
+    PrintStr(L"3\r\n");
 
     /*
      * The Dom0 kernel can be loaded from the configuration file or by the
@@ -1520,27 +1528,47 @@ void EFIAPI __init noreturn efi_start(EFI_HANDLE ImageHandle,
          (status = shim_lock->Verify(kernel.ptr, kernel.size)) != EFI_SUCCESS )
         PrintErrMesg(L"Dom0 kernel image could not be verified", status);
 
+    PrintStr(L"4\r\n");
+
     efi_arch_edd();
+
+    PrintStr(L"5\r\n");
 
     efi_arch_cpu();
 
+    PrintStr(L"6\r\n");
+
     efi_tables();
+
+    PrintStr(L"7\r\n");
 
     /* Collect PCI ROM contents. */
     setup_efi_pci();
 
+    PrintStr(L"8\r\n");
+
     /* Get snapshot of variable store parameters. */
     efi_variables();
+
+    PrintStr(L"9\r\n");
 
     /* Collect Apple device properties, if any. */
     efi_get_apple_properties();
 
+    PrintStr(L"10\r\n");
+
     efi_arch_memory_setup();
+
+    PrintStr(L"11\r\n");
 
     if ( gop )
         efi_set_gop_mode(gop, gop_mode);
 
+    PrintStr(L"12\r\n");
+
     efi_relocate_esrt(SystemTable);
+
+    PrintStr(L"13\r\n");
 
     efi_exit_boot(ImageHandle, SystemTable);
 
