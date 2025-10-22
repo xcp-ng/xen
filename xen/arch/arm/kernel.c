@@ -178,8 +178,10 @@ static __init int kernel_decompress(struct bootmodule *mod, uint32_t offset)
     paddr_t addr = mod->start;
     paddr_t size = mod->size;
 
-    if ( size < offset )
+    if ( size < offset ) {
+	printk("%s: 1\n", __func__);
         return -EINVAL;
+    }
 
     /*
      * It might be that gzip header does not appear at the start address
@@ -189,14 +191,18 @@ static __init int kernel_decompress(struct bootmodule *mod, uint32_t offset)
     addr += offset;
     size -= offset;
 
-    if ( size < 2 )
+    if ( size < 2 ) {
+	printk("%s: 2\n", __func__);
         return -EINVAL;
+    }
 
     copy_from_paddr(magic, addr, sizeof(magic));
 
     /* only gzip is supported */
-    if ( !gzip_check(magic, size) )
+    if ( !gzip_check(magic, size) ) {
+	printk("%s: 3\n", __func__);
         return -EINVAL;
+    }
 
     input = ioremap_cache(addr, size);
     if ( input == NULL )
@@ -410,14 +416,28 @@ static int __init kernel_zimage64_probe(struct kernel_info *info,
     } zimage;
     uint64_t start, end;
 
-    if ( size < sizeof(zimage) )
+    if ( size < sizeof(zimage) ) {
+	printk("%s: size is too small\n", __func__);
         return -EINVAL;
+    }
 
     copy_from_paddr(&zimage, addr, sizeof(zimage));
 
     if ( zimage.magic0 != ZIMAGE64_MAGIC_V0 &&
-         zimage.magic1 != ZIMAGE64_MAGIC_V1 )
+         zimage.magic1 != ZIMAGE64_MAGIC_V1 ) {
+	printk("%s: magics are wrong\n", __func__);
+	printk("%s: magic0: %08x\n", __func__, zimage.magic0);
+	printk("%s: res0: %08x\n", __func__, zimage.res0);
+	printk("%s: text_offset: %016lx\n", __func__, zimage.text_offset);
+	printk("%s: res1: %016lx\n", __func__, zimage.res1);
+	printk("%s: res2: %016lx\n", __func__, zimage.res2);
+	printk("%s: res3: %016lx\n", __func__, zimage.res3);
+	printk("%s: res4: %016lx\n", __func__, zimage.res4);
+	printk("%s: res5: %016lx\n", __func__, zimage.res5);
+	printk("%s: magic1: %08x\n", __func__, zimage.magic1);
+	printk("%s: res6: %08x\n", __func__, zimage.res6);
         return -EINVAL;
+    }
 
     /* Currently there is no length in the header, so just use the size */
     start = 0;
@@ -427,8 +447,10 @@ static int __init kernel_zimage64_probe(struct kernel_info *info,
      * Given the above this check is a bit pointless, but leave it
      * here in case someone adds a length field in the future.
      */
-    if ( (end - start) > size )
+    if ( (end - start) > size ) {
+	printk("%s: second size check failed\n", __func__);
         return -EINVAL;
+    }
 
     info->zimage.kernel_addr = addr;
     info->zimage.len = end - start;
@@ -593,8 +615,10 @@ int __init kernel_probe(struct kernel_info *info,
      * self-containing (i.e. fall through only in case of a header not found).
      */
     rc = kernel_uimage_probe(info, mod);
-    if ( rc != -ENOENT )
+    if ( rc != -ENOENT ) {
+        printk("%s: kernel_uimage_probe failed: %d\n", __func__, rc);
         return rc;
+    }
 
     /*
      * If it is a gzip'ed image, 32bit or 64bit, uncompress it.
@@ -602,14 +626,21 @@ int __init kernel_probe(struct kernel_info *info,
      * so pass 0 as an offset.
      */
     rc = kernel_decompress(mod, 0);
-    if ( rc && rc != -EINVAL )
+    if ( rc && rc != -EINVAL ) {
+        printk("%s: kernel_decompress failed: %d\n", __func__, rc);
         return rc;
+    }
 
 #ifdef CONFIG_ARM_64
     rc = kernel_zimage64_probe(info, mod->start, mod->size);
-    if (rc < 0)
+    if (rc < 0) {
+    	printk("%s: kernel_zimage64_probe failed: %d\n", __func__, rc); 
 #endif
         rc = kernel_zimage32_probe(info, mod->start, mod->size);
+
+#ifdef CONFIG_ARM_64
+     }
+#endif
 
     return rc;
 }
