@@ -15,6 +15,7 @@
 #include "libxl_osdeps.h"
 
 #include "libxl_internal.h"
+#include "xenctrl.h"
 
 int libxl_ctx_alloc(libxl_ctx **pctx, int version,
                     unsigned flags, xentoollog_logger * lg)
@@ -413,6 +414,17 @@ int libxl_get_physinfo(libxl_ctx *ctx, libxl_physinfo *physinfo)
 
     GC_FREE;
     return 0;
+}
+
+int libxl_coco_platform_certs(libxl_ctx *ctx) {
+    int ret;
+    coco_platform_certs_t certs;
+
+
+
+    ret = xc_coco_get_platform_certs(ctx->xch, &certs);
+    (void) certs;
+    return ret;
 }
 
 libxl_cputopology *libxl_get_cpu_topology(libxl_ctx *ctx, int *nb_cpu_out)

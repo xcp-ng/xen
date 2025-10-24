@@ -44,6 +44,7 @@ DEFINE_XEN_GUEST_HANDLE(coco_platform_status_t);
 
 #define XEN_COCO_prepare_initial_mem 1
 #define XEN_COCO_attestation_report 2
+#define XEN_COCO_platform_certs 3
 
 /**
  * XEN_COCO_prepare_initial_mem: Prepare early memory pages of a guest
@@ -75,7 +76,7 @@ struct sev_attestation_report_response {
 }  __attribute__((packed));
 
 /**
- * len is the size used by the attestation
+ * len is the size used by the attestation, it can be used to determine the attestation type
  * the union is used to make sure the struct is big enough to handle all attestation
  */
 struct coco_attestation_report {
@@ -88,6 +89,43 @@ struct coco_attestation_report {
 };
 typedef struct coco_attestation_report coco_attestation_report_t;
 DEFINE_XEN_GUEST_HANDLE(coco_attestation_report_t);
+
+struct sev_certificate {
+	uint32_t version;
+	uint8_t api_major;
+	uint8_t api_minor;
+	uint8_t reserved;
+	uint8_t reserved1;
+	uint32_t pubkey_usage; /* should be 0x1000 */
+	uint32_t pubkey_algo;  /* should be 0x0 */
+	uint8_t pubkey[1028];  /*sevctl generate works */
+	uint32_t sig1_usage;
+	uint32_t sig1_algo;
+	uint32_t reserved2;
+	uint8_t sig1[512];
+	uint32_t sig2_usage;
+	uint32_t sig2_algo;
+	uint32_t reserved3;
+	uint8_t sig2[512];
+};
+
+struct sev_certificate_fullchain {
+    struct sev_certificate phd_cert;
+    struct sev_certificate phd_cert_chain;
+};
+
+/**
+ */
+struct coco_platform_certs {
+    uint8_t hwid[128];          /* OUT */
+    uint8_t cpu_number;          /* OUT */
+    struct coco_platform_status status;          /* OUT */
+    union {
+        struct sev_certificate_fullchain sev;
+    };
+};
+typedef struct coco_platform_certs coco_platform_certs_t;
+DEFINE_XEN_GUEST_HANDLE(coco_platform_certs_t);
 
 
 #endif /* __XEN_PUBLIC_HVM_COCO_H__ */

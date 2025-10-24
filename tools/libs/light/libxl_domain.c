@@ -2630,7 +2630,7 @@ static int hex_char_to_int(char c) {
     return -1;
 }
 
-int libxl_domain_attestation(libxl_ctx *ctx, uint32_t domid, int file, bool is_mmonce_file, char *mmonce) {
+int libxl_coco_domain_attestation(libxl_ctx *ctx, uint32_t domid, int file, bool is_mmonce_file, char *mmonce) {
     coco_attestation_report_t report;
     int rc, r;
 

@@ -7,6 +7,7 @@
 
 #include "xc_private.h"
 #include <assert.h>
+#include <xen/hvm/coco.h>
 
 static int do_xen_version(xc_interface *xch, int cmd,
                           xc_hypercall_buffer_t *dest)
@@ -203,4 +204,25 @@ char *xc_xenver_buildid(xc_interface *xch)
     xencall_free_buffer(xch->xcall, hbuf);
 
     return res;
+}
+
+
+int xc_coco_get_platform_certs(xc_interface *handle, coco_platform_certs_t *cmd)
+{
+    DECLARE_HYPERCALL_BUFFER(coco_platform_certs_t, arg);
+    int rc;
+
+    arg = xc_hypercall_buffer_alloc(handle, arg, sizeof(*arg));
+    if ( arg == NULL )
+        return -1;
+    memcpy(arg, cmd, sizeof(coco_platform_certs_t));
+
+    rc = xencall2(handle->xcall, __HYPERVISOR_coco_op, XEN_COCO_platform_certs,
+        HYPERCALL_BUFFER_AS_ARG(arg));
+
+    if (!rc) {
+        memcpy(cmd, arg, sizeof(coco_platform_certs_t));
+    }
+    xc_hypercall_buffer_free(handle, arg);
+    return rc;
 }

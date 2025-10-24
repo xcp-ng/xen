@@ -644,7 +644,7 @@ const struct cmd_spec cmd_table[] = {
     { "coco",
       &main_coco, 0, 0,
       "All subcommand for coco domains",
-      "<Options> <Domain> <Operation>",
+      "<Options> <Operation>",
     },
 #ifdef LIBXL_HAVE_DT_OVERLAY
     { "dt-overlay",
