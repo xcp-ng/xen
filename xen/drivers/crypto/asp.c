@@ -1,3 +1,4 @@
+#include "xen/config.h"
 #include <xen/init.h>
 #include <xen/pci.h>
 #include <xen/list.h>
@@ -10,6 +11,7 @@
 #include <asm/msi.h>
 #include <asm/system.h>
 #include <asm/psp-sev.h>
+#include <public/hvm/coco.h>
 
 /*
 TODO:
@@ -309,6 +311,15 @@ static int _sev_do_cmd_sync(struct amd_sp_dev *sp, int cmd, void *data, int *psp
 
     cmd_val = SEV_CMDRESP_CMD(cmd);
 
+    if (cmd == 0x008) {
+        struct sev_data_pdh_cert_export * d = data;
+        printk(XENLOG_DEBUG "do_cmd data : pdh = %d, chain %d\n", d->pdh_cert_len, d->cert_chain_len);
+    }
+    if (cmd == 0x008) {
+        struct sev_data_pdh_cert_export * d = sp->cmd_buff;
+        printk(XENLOG_DEBUG "do_cmd cmd_buff : pdh = %d, chain %d\n", d->pdh_cert_len, d->cert_chain_len);
+    }
+    
     writel(cmd_val, sp->io_base + sp->vdata->sev->cmdresp_reg);
 
     for (rc = -EIO, i = asp_sync_tries; i; i-- )
@@ -329,9 +340,17 @@ static int _sev_do_cmd_sync(struct amd_sp_dev *sp, int cmd, void *data, int *psp
     if ( rc &&  psp_ret )
         *psp_ret = SEV_CMDRESP_STS(cmdresp);
 
-    if ( data && (!rc) )
+    if ( data ) //copy on error too, to allow to know how much the psp needs
         memcpy(data, sp->cmd_buff, buf_len);
-
+    
+    if (cmd == 0x008) {
+        struct sev_data_pdh_cert_export * d = data;
+        printk(XENLOG_DEBUG "do_cmd data : pdh = %d, chain %d\n", d->pdh_cert_len, d->cert_chain_len);
+    }
+    if (cmd == 0x008) {
+        struct sev_data_pdh_cert_export * d = sp->cmd_buff;
+        printk(XENLOG_DEBUG "do_cmd cmd_buff : pdh = %d, chain %d\n", d->pdh_cert_len, d->cert_chain_len);
+    }
     return rc;
 }
 
@@ -478,8 +497,9 @@ static int __init sp_do_init(struct amd_sp_dev *sp)
     rc = _sev_do_cmd_sync(sp, SEV_CMD_INIT, &data, &err);
     if ( rc )
         dprintk(XENLOG_ERR, "asp-%pp: can't init device: (%d 0x%x)\n", &sp->pdev->sbdf, rc, err);
-
-    return 0;
+    
+    printk(XENLOG_DEBUG"asp-%pp: device init: (%d 0x%x)\n", &sp->pdev->sbdf, rc, err);
+    return rc;
 }
 
 static int __init sp_df_flush(struct amd_sp_dev *sp)

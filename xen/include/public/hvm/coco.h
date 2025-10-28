@@ -38,6 +38,7 @@ struct coco_platform_status {
 
     uint32_t version_major; /* OUT */
     uint32_t version_minor; /* OUT */
+    uint32_t version_build; /* OUT */
 };
 typedef struct coco_platform_status coco_platform_status_t;
 DEFINE_XEN_GUEST_HANDLE(coco_platform_status_t);
@@ -101,17 +102,15 @@ struct sev_certificate {
 	uint8_t pubkey[1028];  /*sevctl generate works */
 	uint32_t sig1_usage;
 	uint32_t sig1_algo;
-	uint32_t reserved2;
 	uint8_t sig1[512];
 	uint32_t sig2_usage;
 	uint32_t sig2_algo;
-	uint32_t reserved3;
 	uint8_t sig2[512];
 };
 
 struct sev_certificate_fullchain {
     struct sev_certificate phd_cert;
-    struct sev_certificate phd_cert_chain;
+    struct sev_certificate phd_cert_chain[3];
 };
 
 /**

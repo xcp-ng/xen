@@ -420,10 +420,8 @@ int libxl_coco_platform_certs(libxl_ctx *ctx) {
     int ret;
     coco_platform_certs_t certs;
 
-
-
     ret = xc_coco_get_platform_certs(ctx->xch, &certs);
-    (void) certs;
+
     return ret;
 }
 

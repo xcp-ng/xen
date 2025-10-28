@@ -232,7 +232,7 @@ static int sev_attestation_report(struct domain *d,
     args->len = 208;
     report.reserved = 0;
     report.address = (uint64_t) virt_to_maddr(&args->sev);
-    for (size_t i =0; i < 16; i++) { // or memcpy ?
+    for (size_t i =0; i < 16; i++) { // or memset ?
         report.mnonce[i] = args->mnonce[i];
     }
 
