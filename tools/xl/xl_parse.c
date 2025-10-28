@@ -3049,7 +3049,6 @@ skip_usbdev:
 
     if (!xlu_cfg_get_long(config, "sev_policy", &l, 0))
         b_info->arch_x86.sev_policy = l;
-
     xlu_cfg_destroy(config);
 }
 

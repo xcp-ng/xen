@@ -21,6 +21,16 @@
 #include <xen/ioreq.h>
 #include <xen/irq.h>
 #include <xen/lib.h>
+#include <xen/softirq.h>
+#include <xen/coco.h>
+#include <xen/domain.h>
+#include <xen/domain_page.h>
+#include <xen/fastabi.h>
+#include <xen/hypercall.h>
+#include <xen/guest_access.h>
+#include <xen/event.h>
+#include <xen/cpu.h>
+#include <xen/wait.h>
 #include <xen/mem_access.h>
 #include <xen/monitor.h>
 #include <xen/nospec.h>
@@ -57,6 +67,17 @@
 #include <asm/mce.h>
 #include <asm/monitor.h>
 #include <asm/msr.h>
+#include <asm/hvm/emulate.h>
+#include <asm/hvm/hvm.h>
+#include <asm/hvm/vpt.h>
+#include <asm/hvm/support.h>
+#include <asm/hvm/cacheattr.h>
+#include <asm/hvm/nestedhvm.h>
+#include <asm/hvm/monitor.h>
+#include <asm/hvm/viridian.h>
+#include <asm/hvm/vm_event.h>
+#include <asm/hvm/svm/sev.h>
+#include <asm/altp2m.h>
 #include <asm/mtrr.h>
 #include <asm/processor.h>
 #include <asm/regs.h>
@@ -823,6 +844,10 @@ void hvm_domain_destroy(struct domain *d)
         list_del(&ioport->list);
         xfree(ioport);
     }
+<<<<<<< HEAD
+=======
+
+>>>>>>> xen-fastabi-sev
     hvm_asid_free(&d->arch.hvm.asid);
     destroy_vpci_mmcfg(d);
 

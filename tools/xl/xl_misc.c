@@ -12,6 +12,7 @@
  * GNU Lesser General Public License for more details.
  */
 
+#include <fcntl.h>
 #include <limits.h>
 #include <stdlib.h>
 

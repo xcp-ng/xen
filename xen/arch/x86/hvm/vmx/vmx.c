@@ -28,6 +28,16 @@
 #include <asm/hvm/asid.h>
 #include <asm/hvm/emulate.h>
 #include <asm/hvm/hvm.h>
+#include <asm/hvm/support.h>
+#include <asm/hvm/vmx/vmx.h>
+#include <asm/hvm/vmx/vmcs.h>
+#include <public/sched.h>
+#include <public/hvm/ioreq.h>
+#include <asm/hvm/vlapic.h>
+#include <asm/x86_emulate.h>
+#include <asm/hvm/vpt.h>
+#include <public/hvm/save.h>
+#include <asm/hvm/asid.h>
 #include <asm/hvm/monitor.h>
 #include <asm/hvm/nestedhvm.h>
 #include <asm/hvm/support.h>

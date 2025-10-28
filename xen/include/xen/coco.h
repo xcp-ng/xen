@@ -13,7 +13,6 @@ extern __read_mostly struct coco_platform_status platform_status;
 
 struct coco_domain_ops {
     int (*prepare_initial_mem)(struct domain *d, gfn_t gfn, size_t page_count);
-
     /* HVM domain hooks */
     int (*domain_initialise)(struct domain *d);
     int (*domain_creation_finished)(struct domain *d);
@@ -22,6 +21,8 @@ struct coco_domain_ops {
     /* Returns false if the general handler needs to be used. */
     bool (*show_execution_state)(struct vcpu *v);
 
+    int (*domain_attestation_report)(struct domain *d,
+        struct coco_attestation_report *report);
 #ifdef CONFIG_X86
     /* COCO-specific ASID allocation logic */
     int (*asid_alloc)(struct domain *d, struct hvm_asid *asid);
@@ -30,7 +31,6 @@ struct coco_domain_ops {
 
 struct coco_ops {
     const char *name;
-    
     int (*init)(void);
     int (*get_platform_status)(coco_platform_status_t *status);
     struct coco_domain_ops *(*get_domain_ops)(struct domain *d,

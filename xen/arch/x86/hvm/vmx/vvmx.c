@@ -12,6 +12,9 @@
 
 #include <asm/guest-msr.h>
 #include <asm/hvm/nestedhvm.h>
+#include <asm/mtrr.h>
+#include <asm/p2m.h>
+#include <asm/hvm/hvm.h>
 #include <asm/hvm/support.h>
 #include <asm/hvm/vmx/vmx.h>
 #include <asm/hvm/vmx/vvmx.h>

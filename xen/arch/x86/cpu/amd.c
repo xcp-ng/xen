@@ -1,4 +1,5 @@
 #include <xen/cpu.h>
+#include <asm/cpu-policy.h>
 #include <xen/init.h>
 #include <xen/bitops.h>
 #include <xen/mm.h>
@@ -19,7 +20,11 @@
 
 #include "cpu.h"
 
+<<<<<<< HEAD
 #ifdef CONFIG_COCO_AMD_SEV
+=======
+#ifdef CONFIG_COCO
+>>>>>>> xen-fastabi-sev
 #include <asm/coco.h>
 #endif
 

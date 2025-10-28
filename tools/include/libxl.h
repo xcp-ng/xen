@@ -3025,6 +3025,16 @@ static inline int libxl_qemu_monitor_command_0x041200(libxl_ctx *ctx,
  */
 int libxl_clear_domid_history(libxl_ctx *ctx);
 
+/*
+ * Used to retrieve for a coco domain
+ */
+int libxl_coco_domain_attestation(libxl_ctx *ctx, uint32_t domid, int file, bool is_mmonce_file, char *mmonce);
+
+/*
+ * Used to retrieve platform public keys and relevant information (identification, certificates);
+ */
+int libxl_coco_platform_certs(libxl_ctx *ctx);
+
 #endif /* LIBXL_H */
 
 /*

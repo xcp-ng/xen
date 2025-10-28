@@ -258,10 +258,44 @@ static int sev_asid_alloc(struct domain *d, struct hvm_asid *asid)
     return hvm_asid_alloc_range(asid, asid_min, asid_max);
 }
 
+static int sev_attestation_report(struct domain *d,
+    struct coco_attestation_report *args) {
+    struct sev_data_attestation_report report;
+    int psp_ret = 0;
+    int rc = 0;
+
+    //from coco struct to sev specific
+    report.handle = d->arch.hvm.svm.sev.asp_handle;
+    report.len = 208; // size of AMD-SEV attestation
+    args->len = 208;
+    report.reserved = 0;
+    report.address = (uint64_t) virt_to_maddr(&args->sev);
+    for (size_t i =0; i < 16; i++) { // or memset ?
+        report.mnonce[i] = args->mnonce[i];
+    }
+
+    printk(XENLOG_ERR
+           "asp: ATTESTATION_REPORT d%d: size=%u\n", d->domain_id, args->len);
+
+    rc = sev_do_cmd(SEV_CMD_ATTESTATION_REPORT, (void *)(&report),
+        &psp_ret, true);
+
+    if (!rc && !psp_ret) {
+        return 0;
+    }
+    printk(XENLOG_ERR "asp: failed to ATTESTATION for d%hu: psp_ret %d\n",
+           d->domain_id, psp_ret);
+
+    return rc;
+}
+
+
+
 static struct coco_domain_ops sev_domain_ops = {
     .prepare_initial_mem = sev_domain_prepare_initial_mem,
     .domain_initialise = sev_domain_initialise,
     .domain_creation_finished = sev_domain_creation_finished,
+    .domain_attestation_report = sev_attestation_report,
     .domain_destroy = sev_domain_destroy,
     .asid_alloc = sev_asid_alloc,
 };
