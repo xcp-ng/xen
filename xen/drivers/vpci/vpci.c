@@ -198,7 +198,7 @@ static uint32_t cf_check vpci_ignored_read(
 }
 
 static void cf_check vpci_ignored_write(
-    const struct pci_dev *pdev, unsigned int reg, uint32_t val, void *data)
+    struct pci_dev *pdev, unsigned int reg, uint32_t val, void *data)
 {
 }
 
@@ -227,7 +227,7 @@ uint32_t cf_check vpci_hw_read32(
 }
 
 void cf_check vpci_hw_write16(
-    const struct pci_dev *pdev, unsigned int reg, uint32_t val, void *data)
+    struct pci_dev *pdev, unsigned int reg, uint32_t val, void *data)
 {
     pci_conf_write16(pdev->sbdf, reg, val);
 }
@@ -524,7 +524,7 @@ uint32_t vpci_read(pci_sbdf_t sbdf, unsigned int reg, unsigned int size)
 /*
  * Perform a maybe partial write to a register.
  */
-static void vpci_write_helper(const struct pci_dev *pdev,
+static void vpci_write_helper(struct pci_dev *pdev,
                               const struct vpci_register *r, unsigned int size,
                               unsigned int offset, uint32_t data)
 {
@@ -551,7 +551,7 @@ void vpci_write(pci_sbdf_t sbdf, unsigned int reg, unsigned int size,
                 uint32_t data)
 {
     struct domain *d = current->domain;
-    const struct pci_dev *pdev;
+    struct pci_dev *pdev;
     const struct vpci_register *r;
     unsigned int data_offset = 0;
 

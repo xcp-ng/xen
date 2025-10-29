@@ -529,7 +529,7 @@ static int modify_bars(const struct pci_dev *pdev, uint16_t cmd, bool rom_only)
 }
 
 static void cf_check cmd_write(
-    const struct pci_dev *pdev, unsigned int reg, uint32_t cmd, void *data)
+    struct pci_dev *pdev, unsigned int reg, uint32_t cmd, void *data)
 {
     struct vpci_header *header = data;
 
@@ -570,7 +570,7 @@ static uint32_t cf_check guest_cmd_read(
 }
 
 static void cf_check bar_write(
-    const struct pci_dev *pdev, unsigned int reg, uint32_t val, void *data)
+    struct pci_dev *pdev, unsigned int reg, uint32_t val, void *data)
 {
     struct vpci_bar *bar = data;
     bool hi = false;
@@ -621,7 +621,7 @@ static void cf_check bar_write(
     pci_conf_write32(pdev->sbdf, reg, val);
 }
 
-static void cf_check guest_mem_bar_write(const struct pci_dev *pdev,
+static void cf_check guest_mem_bar_write(struct pci_dev *pdev,
                                          unsigned int reg, uint32_t val,
                                          void *data)
 {
@@ -685,7 +685,7 @@ static uint32_t cf_check guest_mem_bar_read(const struct pci_dev *pdev,
 }
 
 static void cf_check rom_write(
-    const struct pci_dev *pdev, unsigned int reg, uint32_t val, void *data)
+    struct pci_dev *pdev, unsigned int reg, uint32_t val, void *data)
 {
     struct vpci_header *header = &pdev->vpci->header;
     struct vpci_bar *rom = data;

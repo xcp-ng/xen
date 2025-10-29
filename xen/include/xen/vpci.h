@@ -10,7 +10,7 @@
 typedef uint32_t vpci_read_t(const struct pci_dev *pdev, unsigned int reg,
                              void *data);
 
-typedef void vpci_write_t(const struct pci_dev *pdev, unsigned int reg,
+typedef void vpci_write_t(struct pci_dev *pdev, unsigned int reg,
                           uint32_t val, void *data);
 
 typedef int vpci_register_init_t(struct pci_dev *dev);
@@ -77,7 +77,7 @@ uint32_t cf_check vpci_hw_read16(
 uint32_t cf_check vpci_hw_read32(
     const struct pci_dev *pdev, unsigned int reg, void *data);
 void cf_check vpci_hw_write16(
-    const struct pci_dev *pdev, unsigned int reg, uint32_t val, void *data);
+    struct pci_dev *pdev, unsigned int reg, uint32_t val, void *data);
 
 /*
  * Check for pending vPCI operations on this vcpu. Returns true if the vcpu
