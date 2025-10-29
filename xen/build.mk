@@ -8,6 +8,7 @@ define cmd_banner
     mv -f $@.tmp $@
 endef
 
+.banner: XEN_FULLVERSION := $$(echo $(XEN_FULLVERSION) | sed "s/-.*//")
 .banner: tools/xen.flf FORCE
 	$(call if_changed,banner)
 
