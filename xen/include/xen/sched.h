@@ -812,7 +812,7 @@ void vcpu_end_shutdown_deferral(struct vcpu *v);
  */
 void __domain_crash(struct domain *d);
 
-#if defined(NDEBUG) && defined(CONFIG_LIVEPATCH)
+#if defined(NDEBUG) && defined(CONFIG_LIVEPATCH) && defined(CONFIG_X86)
 #define print_domain_crash(func) \
     printk(#func " called from %pS\n", current_text_addr())
 #else
