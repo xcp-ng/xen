@@ -230,7 +230,7 @@ struct arch_msix {
 #define ADJ_IDX_LAST  1
     unsigned int adj_access_idx[2];
     spinlock_t table_lock;
-    bool host_maskall, guest_maskall;
+    bool host_maskall, guest_maskall, enabled;
     domid_t warned_domid;
     union {
         uint8_t all;
