@@ -2,6 +2,7 @@
 #define __ASM_EVENT_H__
 
 #include <asm/domain.h>
+#include <xen/sched.h>
 
 void vcpu_kick(struct vcpu *v);
 void vcpu_mark_events_pending(struct vcpu *v);
