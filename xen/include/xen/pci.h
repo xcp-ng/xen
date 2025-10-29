@@ -165,6 +165,8 @@ struct pci_dev {
         const struct pci_dev *pf_pdev;
     };
 
+    bool memory_enabled;
+
     /* Data for vPCI. */
     struct vpci *vpci;
 };
