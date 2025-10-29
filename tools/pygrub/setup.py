@@ -27,5 +27,8 @@ setup(name='pygrub',
       license='GPL',
       package_dir={'grub': 'src', 'fsimage': 'src'},
       packages=pkgs,
-      ext_modules = [ xenfsimage ]
+      ext_modules = [ xenfsimage ],
+      data_files=[
+        ('/etc/pygrub/rules.d/', [])
+        ]
       )
