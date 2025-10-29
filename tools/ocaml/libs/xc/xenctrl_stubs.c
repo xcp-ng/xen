@@ -243,8 +243,27 @@ CAMLprim value stub_xc_domain_create(value xch_val, value wanted_domid, value co
 	arch_domconfig = Field(VAL_ARCH, 0);
 	switch ( Tag_val(VAL_ARCH) )
 	{
-	case 0: /* ARM - nothing to do */
+	case 0: /* ARM */
+#if defined(__arm__) || defined(__aarch64__)
+		/* Quick & dirty check for ABI changes. */
+		/*BUILD_BUG_ON(sizeof(cfg) != X);*/
+
+#define VAL_GIC_VERSION          Field(arch_domconfig, 0)
+#define VAL_NR_SPIS              Field(arch_domconfig, 1)
+#define VAL_CLOCK_FREQ           Field(arch_domconfig, 2)
+/*#define VAL_SVE_VL               Field(arch_domconfig, 3)*/
+/*#define VAL_TEE_TYPE             Field(arch_domconfig, 4)*/
+/*#define VAL_SCI_TYPE             Field(arch_domconfig, 5)*/
+
+                cfg.arch.gic_version = VAL_GIC_VERSION;
+                /*cfg.arch.sve_vl = VAL_SVE_VL;*/
+                cfg.arch.nr_spis = VAL_NR_SPIS;
+                /*cfg.arch.tee_type = VAL_TEE_TYPE; NONE is 0 */
+                /*cfg.arch.arm_sci_type = VAL_SCI_TYPE; NONE is 0*/
+
+#else
 		caml_failwith("Unhandled: ARM");
+#endif
 		break;
 
 	case 1: /* X86 - emulation flags in the block */
@@ -295,6 +314,12 @@ CAMLprim value stub_xc_domain_create(value xch_val, value wanted_domid, value co
 	caml_enter_blocking_section();
 	result = xc_domain_create(xch, &domid, &cfg);
 	caml_leave_blocking_section();
+
+#if defined(__arm__) || defined(__aarch64__)
+        /* Return the OUT (and IN/OUT) parameters */
+        VAL_GIC_VERSION = cfg.arch.gic_version;
+        VAL_CLOCK_FREQ = cfg.arch.clock_frequency;
+#endif
 
 	if (result < 0)
 		failwith_xc(xch);
@@ -1416,6 +1441,9 @@ CAMLprim value stub_xc_get_cpu_featureset(value xch_val, value idx)
 		for (i = 0; i < len; ++i)
 			Store_field(bitmap_val, i, caml_copy_int64(fs[i]));
 	}
+#elif defined(__arm__) || defined(__aarch64__)
+        /* Return an empty array of features - hacky */
+        bitmap_val = caml_alloc(0, 0);
 #else
 	caml_failwith("xc_get_cpu_featureset: not implemented");
 #endif
