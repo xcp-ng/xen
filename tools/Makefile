@@ -287,3 +287,7 @@ subtree-force-update-all:
 	$(MAKE) qemu-xen-dir-force-update
 	$(MAKE) qemu-xen-traditional-dir-force-update
 	$(MAKE) -C firmware subtree-force-update-all
+
+
+
+SUBDIRS-y += xenguest
