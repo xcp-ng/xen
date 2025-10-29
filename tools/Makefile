@@ -290,5 +290,5 @@ subtree-force-update-all:
 
 
 
-SUBDIRS-y += xenguest
+SUBDIRS-$(CONFIG_X86) += xenguest
 SUBDIRS-y += vmdebug
