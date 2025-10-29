@@ -27,7 +27,9 @@ static hvmparam_desc_t params[HVM_NR_PARAMS] =
     PARAM(IOREQ_PFN, "Device Model IO Request frame"),
     PARAM(BUFIOREQ_PFN, "Device Model Buffered IO Request frame"),
     PARAM(BUFIOREQ_EVTCHN, "Device Model Buffered IO Request event channel"),
+#ifdef CONFIG_X86
     PARAM(VIRIDIAN, "Windows Viridian enlightenments"),
+#endif
     PARAM(TIMER_MODE, "Timer tick delivery settings"),
     PARAM(HPET_ENABLED, "HPET available?"),
     PARAM(IDENT_PT, "Identity-map pagetable (Intel restricted real mode)"),
