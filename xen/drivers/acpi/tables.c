@@ -315,13 +315,23 @@ acpi_parse_entries(const char *id, unsigned long table_size,
 	if (!id || !handler)
 		return -EINVAL;
 
+	if (!strncmp(id, ACPI_SIG_MADT, 4))
+		printk("%s: 0\n", __func__);
+
 	if (!table_size)
 		return -EINVAL;
+
+	if (!strncmp(id, ACPI_SIG_MADT, 4))
+	       printk("%s: 1\n", __func__);
 
 	if (!table_header) {
 		printk(KERN_WARNING PREFIX "%4.4s not present\n", id);
 		return -ENODEV;
 	}
+
+	if (!strncmp(id, ACPI_SIG_MADT, 4))
+		printk("%s: 2\n", __func__);
+
 
 	table_end = (unsigned long)table_header + table_header->length;
 
@@ -341,7 +351,12 @@ acpi_parse_entries(const char *id, unsigned long table_size,
 		if (entry->type == entry_id
 		    && (!max_entries || count < max_entries)) {
 			if (handler(entry, table_end))
+			{
+				if (!strncmp(id, ACPI_SIG_MADT, 4))
+					printk("%s: 3\n", __func__);
+
 				return -EINVAL;
+			}
 
 			count++;
 		}
@@ -354,6 +369,9 @@ acpi_parse_entries(const char *id, unsigned long table_size,
 		printk(KERN_WARNING PREFIX "[%4.4s:%#x] ignored %i entries of "
 		       "%i found\n", id, entry_id, count - max_entries, count);
 	}
+
+	if (!strncmp(id, ACPI_SIG_MADT, 4))
+		printk("%s: 4\n", __func__);
 
 	return count;
 }
@@ -377,11 +395,17 @@ acpi_table_parse_entries(const char *id,
 	if (!strncmp(id, ACPI_SIG_MADT, 4))
 		instance = acpi_apic_instance;
 
+	if (!strncmp(id, ACPI_SIG_MADT, 4))
+		printk("%s: 0\n", __func__);
+
 	acpi_get_table(id, instance, &table_header);
 	if (!table_header) {
 		printk(KERN_WARNING PREFIX "%4.4s not present\n", id);
 		return -ENODEV;
 	}
+
+	if (!strncmp(id, ACPI_SIG_MADT, 4))
+		printk("%s: 1\n", __func__);
 
 	return acpi_parse_entries(id, table_size, handler, table_header,
 				  entry_id, max_entries);
