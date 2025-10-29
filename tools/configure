@@ -10420,6 +10420,48 @@ then :
 fi
 
 
+ax_found=0
+
+    if test "$ax_found" = "0"
+then :
+
+        ac_fn_c_check_header_compile "$LINENO" "json/json.h" "ac_cv_header_json_json_h" "$ac_includes_default"
+if test "x$ac_cv_header_json_json_h" = xyes
+then :
+
+
+printf "%s\n" "#define INCLUDE_JSON_H <json/json.h>" >>confdefs.h
+
+            ax_found=1
+fi
+
+
+fi
+
+    if test "$ax_found" = "0"
+then :
+
+        ac_fn_c_check_header_compile "$LINENO" "json-c/json.h" "ac_cv_header_json_c_json_h" "$ac_includes_default"
+if test "x$ac_cv_header_json_c_json_h" = xyes
+then :
+
+
+printf "%s\n" "#define INCLUDE_JSON_H <json-c/json.h>" >>confdefs.h
+
+            ax_found=1
+fi
+
+
+fi
+
+if test "$ax_found" = "0"
+then :
+
+    as_fn_error $? "No header found from list json/json.h json-c/json.h" "$LINENO" 5
+
+fi
+
+
 ac_fn_c_check_func "$LINENO" "pipe2" "ac_cv_func_pipe2"
 if test "x$ac_cv_func_pipe2" = xyes
 then :
