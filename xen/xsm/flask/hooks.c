@@ -844,6 +844,9 @@ static int cf_check flask_domctl(struct domain *d, unsigned int cmd,
     case XEN_DOMCTL_dt_overlay:
         return current_has_perm(d, SECCLASS_DOMAIN2, DOMAIN2__DT_OVERLAY);
 
+    case XEN_DOMCTL_get_runstate_info:
+        return current_has_perm(d, SECCLASS_DOMAIN2, DOMAIN2__GET_RUNSTATE_INFO);
+
     default:
         return avc_unknown_permission("domctl", cmd);
     }
