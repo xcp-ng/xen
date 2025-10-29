@@ -656,6 +656,8 @@ int hvm_domain_initialise(struct domain *d,
 
     hvm_init_guest_time(d);
 
+    d->arch.hvm.params[HVM_PARAM_TIMER_MODE]
+        = HVMPTM_no_delay_for_missed_ticks;
     d->arch.hvm.params[HVM_PARAM_TRIPLE_FAULT_REASON] = SHUTDOWN_reboot;
 
     /* Set altp2m based on domctl flags. */
