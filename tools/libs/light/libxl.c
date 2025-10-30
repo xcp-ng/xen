@@ -16,6 +16,7 @@
 
 #include "libxl_internal.h"
 #include "xenctrl.h"
+#include <stdio.h>
 
 int libxl_ctx_alloc(libxl_ctx **pctx, int version,
                     unsigned flags, xentoollog_logger * lg)
@@ -417,12 +418,37 @@ int libxl_get_physinfo(libxl_ctx *ctx, libxl_physinfo *physinfo)
 }
 
 int libxl_coco_platform_certs(libxl_ctx *ctx) {
-    int ret;
+    int rc;
     coco_platform_certs_t certs;
 
-    ret = xc_coco_get_platform_certs(ctx->xch, &certs);
+    rc = xc_coco_get_platform_certs(ctx->xch, &certs);
 
-    return ret;
+    if (!rc) {
+        int file = open("phd.bin", O_WRONLY | O_CREAT, 0644);
+        if (!file) {
+            perror("open phd.bin");
+            return -1;
+        }
+
+        size_t written = write(file, &certs.sev.phd_cert, sizeof(certs.sev.phd_cert));
+        // the union used does not matter, we use the pointer
+        if (written != sizeof(certs.sev.phd_cert)) {
+            perror("write phd.bin");
+            close(file);
+            return -1;
+        }
+        written = write(file, &certs.sev.phd_cert_chain, sizeof(certs.sev.phd_cert_chain));
+        // the union used does not matter, we use the pointer
+        if (written != sizeof(certs.sev.phd_cert_chain)) {
+            perror("write phd_certs.bin");
+            close(file);
+            return -1;
+        }
+
+        printf("Version: %d.%d.%d\n", certs.status.version_major, certs.status.version_minor, certs.status.version_build);
+    }
+
+    return rc;
 }
 
 libxl_cputopology *libxl_get_cpu_topology(libxl_ctx *ctx, int *nb_cpu_out)

@@ -131,17 +131,16 @@ static long coco_op_get_attestation_report(coco_attestation_report_t *report) {
 static long coco_op_get_certificate(coco_platform_certs_t *certs) {
     int rc;
     unsigned int psp_ret = 0;
-
     struct sev_data_pdh_cert_export pdh_cert_export;
-    //struct sev_certificate chain[4];
 
     certs->status = platform_status;
     certs->cpu_number = nr_sockets;
-    printk(XENLOG_DEBUG "version: major = %d, minor %d\n", platform_status.version_major, platform_status.version_minor);
     
-    // platform_status.version_major is not initialized, platform_status is set before the asp is init 
+    //printk(XENLOG_DEBUG "version: major = %d, minor %d\n", platform_status.version_major, platform_status.version_minor);
+    // platform_status.version_major is not initialized, platform_status is set before the asp is init, no call
     //if (platform_status.version_major >= 1 || platform_status.version_minor >= 15) {
     if (true) { // > 0.16
+        // SEV GET_ID is available from SEV API v0.16 and up
         struct sev_data_get_id get_id;
         get_id.address = (uint64_t) virt_to_maddr(&certs->hwid);
         get_id.len = sizeof(certs->hwid); // size of AMD-SEV attestation
@@ -151,9 +150,21 @@ static long coco_op_get_certificate(coco_platform_certs_t *certs) {
         printk(XENLOG_DEBUG "platform: maj = %d, min %d\n", platform_status.version_major, platform_status.version_minor);
 
         for (size_t i = 0; i < 128 - 1; i++) {
-	    	printk("%02X", certs->hwid[i]);
-	    }
-	    printk("%02X\n", certs->hwid[127]);
+            printk("%02X", certs->hwid[i]);
+        }
+        printk("%02X\n", certs->hwid[127]);
+    }
+    if (true) { // > 0.16
+        // SEV GET_ID is available from SEV API v0.16 and up
+        struct sev_user_data_status status;
+
+        rc = sev_do_cmd(SEV_CMD_PLATFORM_STATUS, (void *)(&status), &psp_ret, true);
+        printk(XENLOG_DEBUG "platform: rc = %d, psp_ret %d\n", rc, psp_ret);
+        printk(XENLOG_DEBUG "platform: maj = %d, min %d\n", status.api_major, status.api_minor);
+
+        certs->status.version_major = status.api_major;
+        certs->status.version_minor = status.api_minor;
+        certs->status.version_build = status.build;
     }
     
     pdh_cert_export.pdh_cert_address = (uint64_t) virt_to_maddr(&certs->sev.phd_cert);
@@ -173,11 +184,9 @@ static long coco_op_get_certificate(coco_platform_certs_t *certs) {
     // note : get_id is irrelevant for rome processor : 
     // https://www.amd.com/content/dam/amd/en/documents/epyc-technical-docs/specifications/57230.pdf
     printk(XENLOG_DEBUG "%s: rc = %d, psp_ret %d\n", __func__, rc, psp_ret);
-	// SEV GET_ID is available from SEV API v0.16 and up
-	// if (!sev_version_greater_or_equal(0, 16))
-	// 	return -ENOTSUPP;
     return rc;
 }
+
 
 
 long do_coco_op(unsigned int cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
@@ -225,10 +234,19 @@ long do_coco_op(unsigned int cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
             coco_platform_certs_t *certs = xmalloc(coco_platform_certs_t);
             int rc = 0;
 
-            if ( copy_from_guest(&certs, arg, 1) )
+            if ( copy_from_guest(certs, arg, 1) )
                 return -EFAULT;
+            
+            if (!certs){
+                printk(XENLOG_ERR"%s: could not malloc\n", __func__);
+                return -ENOSPC;
+            }
 
             rc = coco_op_get_certificate(certs);
+
+            if (copy_to_guest(arg, certs, 1))
+                return -EFAULT;
+
             xfree(certs);
             return rc;
         }

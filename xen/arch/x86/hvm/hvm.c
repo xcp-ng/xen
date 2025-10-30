@@ -844,10 +844,6 @@ void hvm_domain_destroy(struct domain *d)
         list_del(&ioport->list);
         xfree(ioport);
     }
-<<<<<<< HEAD
-=======
-
->>>>>>> xen-fastabi-sev
     hvm_asid_free(&d->arch.hvm.asid);
     destroy_vpci_mmcfg(d);
 

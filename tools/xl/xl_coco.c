@@ -84,9 +84,6 @@ static int main_coco_attestation(int argc, char **argv) {
 }
 
 static int main_coco_get_platform_certs(int argc, char **argv) {
-    // get info hyprcall
-    // write struct (get id + pdh)
-    // no opt
     int opt, rc;
     SWITCH_FOREACH_OPT(opt, "", NULL, "coco platform", 0) {
         /* No options */

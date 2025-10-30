@@ -20,11 +20,7 @@
 
 #include "cpu.h"
 
-<<<<<<< HEAD
 #ifdef CONFIG_COCO_AMD_SEV
-=======
-#ifdef CONFIG_COCO
->>>>>>> xen-fastabi-sev
 #include <asm/coco.h>
 #endif
 

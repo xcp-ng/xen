@@ -261,7 +261,7 @@ static int sev_asid_alloc(struct domain *d, struct hvm_asid *asid)
 static int sev_attestation_report(struct domain *d,
     struct coco_attestation_report *args) {
     struct sev_data_attestation_report report;
-    int psp_ret = 0;
+    unsigned int psp_ret = 0;
     int rc = 0;
 
     //from coco struct to sev specific
