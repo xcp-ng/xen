@@ -325,6 +325,8 @@ static int compat_gnttab_hvm_seed(xc_interface *xch, uint32_t domid,
         .domid = domid,
     };
 
+    xc_dom_printf(xch, "%s() d%d", __func__, domid);
+
     rc = xc_core_arch_get_scratch_gpfn(xch, domid, &scratch_gfn);
     if ( rc < 0 )
     {
@@ -385,12 +387,15 @@ int xc_dom_gnttab_seed(xc_interface *xch, uint32_t guest_domid,
     xenforeignmemory_resource_handle *fres;
     void *addr = NULL;
 
+    xc_dom_printf(xch, "%s() d%d", __func__, guest_domid);
+
     fres = xenforeignmemory_map_resource(
         fmem, guest_domid, XENMEM_resource_grant_table,
         XENMEM_resource_grant_table_id_shared, 0, 1, &addr,
         PROT_READ | PROT_WRITE, 0);
     if ( !fres )
     {
+        xc_dom_printf(xch, "%s() d%d xenforeignmemory_map_resource() failed", __func__, guest_domid);
         if ( errno == EOPNOTSUPP )
             return is_hvm ?
                 compat_gnttab_hvm_seed(xch, guest_domid,
@@ -421,6 +426,8 @@ int xc_dom_gnttab_init(struct xc_dom_image *dom)
     bool is_hvm = xc_dom_translated(dom);
     xen_pfn_t console_gfn = xc_dom_p2m(dom, dom->console_pfn);
     xen_pfn_t xenstore_gfn = xc_dom_p2m(dom, dom->xenstore_pfn);
+
+    xc_dom_printf(dom->xch, "%s() d%d", __func__, dom->guest_domid);
 
     return xc_dom_gnttab_seed(dom->xch, dom->guest_domid, is_hvm,
                               console_gfn, xenstore_gfn,
