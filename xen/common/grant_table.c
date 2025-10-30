@@ -1357,6 +1357,16 @@ map_grant_ref(
     rcu_unlock_domain(rd);
 }
 
+static void dump_grant_op(struct gnttab_map_grant_ref *op) {
+	dprintk(XENLOG_ERR, "host_addr: %016lx\n", op->host_addr);
+	dprintk(XENLOG_ERR, "flags: %08x\n", op->flags);
+	dprintk(XENLOG_ERR, "ref: %08x\n", op->ref);
+	dprintk(XENLOG_ERR, "dom: %04x\n", op->dom);
+	dprintk(XENLOG_ERR, "status: %04x\n", op->status);
+	dprintk(XENLOG_ERR, "handle: %08x\n", op->handle);
+	dprintk(XENLOG_ERR, "dev_bus_addr: %016lx\n", op->dev_bus_addr);
+}
+
 static long
 gnttab_map_grant_ref(
     XEN_GUEST_HANDLE_PARAM(gnttab_map_grant_ref_t) uop, unsigned int count)
@@ -1369,13 +1379,21 @@ gnttab_map_grant_ref(
         if ( i && hypercall_preempt_check() )
             return i;
 
-        if ( unlikely(__copy_from_guest_offset(&op, uop, i, 1)) )
+        if ( unlikely(__copy_from_guest_offset(&op, uop, i, 1)) ) {
+	    dprintk(XENLOG_ERR, "%s: __copy_from_guest_offset failed\n", __func__);
             return -EFAULT;
+	}
 
+	dprintk(XENLOG_ERR, "%s: before map_grant_ref()\n", __func__);
+	dump_grant_op(&op);
         map_grant_ref(&op);
+	dprintk(XENLOG_ERR, "%s: after map_grant_ref()\n", __func__);
+	dump_grant_op(&op);
 
-        if ( unlikely(__copy_to_guest_offset(uop, i, &op, 1)) )
+        if ( unlikely(__copy_to_guest_offset(uop, i, &op, 1)) ) {
+	    dprintk(XENLOG_ERR, "%s: __copy_to_guest_offset failed\n", __func__);
             return -EFAULT;
+	}
     }
 
     return 0;
