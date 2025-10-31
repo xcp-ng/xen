@@ -20,7 +20,7 @@ static inline void gnttab_clear_flags(struct domain *d,
 static inline void gnttab_mark_dirty(struct domain *d, mfn_t mfn)
 {
 #ifndef NDEBUG
-    printk_once(XENLOG_G_WARNING "gnttab_mark_dirty not implemented yet\n");
+    printk_once(XENLOG_G_WARNING "gnttab_mark_dirty not implemented yet: mfn(%#lx)\n", mfn_x(mfn));
 #endif
 }
 

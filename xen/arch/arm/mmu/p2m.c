@@ -523,6 +523,14 @@ mfn_t p2m_get_entry(struct p2m_domain *p2m, gfn_t gfn,
 
         if ( valid )
             *valid = lpae_is_valid(entry);
+
+        printk("%s: mfn(%#lx), v(%d), r(%d) w(%d) nx(%d)\n",
+               __func__,
+               mfn_x(mfn),
+               lpae_is_valid(entry),
+               entry.p2m.read,
+               entry.p2m.write,
+               entry.p2m.xn);
     }
 
 out_unmap:

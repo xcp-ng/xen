@@ -1686,6 +1686,9 @@ unmap_grant_ref(
     common->rd = NULL;
     common->mfn = INVALID_MFN;
 
+    printk("%s: host_addr(%#lx) dev_bus_addr(%#lx), handle(%#x)\n",
+           __func__, op->host_addr, op->dev_bus_addr, op->handle);
+
     unmap_common(common);
     op->status = common->status;
 }
