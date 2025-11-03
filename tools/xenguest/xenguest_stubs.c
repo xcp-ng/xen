@@ -30,10 +30,12 @@
 
 #include <xentoolcore_internal.h>
 
+#if defined(__i386__) || defined(__x86_64__)
 enum {
 #define XEN_CPUFEATURE(name, value) X86_FEATURE_##name = value,
 #include <xen/arch-x86/cpufeatureset.h>
 };
+#endif
 
 char *xs_domain_path = NULL;
 char *pci_passthrough_sbdf_list = NULL;
@@ -193,6 +195,7 @@ int xenstore_puts(const char *key, const char *val)
     return xenstore_putsv(key, "%s", val);
 }
 
+#if defined(__i386__) || defined(__x86_64__)
 static uint32_t *host_featureset, *featureset, nr_features;
 
 /*
@@ -207,13 +210,15 @@ static uint32_t *host_featureset, *featureset, nr_features;
  * If no featureset is found, default to the host maximum.  It is important in
  * a heterogenous case to permit featuresets longer than this hosts maximum,
  * if they have been zero-extended to make a common longest length.
+ *
+ * A no-op on ARM, returning 0
  */
 static int get_vm_featureset(bool hvm)
 {
+    int rc = 0;
     char *platform = xenstore_gets("platform/featureset");
     char *s = platform, *e;
     unsigned int i = 0;
-    int rc = 0;
 
     if ( !platform )
     {
@@ -262,9 +267,11 @@ static int get_vm_featureset(bool hvm)
     free(platform);
     return rc;
 }
+#endif
 
 static int construct_cpuid_policy(const struct flags *f, bool hvm, bool restore)
 {
+#if defined(__i386__) || defined(__x86_64__)
     int rc = -1;
 
     if ( xc_get_cpu_featureset(xch,
@@ -327,7 +334,9 @@ static int construct_cpuid_policy(const struct flags *f, bool hvm, bool restore)
 out:
     free(featureset);
     featureset = NULL;
-    return rc;
+#elif defined(__arm__) || defined(__aarch64__)
+    return 0;
+#endif
 }
 
 static int hvmloader_flag(const char *key)
@@ -484,6 +493,7 @@ static void get_flags(struct flags *f)
             f->viridian_hcall_remote_tlb_flush, f->viridian_apic_assist,
             f->viridian_crash_ctl, f->viridian_stimer, f->viridian_hcall_ipi);
 
+    /* TODO not all of these make sense for arm */
     for ( n = 0; n < f->vcpus; n++ )
         xg_info("vcpu/%d/affinity:%s\n",
                 n, f->vcpu_affinity[n] ?: "unset");
@@ -572,10 +582,14 @@ static uint64_t get_image_max_size(const char *type)
 
 static void configure_tsc(struct flags *f)
 {
+#if defined(__i386__) || defined(__x86_64__)
     int rc = xc_domain_set_tsc_info(xch, domid, f->tsc_mode, 0, 0, 0);
 
     if ( rc )
         failwith_oss_xc("xc_domain_set_tsc_info");
+#elif defined(__arm__) || defined(__aarch64__)
+    return;
+#endif
 }
 
 
@@ -842,6 +856,7 @@ out:
 
 static void hvm_set_viridian_features(struct flags *f)
 {
+#if defined(__i386__) || defined(__x86_64__)
     uint64_t feature_mask = HVMPV_base_freq | HVMPV_cpu_hotplug;
 
     xg_info("viridian base\n");
@@ -889,6 +904,9 @@ static void hvm_set_viridian_features(struct flags *f)
     }
 
     xc_set_hvm_param(xch, domid, HVM_PARAM_VIRIDIAN, feature_mask);
+#elif defined(__arm__) || defined(__aarch64__)
+    return;
+#endif
 }
 
 static int hvm_build_set_params(bool is_pvh, struct flags *f)
@@ -1049,6 +1067,7 @@ out:
 #endif
 }
 
+#if defined(__i386__) || defined(__x86_64__)
 static int pci_get_id(uint16_t seg, uint8_t bus, uint8_t dev, uint8_t func,
                       const char *type, uint16_t *id)
 {
@@ -1158,6 +1177,7 @@ static int get_rdm(uint16_t seg, uint8_t bus, uint8_t devfn,
 out:
     return rc;
 }
+#endif
 
 /* Copied from xen hypervisor itself */
 const char *parse_pci_sbdf(char *s, unsigned int *seg_p,
@@ -1204,10 +1224,12 @@ const char *parse_pci_sbdf(char *s, unsigned int *seg_p,
 int hvm_build_setup_mem(struct xc_dom_image *dom, uint64_t max_mem_mib,
                         uint64_t max_start_mib)
 {
+    int ret;
     uint64_t lowmem_end, highmem_start, highmem_end, mmio_start, mmio_size;
+#if defined(__i386__) || defined(__x86_64__)
     uint64_t mmio_total = HVM_BELOW_4G_MMIO_LENGTH;
-    unsigned int i, j, nr = 0;
     struct e820entry *e820;
+    unsigned int i, j, nr = 0;
     unsigned int nr_rdm_entries[MAX_RMRR_DEVICES] = {0};
     unsigned int nr_rmrr_devs = 0;
     struct xen_reserved_device_memory *xrdm[MAX_RMRR_DEVICES] = {0};
@@ -1215,7 +1237,6 @@ int hvm_build_setup_mem(struct xc_dom_image *dom, uint64_t max_mem_mib,
     bool allow_memory_relocate = ALLOW_MEMORY_RELOCATE;
     bool apply_mxgpu_workaround = false;
     char *s;
-    int ret;
 
     if ( pci_passthrough_sbdf_list )
     {
@@ -1395,6 +1416,28 @@ int hvm_build_setup_mem(struct xc_dom_image *dom, uint64_t max_mem_mib,
     dom->mmio_size = mmio_size;
     dom->mmio_start = mmio_start;
 
+#elif defined(__arm__) || defined(__aarch64__)
+    dom->target_pages = max_start_mib << (20 - XC_PAGE_SHIFT);
+
+    lowmem_end  = max_mem_mib << 20;
+    highmem_end = highmem_start = 1ull << 32;
+
+    mmio_size   = HVM_BELOW_4G_MMIO_LENGTH;
+    dom->mmio_size = mmio_size;
+    dom->mmio_start = (1ull << 32) - dom->mmio_size;
+
+    mmio_start  = highmem_start - mmio_size;
+
+    if ( lowmem_end > mmio_start )
+    {
+        highmem_end = (1ull << 32) + (lowmem_end - mmio_start);
+        lowmem_end = mmio_start;
+    }
+
+    dom->lowmem_end = lowmem_end;
+    dom->highmem_end = highmem_end;
+#endif
+
     ret = hvm_load_firmware_module(dom);
     if ( ret )
         xg_fatal("xenguest: Failed to load firmware module: %s\n",
@@ -1412,10 +1455,12 @@ int hvm_build_setup_mem(struct xc_dom_image *dom, uint64_t max_mem_mib,
      */
     xenstore_putsv("vm-data/mmio-hole-size", "%lu", mmio_size);
 
+#if defined(__i386__) || defined(__x86_64__)
     if ( xc_domain_set_memory_map(xch, domid, e820, nr) )
         failwith_oss_xc("xc_domain_set_memory_map");
 
     free(e820);
+#endif
 
     return 0;
 }
@@ -1460,6 +1505,7 @@ static int pvh_setup_mem(struct xc_dom_image *dom, uint64_t max_mem_mib,
 
 static int pvh_setup_e820(struct xc_dom_image *dom)
 {
+#if defined(__i386__) || defined(__x86_64__)
     struct e820entry *e820;
     uint64_t lowmem_end, highmem_start, highmem_end;
     uint32_t lowmem_start = dom->device_model ? 0x100000u : 0;
@@ -1503,7 +1549,7 @@ static int pvh_setup_e820(struct xc_dom_image *dom)
         failwith_oss_xc("xc_domain_set_memory_map");
 
     free(e820);
-
+#endif
     return 0;
 }
 
