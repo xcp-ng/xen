@@ -154,10 +154,13 @@ void arch_get_domain_info(const struct domain *d,
     info->arch_config.emulation_flags = d->arch.emulation_flags;
     info->gpaddr_bits = hap_paddr_bits;
     #ifdef CONFIG_COCO_AMD_SEV
-    if ( is_sev_domain(d) )
+    if ( is_sev_domain(d) && info->arch_config.coco.sev.p)
     {
-        info->arch_config.coco.sev.flags = XEN_X86_SEV_POLICY_VALID;
-        info->arch_config.coco.sev.policy = d->arch.hvm.svm.sev.asp_policy.raw;
+        sev_start_parameters_t *p = info->arch_config.coco.sev.p;
+        // info->arch_config.coco.sev.flags = XEN_X86_SEV_POLICY_VALID;
+        p->flags = XEN_X86_SEV_POLICY_VALID;
+        // info->arch_config.coco.sev.policy = d->arch.hvm.svm.sev.asp_policy.raw;
+        p->flags = d->arch.hvm.svm.sev.asp_policy.raw;
     }
     #endif
 }

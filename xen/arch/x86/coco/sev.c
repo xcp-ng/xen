@@ -4,9 +4,11 @@
  * Copyright (c) Vates SAS
  */
 
+#include "xen/xmalloc.h"
 #include <xen/config.h>
 #include <xen/coco.h>
 #include <xen/mm.h>
+#include <xen/guest_access.h>
 
 #include <asm/cpu-policy.h>
 #include <asm/cpufeature.h>
@@ -29,6 +31,10 @@ static int sev_domain_initialise(struct domain *d)
     union sev_guest_policy sev_policy = d->arch.hvm.svm.sev.asp_policy;
     unsigned int psp_ret = 0;
     long rc = 0;
+
+    printk("%s: %p\n", __func__, d->arch.hvm.svm.sev.owner_crt);
+    printk("%s: %p\n", __func__, d->arch.hvm.svm.sev.session);
+
 
     if ( sev_policy.rsvd0 || sev_policy.rsvd1 )
     {
@@ -440,18 +446,33 @@ static struct coco_domain_ops *sev_get_domain_ops(struct domain *d,
 {
     /* We need to set a valid policy for the initialization. */
     union sev_guest_policy *sev_policy = &d->arch.hvm.svm.sev.asp_policy;
+    struct sev_certificate **sev_crt = &d->arch.hvm.svm.sev.owner_crt;
+    struct sev_session **sev_session = &d->arch.hvm.svm.sev.session;
+    sev_start_parameters_t sp;
 
-    if ( config->arch.coco.sev.flags & XEN_X86_SEV_POLICY_VALID )
-        sev_policy->raw = (uint32_t)config->arch.coco.sev.policy;
+    *sev_crt = xmalloc(struct sev_certificate);
+    *sev_session = xmalloc(struct sev_session);
+    
+    printk("%s: %p\n", __func__, config->arch.coco.sev.p);
+    if ( copy_from_guest(&sp, config->arch.coco.sev, 1) )
+        goto out;
+
+    if (sp.flags & XEN_X86_SEV_POLICY_VALID ) {
+        sev_policy->raw = sp.policy;
+        //sev_policy->raw = (uint32_t)config->arch.co co.sev.policy;
+    }
     else
-        /* Use a reasonable default policy */
+        // Use a reasonable default policy 
         *sev_policy = (union sev_guest_policy){
             .no_key_sharing = true,
             .no_debug = true,
-            .no_send = true, /* To change when SEV live migration is something */
-            .es = cpu_has_sev_es, /* Use SEV-ES if available */
+            .no_send = true, // To change when SEV live migration is something 
+            .es = cpu_has_sev_es, // Use SEV-ES if available 
         };
+    memcpy(d->arch.hvm.svm.sev.owner_crt, sp.crt, sizeof(sp.crt));
+    memcpy(d->arch.hvm.svm.sev.session, sp.session, sizeof(sp.session));
 
+out:
     return sev_policy->es ? &sev_es_domain_ops : &sev_domain_ops;
 }
 

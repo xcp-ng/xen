@@ -91,6 +91,14 @@ struct coco_attestation_report {
 typedef struct coco_attestation_report coco_attestation_report_t;
 DEFINE_XEN_GUEST_HANDLE(coco_attestation_report_t);
 
+struct sev_session {
+    uint8_t nonce[128];
+    uint8_t wrap_tk[256];
+    uint8_t wrap_iv[128];
+    uint8_t wrap_mac[256];
+    uint8_t policy_mac[256];
+};
+
 struct sev_certificate {
 	uint32_t version;
 	uint8_t api_major;

@@ -266,6 +266,19 @@ struct arch_shared_info {
 };
 typedef struct arch_shared_info arch_shared_info_t;
 
+/* could not properly include the struct from "../hvm/coco.h" due to circular includes */
+struct sev_start_parameters {
+    uint8_t crt[2084];
+    uint8_t session[128];
+    /* Use provided policy if set. If cleared, use default Xen policy. */
+    uint32_t flags;
+    #define XEN_X86_SEV_POLICY_VALID (1u << 0)
+    uint32_t policy;
+};
+typedef struct sev_start_parameters sev_start_parameters_t;
+DEFINE_XEN_GUEST_HANDLE(sev_start_parameters_t);
+
+
 #if defined(__XEN__) || defined(__XEN_TOOLS__)
 /*
  * struct xen_arch_domainconfig's ABI is covered by
@@ -313,12 +326,7 @@ struct xen_arch_domainconfig {
 #define XEN_X86_MSR_RELAXED (1u << 0)
     uint32_t misc_flags;
     union {
-        struct {
-/* Use provided policy if set. If cleared, use default Xen policy. */
-#define XEN_X86_SEV_POLICY_VALID (1u << 0)
-            uint32_t flags;
-            uint64_t policy;
-        } sev;
+        XEN_GUEST_HANDLE(sev_start_parameters_t) sev;
     } coco;
 };
 

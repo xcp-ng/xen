@@ -355,10 +355,11 @@ int xc_domain_getinfo_single(xc_interface *xch,
         .cmd = XEN_DOMCTL_getdomaininfo,
         .domain = domid,
     };
-
+    
     if ( do_domctl(xch, &domctl) < 0 )
         return -1;
 
+    printf("%s: %p\n", __func__, info->arch_config.coco.sev.p);
     if ( info )
         *info = domctl.u.getdomaininfo;
 

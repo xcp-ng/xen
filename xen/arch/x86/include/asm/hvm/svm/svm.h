@@ -9,6 +9,7 @@
 #ifndef __ASM_X86_HVM_SVM_H__
 #define __ASM_X86_HVM_SVM_H__
 
+#include "public/hvm/coco.h"
 #include <xen/stdint.h>
 #include <asm/psp-sev.h>
 
@@ -35,6 +36,8 @@ struct sev_state {
     uint8_t  measure[96];
     uint32_t measure_len; /* 96 bytes */
     unsigned long flags;
+    struct sev_certificate *owner_crt;
+    struct sev_session *session;
 };
                 
 struct svm_domain {
