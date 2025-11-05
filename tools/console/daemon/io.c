@@ -680,7 +680,12 @@ static void console_unmap_interface(struct console *con)
 	if (con->interface == NULL)
 		return;
 	if (xgt_handle && con->ring_ref == -1)
+	{
+		dolog(LOG_ERR, ">>>>>>> %s:%s():L%d\n",
+		      __FILE__, __FUNCTION__, __LINE__);
+
 		xengnttab_unmap(xgt_handle, con->interface, 1);
+	}
 	else
 		xenforeignmemory_unmap(xfm_handle, con->interface, 1);
 	con->interface = NULL;
@@ -719,9 +724,17 @@ static int console_create_ring(struct console *con)
 
 	/* If using ring_ref and it has changed, remap */
 	if (ring_ref != con->ring_ref && con->ring_ref != -1)
+	{
+		dolog(LOG_ERR, "%s:%s():L%d ring_ref has been changed? remapping?\n",
+		      __FILE__, __FUNCTION__, __LINE__);
+
 		console_unmap_interface(con);
+	}
 
 	if (!con->interface && xgt_handle && con->use_gnttab) {
+		dolog(LOG_ERR, "%s:%s():L%d ring_ref is console ring ref remapped?\n",
+		      __FILE__, __FUNCTION__, __LINE__);
+
 		/* Prefer using grant table */
 		con->interface = xengnttab_map_grant_ref(xgt_handle,
 			dom->domid, GNTTAB_RESERVED_CONSOLE,
@@ -964,6 +977,10 @@ static void shutdown_domain(struct domain *d)
 {
 	d->is_dead = true;
 	watch_domain(d, false);
+
+	dolog(LOG_ERR, ">>>>> %s:%s():L%d\n",
+		  __FILE__, __FUNCTION__, __LINE__);
+
 	console_iter_void_arg1(d, console_unmap_interface);
 	console_iter_void_arg1(d, console_close_evtchn);
 }

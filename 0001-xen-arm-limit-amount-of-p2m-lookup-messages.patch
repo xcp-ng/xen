@@ -1,0 +1,82 @@
+From ae9d097d874406a25f0d6d7cd64556f9f5e7104e Mon Sep 17 00:00:00 2001
+From: Oleksii Kurochko <oleksii.kurochko@gmail.com>
+Date: Fri, 31 Oct 2025 17:50:58 +0100
+Subject: [PATCH] xen/arm: limit amount of p2m lookup messages
+
+Print p2m entries information only when grant table mapping
+happens.
+
+Signed-off-by: Oleksii Kurochko <oleksii.kurochko@gmail.com>
+---
+ xen/arch/arm/mmu/p2m.c   | 19 ++++++++++++-------
+ xen/common/grant_table.c |  9 +++++++++
+ 2 files changed, 21 insertions(+), 7 deletions(-)
+
+diff --git a/xen/arch/arm/mmu/p2m.c b/xen/arch/arm/mmu/p2m.c
+index fafbafc7fc..09770e6b57 100644
+--- a/xen/arch/arm/mmu/p2m.c
++++ b/xen/arch/arm/mmu/p2m.c
+@@ -432,6 +432,8 @@ static int p2m_next_level(struct p2m_domain *p2m, bool read_only,
+     return GUEST_TABLE_NORMAL_PAGE;
+ }
+ 
++bool grant_table_req = false;
++
+ /*
+  * Get the details of a given gfn.
+  *
+@@ -524,13 +526,16 @@ mfn_t p2m_get_entry(struct p2m_domain *p2m, gfn_t gfn,
+         if ( valid )
+             *valid = lpae_is_valid(entry);
+ 
+-        printk("%s: mfn(%#lx), v(%d), r(%d) w(%d) nx(%d)\n",
+-               __func__,
+-               mfn_x(mfn),
+-               lpae_is_valid(entry),
+-               entry.p2m.read,
+-               entry.p2m.write,
+-               entry.p2m.xn);
++        if ( grant_table_req )
++        {
++            printk("%s: mfn(%#lx), v(%d), r(%d) w(%d) nx(%d)\n",
++                __func__,
++                mfn_x(mfn),
++                lpae_is_valid(entry),
++                entry.p2m.read,
++                entry.p2m.write,
++                entry.p2m.xn);
++        }
+     }
+ 
+ out_unmap:
+diff --git a/xen/common/grant_table.c b/xen/common/grant_table.c
+index 22c7076189..cc6dad038b 100644
+--- a/xen/common/grant_table.c
++++ b/xen/common/grant_table.c
+@@ -1367,6 +1367,8 @@ static void dump_grant_op(struct gnttab_map_grant_ref *op) {
+ 	dprintk(XENLOG_ERR, "dev_bus_addr: %016lx\n", op->dev_bus_addr);
+ }
+ 
++extern bool grant_table_req;
++
+ static long
+ gnttab_map_grant_ref(
+     XEN_GUEST_HANDLE_PARAM(gnttab_map_grant_ref_t) uop, unsigned int count)
+@@ -1386,7 +1388,14 @@ gnttab_map_grant_ref(
+ 
+ 	dprintk(XENLOG_ERR, "%s: before map_grant_ref()\n", __func__);
+ 	dump_grant_op(&op);
++
++
++    grant_table_req = true;
++
+         map_grant_ref(&op);
++
++    grant_table_req = false;
++
+ 	dprintk(XENLOG_ERR, "%s: after map_grant_ref()\n", __func__);
+ 	dump_grant_op(&op);
+ 
+-- 
+2.51.0
+
