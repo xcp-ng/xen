@@ -271,9 +271,6 @@ struct sev_start_parameters {
     uint8_t crt[2084];
     uint8_t session[128];
     /* Use provided policy if set. If cleared, use default Xen policy. */
-    uint32_t flags;
-    #define XEN_X86_SEV_POLICY_VALID (1u << 0)
-    uint32_t policy;
 };
 typedef struct sev_start_parameters sev_start_parameters_t;
 DEFINE_XEN_GUEST_HANDLE(sev_start_parameters_t);
@@ -326,7 +323,12 @@ struct xen_arch_domainconfig {
 #define XEN_X86_MSR_RELAXED (1u << 0)
     uint32_t misc_flags;
     union {
-        XEN_GUEST_HANDLE(sev_start_parameters_t) sev;
+        struct {
+            XEN_GUEST_HANDLE(sev_start_parameters_t) sp;
+            uint32_t flags;
+            #define XEN_X86_SEV_POLICY_VALID (1u << 0)
+            uint32_t policy;
+        } sev;
     } coco;
 };
 

@@ -92,11 +92,11 @@ typedef struct coco_attestation_report coco_attestation_report_t;
 DEFINE_XEN_GUEST_HANDLE(coco_attestation_report_t);
 
 struct sev_session {
-    uint8_t nonce[128];
-    uint8_t wrap_tk[256];
-    uint8_t wrap_iv[128];
-    uint8_t wrap_mac[256];
-    uint8_t policy_mac[256];
+    uint8_t nonce[16];
+    uint8_t wrap_tk[32];
+    uint8_t wrap_iv[16];
+    uint8_t wrap_mac[32];
+    uint8_t policy_mac[32];
 };
 
 struct sev_certificate {

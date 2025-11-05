@@ -688,7 +688,6 @@ int libxl__domain_make(libxl__gc *gc, libxl_domain_config *d_config,
             } else {
                 local_domid = info->domid; /* May not be valid */
             }
-            printf("%s 1: %p\n", __func__, create.arch.coco.sev.p);
             ret = xc_domain_create(ctx->xch, &local_domid, &create);
             if (ret < 0) {
                 /*
@@ -761,7 +760,6 @@ int libxl__domain_make(libxl__gc *gc, libxl_domain_config *d_config,
 
             /* The domain was successfully destroyed, so we can try again */
         }
-        printf("%s: %p\n", __func__, create.arch.coco.sev.p);
 
         rc = libxl__arch_domain_save_config(gc, d_config, state, &create);
         if (rc < 0)

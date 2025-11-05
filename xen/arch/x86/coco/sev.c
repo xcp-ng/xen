@@ -57,13 +57,30 @@ static int sev_domain_initialise(struct domain *d)
     sd_ls.handle = 0; /* generate new one */
     sd_ls.policy = sev_policy;
     sd_ls.dh_cert_address = 0; /* do not DH stuff */
+    sd_ls.dh_cert_address = virt_to_maddr(d->arch.hvm.svm.sev.owner_crt);
+    sd_ls.dh_cert_len = sizeof(*d->arch.hvm.svm.sev.owner_crt);
+    sd_ls.session_address = virt_to_maddr(d->arch.hvm.svm.sev.session);
+    sd_ls.session_len = sizeof(*d->arch.hvm.svm.sev.session);
+
+    for (size_t i = 0; i < 128; i++) {
+        printk("%02X", ((uint8_t *)d->arch.hvm.svm.sev.session)[i]);
+    }
+    printk("\n\n");
+    for (size_t i = 0; i < 64; i++) {
+        printk("%02X", ((uint8_t *)d->arch.hvm.svm.sev.owner_crt)[i]);
+    }
+    printk("\n");
+    for (size_t i = 2020; i < 2084; i++) {
+        printk("%02X", ((uint8_t *)d->arch.hvm.svm.sev.owner_crt)[i]);
+    }
+    printk("\n\n");
 
     rc = sev_do_cmd(SEV_CMD_LAUNCH_START, (void *)(&sd_ls), &psp_ret, true);
-    if ( rc )
+    if ( rc || psp_ret )
     {
         printk(XENLOG_ERR "asp: failed to LAUNCH_START domain(%d): psp_ret %u\n",
                 d->domain_id, psp_ret);
-        return rc;
+        return rc ;
     }
 
     sd_a.handle = sd_ls.handle;
@@ -446,19 +463,17 @@ static struct coco_domain_ops *sev_get_domain_ops(struct domain *d,
 {
     /* We need to set a valid policy for the initialization. */
     union sev_guest_policy *sev_policy = &d->arch.hvm.svm.sev.asp_policy;
-    struct sev_certificate **sev_crt = &d->arch.hvm.svm.sev.owner_crt;
-    struct sev_session **sev_session = &d->arch.hvm.svm.sev.session;
     sev_start_parameters_t sp;
 
-    *sev_crt = xmalloc(struct sev_certificate);
-    *sev_session = xmalloc(struct sev_session);
+    d->arch.hvm.svm.sev.owner_crt = xmalloc(struct sev_certificate);
+    d->arch.hvm.svm.sev.session = xmalloc(struct sev_session);
     
-    printk("%s: %p\n", __func__, config->arch.coco.sev.p);
-    if ( copy_from_guest(&sp, config->arch.coco.sev, 1) )
+    printk("%s: %p\n", __func__, config->arch.coco.sev.sp.p);
+    if ( copy_from_guest(&sp, config->arch.coco.sev.sp, 1) )
         goto out;
 
-    if (sp.flags & XEN_X86_SEV_POLICY_VALID ) {
-        sev_policy->raw = sp.policy;
+    if (config->arch.coco.sev.flags & XEN_X86_SEV_POLICY_VALID ) {
+        sev_policy->raw = config->arch.coco.sev.policy;
         //sev_policy->raw = (uint32_t)config->arch.co co.sev.policy;
     }
     else

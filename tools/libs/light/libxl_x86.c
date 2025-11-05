@@ -31,18 +31,19 @@ int libxl__arch_domain_prepare_config(libxl__gc *gc,
 
     if (libxl_defbool_val(d_config->b_info.arch_x86.x2apic_force))
         config->arch.emulation_flags |= XEN_X86_EMU_FORCE_X2APIC;
-
+    
+    if ( d_config->b_info.arch_x86.sev_policy != ~0 )
+    {
+        config->arch.coco.sev.flags |= XEN_X86_SEV_POLICY_VALID;
+        config->arch.coco.sev.policy = d_config->b_info.arch_x86.sev_policy;
+    }
+    
     if ( d_config->b_info.arch_x86.sev_session_file && d_config->b_info.arch_x86.sev_cert_file )
     {
-        //sev_start_parameters_t *buf = malloc(sizeof(sev_start_parameters_t));
         DECLARE_HYPERCALL_BUFFER(sev_start_parameters_t, buf);
         buf = xc_hypercall_buffer_alloc(gc->owner->xch, buf, sizeof(*buf));
         int rc, fd;
-        if ( d_config->b_info.arch_x86.sev_policy != ~0 )
-        {
-            buf->flags |= XEN_X86_SEV_POLICY_VALID;
-            buf->policy = d_config->b_info.arch_x86.sev_policy;
-        }
+
         fd = open(d_config->b_info.arch_x86.sev_session_file, O_RDONLY);
         if (fd == -1) {
             perror("sev_session_file invalid");
@@ -65,11 +66,11 @@ int libxl__arch_domain_prepare_config(libxl__gc *gc,
         }
         
         //config->arch.coco.sev = buf;
-        set_xen_guest_handle(config->arch.coco.sev, buf);
+        set_xen_guest_handle(config->arch.coco.sev.sp, buf);
         printf("%s: %s, %s\n", __func__, d_config->b_info.arch_x86.sev_session_file, 
             d_config->b_info.arch_x86.sev_cert_file );
         printf("%s: %p\n", __func__, buf);
-        printf("%s: %p\n", __func__, config->arch.coco.sev.p);
+        printf("%s: %p\n", __func__, config->arch.coco.sev.sp.p);
     }
 
     if (libxl_defbool_val(d_config->b_info.trap_unmapped_accesses)) {
