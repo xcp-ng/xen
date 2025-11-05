@@ -1143,6 +1143,18 @@ static int __p2m_set_entry(struct p2m_domain *p2m,
 
         p2m_write_pte(entry, pte, p2m->clean_pte);
 
+        if ( (gfn_x(sgfn) >= 0x39000) && (gfn_x(sgfn) <= 0x40000) ) 
+        {
+            printk("%s: sgfn(%#lx) mfn(%#lx), v(%d), r(%d) w(%d) nx(%d)\n",
+                __func__,
+                gfn_x(sgfn),
+                mfn_x(smfn),
+                lpae_is_valid(*entry),
+                entry->p2m.read,
+                entry->p2m.write,
+                entry->p2m.xn);
+        }
+
         p2m->max_mapped_gfn = gfn_max(p2m->max_mapped_gfn,
                                       gfn_add(sgfn, (1UL << page_order) - 1));
         p2m->lowest_mapped_gfn = gfn_min(p2m->lowest_mapped_gfn, sgfn);
