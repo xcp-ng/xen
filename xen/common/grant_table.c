@@ -1953,6 +1953,8 @@ gnttab_grow_table(struct domain *d, unsigned int req_nr_frames)
     struct grant_table *gt = d->grant_table;
     unsigned int i, j;
 
+    printk(">>> %s: req_nr_frames(%d)\n", __func__, req_nr_frames);
+
     if ( req_nr_frames < INITIAL_NR_GRANT_FRAMES )
         req_nr_frames = INITIAL_NR_GRANT_FRAMES;
     ASSERT(req_nr_frames <= gt->max_grant_frames);
@@ -1993,15 +1995,23 @@ gnttab_grow_table(struct domain *d, unsigned int req_nr_frames)
         share_xen_page_with_guest(virt_to_page(gt->shared_raw[i]), d, SHARE_rw);
     gt->nr_grant_frames = req_nr_frames;
 
+    printk(">>> %s: 0\n", __func__);
+
     return 0;
 
 shared_alloc_failed:
+
+    printk(">>> %s: 1\n", __func__);
+
     for ( i = nr_grant_frames(gt); i < req_nr_frames; i++ )
     {
         free_xenheap_page(gt->shared_raw[i]);
         gt->shared_raw[i] = NULL;
     }
 active_alloc_failed:
+
+    printk(">>> %s: 2\n", __func__);
+
     for ( i = nr_active_grant_frames(gt);
           i < num_act_frames_from_sha_frames(req_nr_frames); i++ )
     {
@@ -2092,6 +2102,8 @@ int grant_table_init(struct domain *d, int max_grant_frames,
 
     grant_write_lock(gt);
 
+    printk(">>> %s 0\n", __func__);
+
     /* gnttab_grow_table() allocates a min number of frames, so 0 is okay. */
     ret = gnttab_grow_table(d, 0);
 
@@ -2115,14 +2127,22 @@ gnttab_setup_table(
     struct grant_table *gt;
     unsigned int i;
 
+    printk(">>> %s: 0\n", __func__);
+
     if ( count != 1 )
         return -EINVAL;
+
+    printk(">>> %s: 1\n", __func__);
 
     if ( unlikely(copy_from_guest(&op, uop, 1)) )
         return -EFAULT;
 
+    printk(">>> %s: 2\n", __func__);
+
     if ( !guest_handle_okay(op.frame_list, op.nr_frames) )
         return -EFAULT;
+
+    printk(">>> %s: 3\n", __func__);
 
     d = rcu_lock_domain_by_any_id(op.dom);
     if ( d == NULL )
@@ -2140,6 +2160,8 @@ gnttab_setup_table(
     gt = d->grant_table;
     grant_write_lock(gt);
 
+    printk(">>> %s: 4: op.nr_frames(%d)\n", __func__, op.nr_frames);
+
     if ( unlikely(op.nr_frames > gt->max_grant_frames) )
     {
         gdprintk(XENLOG_INFO, "d%d is limited to %u grant-table frames\n",
@@ -2155,6 +2177,8 @@ gnttab_setup_table(
         goto unlock;
     }
 
+    printk(">>> %s: 5\n", __func__);
+
     if ( (op.nr_frames > nr_grant_frames(gt) ||
           ((gt->gt_version > 1) &&
            (grant_to_status_frames(op.nr_frames) > nr_status_frames(gt)))) &&
@@ -2167,6 +2191,8 @@ gnttab_setup_table(
         op.status = GNTST_general_error;
         goto unlock;
     }
+
+    printk(">>> %s: 6\n", __func__);
 
     op.status = GNTST_okay;
     for ( i = 0; i < op.nr_frames; i++ )
@@ -2183,14 +2209,20 @@ gnttab_setup_table(
         }
     }
 
+    printk(">>> %s: 7\n", __func__);
+
  unlock:
     grant_write_unlock(gt);
  out:
     if ( d )
         rcu_unlock_domain(d);
 
+    printk(">>> %s: 8\n", __func__);
+
     if ( unlikely(__copy_field_to_guest(uop, &op, status)) )
         return -EFAULT;
+
+    printk(">>> %s: 9\n", __func__);
 
     return 0;
 }
@@ -4161,6 +4193,8 @@ static int gnttab_get_status_frame_mfn(struct domain *d,
         if ( grant_to_status_frames(nr_grant) != nr_status ) /* overflow? */
             return -EINVAL;
 
+        printk(">>> %s 0\n", __func__);
+
         if ( nr_grant <= gt->max_grant_frames )
             gnttab_grow_table(d, nr_grant);
 
@@ -4191,6 +4225,8 @@ static int gnttab_get_shared_frame_mfn(struct domain *d,
 
         if ( nr_grant == 0 ) /* overflow? */
             return -EINVAL;
+
+        printk(">>> %s 0\n", __func__);
 
         if ( nr_grant <= gt->max_grant_frames )
             gnttab_grow_table(d, nr_grant);
