@@ -501,6 +501,9 @@ static const struct interface_funcs domain_funcs = {
 
 static void *map_interface(domid_t domid)
 {
+	syslog(LOG_ERR, "%s: domid(%d) master_domid(%d)\n",
+		   __func__, domid, xenbus_master_domid());
+
 	if (domid == xenbus_master_domid())
 		return xenbus_map();
 
@@ -970,9 +973,14 @@ static struct domain *introduce_domain(const void *ctx,
 	struct xenstore_domain_interface *interface;
 	bool is_master_domain = (domid == xenbus_master_domid());
 
+	syslog(LOG_ERR, "%s: domid(%d), is_master_domain(%d)\n", __func__, domid, is_master_domain);
+
 	domain = find_or_alloc_domain(ctx, domid);
 	if (!domain)
 		return NULL;
+
+	syslog(LOG_ERR, "%s: domid(%d)->introduced: %d\n",
+	       __func__, domid, domain->introduced);
 
 	if (!domain->introduced) {
 		interface = map_interface(domid);
@@ -1003,6 +1011,8 @@ static struct domain *introduce_domain(const void *ctx,
 		domain->port = (rc == -1) ? 0 : rc;
 	}
 
+	syslog(LOG_ERR, "%s: domid(%d): %p\n", __func__, domid, domain);
+
 	return domain;
 }
 
@@ -1014,6 +1024,8 @@ int do_introduce(const void *ctx, struct connection *conn,
 	const char *vec[3];
 	unsigned int domid;
 	evtchn_port_t port;
+
+	syslog(LOG_ERR, "%s is called\n", __func__);
 
 	if (get_strings(in, vec, ARRAY_SIZE(vec)) < ARRAY_SIZE(vec))
 		return EINVAL;
