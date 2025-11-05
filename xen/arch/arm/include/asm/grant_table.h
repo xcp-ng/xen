@@ -8,7 +8,7 @@
 
 #include <asm/guest_atomics.h>
 
-#define INITIAL_NR_GRANT_FRAMES 1U
+#define INITIAL_NR_GRANT_FRAMES 4U
 #define GNTTAB_MAX_VERSION 1
 
 static inline void gnttab_clear_flags(struct domain *d,

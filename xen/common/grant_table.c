@@ -2105,7 +2105,9 @@ int grant_table_init(struct domain *d, int max_grant_frames,
     printk(">>> %s 0\n", __func__);
 
     /* gnttab_grow_table() allocates a min number of frames, so 0 is okay. */
-    ret = gnttab_grow_table(d, 0);
+    ret = gnttab_grow_table(d, INITIAL_NR_GRANT_FRAMES);
+
+    printk(">>> %s 1\n", __func__);
 
     grant_write_unlock(gt);
 
