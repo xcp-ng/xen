@@ -1704,7 +1704,7 @@ unmap_grant_ref(
 
     rcu_read_lock(&domlist_read_lock);
 
-    printk("before:\n")
+    printk("before:\n");
 
     for_each_domain ( d )
         gnttab_usage_print(d);
@@ -1716,7 +1716,7 @@ unmap_grant_ref(
 
         rcu_read_lock(&domlist_read_lock);
 
-    printk("after:\n")
+    printk("after:\n");
 
     for_each_domain ( d )
         gnttab_usage_print(d);
