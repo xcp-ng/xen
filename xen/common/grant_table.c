@@ -1680,11 +1680,15 @@ unmap_common_complete(struct gnttab_unmap_common *op)
     rcu_unlock_domain(rd);
 }
 
+
+static void gnttab_usage_print(struct domain *rd);
+
 static void
 unmap_grant_ref(
     struct gnttab_unmap_grant_ref *op,
     struct gnttab_unmap_common *common)
 {
+    struct domain *d;
     common->host_addr = op->host_addr;
     common->dev_bus_addr = op->dev_bus_addr;
     common->handle = op->handle;
@@ -1698,8 +1702,26 @@ unmap_grant_ref(
     printk("%s: host_addr(%#lx) dev_bus_addr(%#lx), handle(%#x)\n",
            __func__, op->host_addr, op->dev_bus_addr, op->handle);
 
+    rcu_read_lock(&domlist_read_lock);
+
+    printk("before:\n")
+
+    for_each_domain ( d )
+        gnttab_usage_print(d);
+
+    rcu_read_unlock(&domlist_read_lock);
+
     unmap_common(common);
     op->status = common->status;
+
+        rcu_read_lock(&domlist_read_lock);
+
+    printk("after:\n")
+
+    for_each_domain ( d )
+        gnttab_usage_print(d);
+
+    rcu_read_unlock(&domlist_read_lock);
 }
 
 
