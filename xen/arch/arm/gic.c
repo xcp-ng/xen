@@ -438,8 +438,20 @@ unsigned long gic_get_hwdom_madt_size(const struct domain *d)
 {
     unsigned long madt_size;
 
+    struct acpi_subtable_header *header;
+    struct acpi_madt_generic_interrupt *host_gicc;
+
+    header = acpi_table_get_entry_madt(ACPI_MADT_TYPE_GENERIC_INTERRUPT, 0);
+    if ( !header )
+        panic("Can't get GICC entry");
+
+    host_gicc = container_of(header, struct acpi_madt_generic_interrupt,
+                             header);
+
+    printk("ACPI_MADT_GICC_LENGTH->%d\n", host_gicc->header.length);
+
     madt_size = sizeof(struct acpi_table_madt)
-                + ACPI_MADT_GICC_LENGTH * d->max_vcpus
+                + host_gicc->header.length * d->max_vcpus
                 + sizeof(struct acpi_madt_generic_distributor)
                 + gic_hw_ops->get_hwdom_extra_madt_size(d);
 

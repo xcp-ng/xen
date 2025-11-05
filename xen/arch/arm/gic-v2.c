@@ -1121,7 +1121,10 @@ static int gicv2_make_hwdom_madt(const struct domain *d, u32 offset)
     host_gicc = container_of(header, struct acpi_madt_generic_interrupt,
                              header);
 
-    size = ACPI_MADT_GICC_LENGTH;
+    size = host_gicc->header.length;
+
+    printk("ACPI_MADT_GICC_LENGTH->%u\n", size);
+
     /* Add Generic Interrupt */
     for ( i = 0; i < d->max_vcpus; i++ )
     {
