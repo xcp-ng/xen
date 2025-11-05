@@ -1369,6 +1369,8 @@ static void dump_grant_op(struct gnttab_map_grant_ref *op) {
 
 extern bool grant_table_req;
 
+static void cf_check gnttab_usage_print_all(unsigned char key);
+
 static long
 gnttab_map_grant_ref(
     XEN_GUEST_HANDLE_PARAM(gnttab_map_grant_ref_t) uop, unsigned int count)
@@ -1389,6 +1391,7 @@ gnttab_map_grant_ref(
 	dprintk(XENLOG_ERR, "%s: before map_grant_ref()\n", __func__);
 	dump_grant_op(&op);
 
+    gnttab_usage_print_all('q');
 
     grant_table_req = true;
 
@@ -1398,6 +1401,8 @@ gnttab_map_grant_ref(
 
 	dprintk(XENLOG_ERR, "%s: after map_grant_ref()\n", __func__);
 	dump_grant_op(&op);
+
+    gnttab_usage_print_all('q');
 
         if ( unlikely(__copy_to_guest_offset(uop, i, &op, 1)) ) {
 	    dprintk(XENLOG_ERR, "%s: __copy_to_guest_offset failed\n", __func__);
