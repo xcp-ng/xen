@@ -194,6 +194,8 @@ CAMLprim value stub_xc_domain_create(value xch_val, value wanted_domid, value co
 	CAMLlocal2(l, arch_domconfig);
 	xc_interface *xch = xch_of_val(xch_val);
 
+        /*printf("stub_xc_domain_create\n");*/
+
 	/* Mnemonics for the named fields inside domctl_create_config */
 #define VAL_SSIDREF             Field(config, 0)
 #define VAL_HANDLE              Field(config, 1)
@@ -245,6 +247,7 @@ CAMLprim value stub_xc_domain_create(value xch_val, value wanted_domid, value co
 	{
 	case 0: /* ARM */
 #if defined(__arm__) || defined(__aarch64__)
+        /*printf("stub_xc_domain_create - arm\n");*/
 		/* Quick & dirty check for ABI changes. */
 		/*BUILD_BUG_ON(sizeof(cfg) != X);*/
 
@@ -255,9 +258,11 @@ CAMLprim value stub_xc_domain_create(value xch_val, value wanted_domid, value co
 /*#define VAL_TEE_TYPE             Field(arch_domconfig, 4)*/
 /*#define VAL_SCI_TYPE             Field(arch_domconfig, 5)*/
 
-                cfg.arch.gic_version = VAL_GIC_VERSION;
+                /*cfg.arch.gic_version = Int32_val(VAL_GIC_VERSION);*/
+                cfg.arch.gic_version = 2;
                 /*cfg.arch.sve_vl = VAL_SVE_VL;*/
-                cfg.arch.nr_spis = VAL_NR_SPIS;
+                /*cfg.arch.nr_spis = Int32_val(VAL_NR_SPIS);*/
+                cfg.arch.nr_spis = (~(uint32_t)0);
                 /*cfg.arch.tee_type = VAL_TEE_TYPE; NONE is 0 */
                 /*cfg.arch.arm_sci_type = VAL_SCI_TYPE; NONE is 0*/
 
@@ -268,6 +273,7 @@ CAMLprim value stub_xc_domain_create(value xch_val, value wanted_domid, value co
 
 	case 1: /* X86 - emulation flags in the block */
 #if defined(__i386__) || defined(__x86_64__)
+        /*printf("stub_xc_domain_create - x86\n");*/
 
 		/* Quick & dirty check for ABI changes. */
 		BUILD_BUG_ON(sizeof(cfg) != 68);
@@ -310,16 +316,21 @@ CAMLprim value stub_xc_domain_create(value xch_val, value wanted_domid, value co
 #undef VAL_FLAGS
 #undef VAL_HANDLE
 #undef VAL_SSIDREF
+#undef VAL_GIC_VERSION
+#undef VAL_NR_SPIS
+#undef VAL_CLOCK_FREQ
 
+        /*printf("stub_xc_domain_create - cfg.arch {gic_version= %d, nr_spis=%d}\n", cfg.arch.gic_version, cfg.arch.nr_spis);*/
 	caml_enter_blocking_section();
 	result = xc_domain_create(xch, &domid, &cfg);
 	caml_leave_blocking_section();
+        /*printf("stub_xc_domain_create - result %d\n", result);*/
 
-#if defined(__arm__) || defined(__aarch64__)
+/*#if defined(__arm__) || defined(__aarch64__)*/
         /* Return the OUT (and IN/OUT) parameters */
-        VAL_GIC_VERSION = cfg.arch.gic_version;
-        VAL_CLOCK_FREQ = cfg.arch.clock_frequency;
-#endif
+	/*Store_field(arch_domconfig, 0, Val_int(cfg.arch.gic_version));*/
+	/*Store_field(arch_domconfig, 2, Val_int(cfg.arch.clock_frequency));*/
+/*#endif*/
 
 	if (result < 0)
 		failwith_xc(xch);
