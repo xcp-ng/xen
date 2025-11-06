@@ -267,10 +267,10 @@ struct arch_shared_info {
 typedef struct arch_shared_info arch_shared_info_t;
 
 /* could not properly include the struct from "../hvm/coco.h" due to circular includes */
+/* size of certificate is 2084 bytes */
 struct sev_start_parameters {
     uint8_t crt[2084];
     uint8_t session[128];
-    /* Use provided policy if set. If cleared, use default Xen policy. */
 };
 typedef struct sev_start_parameters sev_start_parameters_t;
 DEFINE_XEN_GUEST_HANDLE(sev_start_parameters_t);
@@ -324,9 +324,10 @@ struct xen_arch_domainconfig {
     uint32_t misc_flags;
     union {
         struct {
+/* Use provided policy if set. If cleared, use default Xen policy. */
+#define XEN_X86_SEV_POLICY_VALID (1u << 0)
             XEN_GUEST_HANDLE(sev_start_parameters_t) sp;
             uint32_t flags;
-            #define XEN_X86_SEV_POLICY_VALID (1u << 0)
             uint32_t policy;
         } sev;
     } coco;

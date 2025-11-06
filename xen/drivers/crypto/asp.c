@@ -1,4 +1,3 @@
-#include "xen/config.h"
 #include <xen/init.h>
 #include <xen/pci.h>
 #include <xen/list.h>
@@ -11,7 +10,6 @@
 #include <asm/msi.h>
 #include <asm/system.h>
 #include <asm/psp-sev.h>
-#include <public/hvm/coco.h>
 
 /*
 TODO:
@@ -339,7 +337,7 @@ static int _sev_do_cmd_sync(struct amd_sp_dev *sp, int cmd, void *data, unsigned
 
     if ( data ) //copy on error too, to allow to know space how much the psp needs
         memcpy(data, sp->cmd_buff, buf_len);
-    
+
     return rc;
 }
 
