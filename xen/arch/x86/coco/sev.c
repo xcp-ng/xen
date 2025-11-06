@@ -4,11 +4,11 @@
  * Copyright (c) Vates SAS
  */
 
- #include <xen/config.h>
- #include <xen/coco.h>
- #include <xen/guest_access.h>
- #include <xen/mm.h>
- #include <xen/xmalloc.h>
+#include <xen/config.h>
+#include <xen/coco.h>
+#include <xen/guest_access.h>
+#include <xen/mm.h>
+#include <xen/xmalloc.h>
 
 #include <asm/cpu-policy.h>
 #include <asm/cpufeature.h>
@@ -66,7 +66,7 @@ static int sev_domain_initialise(struct domain *d)
     {
         printk(XENLOG_ERR "asp: failed to LAUNCH_START domain(%d): psp_ret %u\n",
                 d->domain_id, psp_ret);
-        return rc ;
+        return rc;
     }
     xfree(d->arch.hvm.svm.sev.owner_crt);
     xfree(d->arch.hvm.svm.sev.session);
@@ -506,7 +506,6 @@ static struct coco_domain_ops *sev_get_domain_ops(struct domain *d,
 
     if (config->arch.coco.sev.flags & XEN_X86_SEV_POLICY_VALID ) {
         sev_policy->raw = config->arch.coco.sev.policy;
-        //sev_policy->raw = (uint32_t)config->arch.co co.sev.policy;
     }
     else
         // Use a reasonable default policy 

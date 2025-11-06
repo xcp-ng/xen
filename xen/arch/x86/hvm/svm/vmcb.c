@@ -261,7 +261,6 @@ int svm_create_vmcb(struct vcpu *v)
 
     svm->vmcb_pa = nv->nv_n1vmcx_pa = virt_to_maddr(svm->vmcb);
     return 0;
-
 }
 
 void svm_destroy_vmcb(struct vcpu *v)
