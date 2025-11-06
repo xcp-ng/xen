@@ -4,11 +4,11 @@
  * Copyright (c) Vates SAS
  */
 
-#include "xen/xmalloc.h"
-#include <xen/config.h>
-#include <xen/coco.h>
-#include <xen/mm.h>
-#include <xen/guest_access.h>
+ #include <xen/config.h>
+ #include <xen/coco.h>
+ #include <xen/guest_access.h>
+ #include <xen/mm.h>
+ #include <xen/xmalloc.h>
 
 #include <asm/cpu-policy.h>
 #include <asm/cpufeature.h>
@@ -32,10 +32,6 @@ static int sev_domain_initialise(struct domain *d)
     unsigned int psp_ret = 0;
     long rc = 0;
 
-    printk("%s: %p\n", __func__, d->arch.hvm.svm.sev.owner_crt);
-    printk("%s: %p\n", __func__, d->arch.hvm.svm.sev.session);
-
-
     if ( sev_policy.rsvd0 || sev_policy.rsvd1 )
     {
         printk(XENLOG_ERR "sev: Reserved bits set in policy\n");
@@ -56,24 +52,14 @@ static int sev_domain_initialise(struct domain *d)
     
     sd_ls.handle = 0; /* generate new one */
     sd_ls.policy = sev_policy;
-    sd_ls.dh_cert_address = 0; /* do not DH stuff */
-    sd_ls.dh_cert_address = virt_to_maddr(d->arch.hvm.svm.sev.owner_crt);
-    sd_ls.dh_cert_len = sizeof(*d->arch.hvm.svm.sev.owner_crt);
-    sd_ls.session_address = virt_to_maddr(d->arch.hvm.svm.sev.session);
-    sd_ls.session_len = sizeof(*d->arch.hvm.svm.sev.session);
-
-    for (size_t i = 0; i < 128; i++) {
-        printk("%02X", ((uint8_t *)d->arch.hvm.svm.sev.session)[i]);
+    if (d->arch.hvm.svm.sev.owner_crt && d->arch.hvm.svm.sev.session) {
+        sd_ls.dh_cert_address = virt_to_maddr(d->arch.hvm.svm.sev.owner_crt);
+        sd_ls.dh_cert_len = sizeof(*d->arch.hvm.svm.sev.owner_crt);
+        sd_ls.session_address = virt_to_maddr(d->arch.hvm.svm.sev.session);
+        sd_ls.session_len = sizeof(*d->arch.hvm.svm.sev.session);
+    } else {
+        sd_ls.dh_cert_address = 0; /* do not DH stuff */
     }
-    printk("\n\n");
-    for (size_t i = 0; i < 64; i++) {
-        printk("%02X", ((uint8_t *)d->arch.hvm.svm.sev.owner_crt)[i]);
-    }
-    printk("\n");
-    for (size_t i = 2020; i < 2084; i++) {
-        printk("%02X", ((uint8_t *)d->arch.hvm.svm.sev.owner_crt)[i]);
-    }
-    printk("\n\n");
 
     rc = sev_do_cmd(SEV_CMD_LAUNCH_START, (void *)(&sd_ls), &psp_ret, true);
     if ( rc || psp_ret )
@@ -82,6 +68,10 @@ static int sev_domain_initialise(struct domain *d)
                 d->domain_id, psp_ret);
         return rc ;
     }
+    xfree(d->arch.hvm.svm.sev.owner_crt);
+    xfree(d->arch.hvm.svm.sev.session);
+    d->arch.hvm.svm.sev.owner_crt = NULL;
+    d->arch.hvm.svm.sev.session = NULL;
 
     sd_a.handle = sd_ls.handle;
     sd_a.asid = d->arch.hvm.asid.asid;
@@ -287,10 +277,9 @@ static int sev_attestation_report(struct domain *d,
     unsigned int psp_ret = 0;
     int rc = 0;
 
-    //from coco struct to sev specific
     report.handle = d->arch.hvm.svm.sev.asp_handle;
-    report.len = 208; // size of AMD-SEV attestation
-    args->len = 208;
+    report.len = sizeof(struct sev_attestation_report_response);
+    args->len = sizeof(struct sev_attestation_report_response);
     report.reserved = 0;
     report.address = (uint64_t) virt_to_maddr(&args->sev);
     for (size_t i =0; i < 16; i++) { // or memset ?
@@ -514,14 +503,6 @@ static struct coco_domain_ops *sev_get_domain_ops(struct domain *d,
 {
     /* We need to set a valid policy for the initialization. */
     union sev_guest_policy *sev_policy = &d->arch.hvm.svm.sev.asp_policy;
-    sev_start_parameters_t sp;
-
-    d->arch.hvm.svm.sev.owner_crt = xmalloc(struct sev_certificate);
-    d->arch.hvm.svm.sev.session = xmalloc(struct sev_session);
-    
-    printk("%s: %p\n", __func__, config->arch.coco.sev.sp.p);
-    if ( copy_from_guest(&sp, config->arch.coco.sev.sp, 1) )
-        goto out;
 
     if (config->arch.coco.sev.flags & XEN_X86_SEV_POLICY_VALID ) {
         sev_policy->raw = config->arch.coco.sev.policy;
@@ -532,11 +513,18 @@ static struct coco_domain_ops *sev_get_domain_ops(struct domain *d,
         *sev_policy = (union sev_guest_policy){
             .no_key_sharing = true,
             .no_debug = true,
-            .no_send = true, // To change when SEV live migration is something 
-            .es = cpu_has_sev_es, // Use SEV-ES if available 
+            .no_send = true, /* To change when SEV live migration is something */
+            .es = cpu_has_sev_es, /* Use SEV-ES if available */
         };
-    memcpy(d->arch.hvm.svm.sev.owner_crt, sp.crt, sizeof(sp.crt));
-    memcpy(d->arch.hvm.svm.sev.session, sp.session, sizeof(sp.session));
+    if (config->arch.coco.sev.sp.p) {
+        sev_start_parameters_t sp;
+        if ( copy_from_guest(&sp, config->arch.coco.sev.sp, 1) )
+            goto out;
+        d->arch.hvm.svm.sev.owner_crt = xmalloc(struct sev_certificate);
+        d->arch.hvm.svm.sev.session = xmalloc(struct sev_session);
+        memcpy(d->arch.hvm.svm.sev.owner_crt, sp.crt, sizeof(sp.crt));
+        memcpy(d->arch.hvm.svm.sev.session, sp.session, sizeof(sp.session));
+    }
 
 out:
     return sev_policy->es ? &sev_es_domain_ops : &sev_domain_ops;

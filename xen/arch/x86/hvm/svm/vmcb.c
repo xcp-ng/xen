@@ -23,9 +23,6 @@
 #include <asm/hvm/svm/vmcb.h>
 #include <asm/msr-index.h>
 #include <asm/p2m.h>
-#include <asm/hvm/svm/sev.h>
-#include <asm/hvm/svm/svm.h>
-#include <asm/hvm/svm/svmdebug.h>
 #include <asm/spec_ctrl.h>
 
 struct vmcb_struct *alloc_vmcb(void)
@@ -255,19 +252,16 @@ int svm_create_vmcb(struct vcpu *v)
     svm->vmcb = nv->nv_n1vmcx;
     rc = construct_vmcb(v);
     if ( rc != 0 )
-        goto err;
-
-    if ( is_sev_domain(v->domain) )
-        vmcb_set_np_ctrl(svm->vmcb, vmcb_get_np_ctrl(svm->vmcb) | NPCTRL_SEV_ENABLE);
+    {
+        free_vmcb(nv->nv_n1vmcx);
+        nv->nv_n1vmcx = NULL;
+        svm->vmcb = NULL;
+        return rc;
+    }
 
     svm->vmcb_pa = nv->nv_n1vmcx_pa = virt_to_maddr(svm->vmcb);
     return 0;
 
-err:
-    free_vmcb(nv->nv_n1vmcx);
-    nv->nv_n1vmcx = NULL;
-    svm->vmcb = NULL;
-    return rc;
 }
 
 void svm_destroy_vmcb(struct vcpu *v)

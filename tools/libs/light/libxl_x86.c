@@ -54,6 +54,7 @@ int libxl__arch_domain_prepare_config(libxl__gc *gc,
             perror("sev_session_file invalid");
             exit(1);
         }
+        
         fd = open(d_config->b_info.arch_x86.sev_cert_file, O_RDONLY);
         if (fd == -1) {
             perror("sev_session_file invalid");
@@ -65,12 +66,9 @@ int libxl__arch_domain_prepare_config(libxl__gc *gc,
             exit(1);
         }
         
-        //config->arch.coco.sev = buf;
         set_xen_guest_handle(config->arch.coco.sev.sp, buf);
-        printf("%s: %s, %s\n", __func__, d_config->b_info.arch_x86.sev_session_file, 
-            d_config->b_info.arch_x86.sev_cert_file );
-        printf("%s: %p\n", __func__, buf);
-        printf("%s: %p\n", __func__, config->arch.coco.sev.sp.p);
+    } else {
+        config->arch.coco.sev.sp.p = 0;
     }
 
     if (libxl_defbool_val(d_config->b_info.trap_unmapped_accesses)) {
