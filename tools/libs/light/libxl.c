@@ -417,22 +417,22 @@ int libxl_get_physinfo(libxl_ctx *ctx, libxl_physinfo *physinfo)
     return 0;
 }
 
-int libxl_coco_platform_certs(libxl_ctx *ctx) {
+int libxl_coco_platform_certs(libxl_ctx *ctx, char* path) {
     int rc;
     coco_platform_certs_t certs;
 
     rc = xc_coco_get_platform_certs(ctx->xch, &certs);
 
     if (!rc) {
-        int file = open("phd.bin", O_WRONLY | O_CREAT, 0644);
+        int file = open(path, O_WRONLY | O_CREAT, 0644);
         if (!file) {
-            perror("open phd.bin");
+            perror("open:");
             return -1;
         }
 
         size_t written = write(file, &certs.sev, sizeof(certs.sev));
         if (written != sizeof(certs.sev)) {
-            perror("write phd.bin :");
+            perror("write:");
             close(file);
             return -1;
         }

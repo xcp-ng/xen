@@ -85,11 +85,19 @@ static int main_coco_attestation(int argc, char **argv) {
 
 static int main_coco_get_platform_certs(int argc, char **argv) {
     int opt, rc;
-    SWITCH_FOREACH_OPT(opt, "", NULL, "coco platform", 0) {
-        /* No options */
+    char *path = "pdh.bin";
+    static struct option opts[] = {
+        {"file", 1, 0, 'f'},
+        COMMON_LONG_OPTS
+    };
+
+    SWITCH_FOREACH_OPT(opt, "f:", opts, "coco platform", 0) {
+        case 'f':
+            path = optarg;
+            break;
     }
     
-    rc = libxl_coco_platform_certs(ctx);
+    rc = libxl_coco_platform_certs(ctx, path);
     
     return rc;
 }

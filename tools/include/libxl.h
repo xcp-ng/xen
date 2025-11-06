@@ -3033,7 +3033,7 @@ int libxl_coco_domain_attestation(libxl_ctx *ctx, uint32_t domid, int file, bool
 /*
  * Used to retrieve platform public keys and relevant information (identification, certificates);
  */
-int libxl_coco_platform_certs(libxl_ctx *ctx);
+int libxl_coco_platform_certs(libxl_ctx *ctx, char *path);
 
 #endif /* LIBXL_H */
 
