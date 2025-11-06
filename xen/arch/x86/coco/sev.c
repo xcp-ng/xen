@@ -401,6 +401,7 @@ static struct coco_domain_ops sev_es_domain_ops = {
     .domain_initialise = sev_domain_initialise,
     .domain_creation_finished = sev_es_domain_creation_finished,
     .domain_destroy = sev_domain_destroy,
+    .domain_attestation_report = sev_attestation_report,
     .asid_alloc = sev_es_asid_alloc,
     .show_execution_state = sev_vmsa_dump,
 };
@@ -458,6 +459,56 @@ static int sev_get_platform_status(struct coco_platform_status *status)
     return 0;
 }
 
+static int sev_get_platform_certs(struct coco_platform_certs *certs) {
+    int rc;
+    unsigned int psp_ret = 0;
+    struct sev_data_pdh_cert_export pdh_cert_export;
+    struct sev_user_data_status status;
+    struct sev_data_get_id get_id;
+
+    
+    rc = sev_do_cmd(SEV_CMD_PLATFORM_STATUS, (void *)(&status), &psp_ret, true);
+    if ( rc || psp_ret )
+    {
+        printk(XENLOG_ERR "asp: failed to PLATFORM_STATUS: rc %u psp_ret %u\n", rc, psp_ret);
+        return rc;
+    }
+    certs->status = platform_status; // flags
+    certs->status.version_major = status.api_major;
+    certs->status.version_minor = status.api_minor;
+    certs->status.version_build = status.build;
+    
+    if (status.api_major > 1 || status.api_minor > 15) { // > 0.16
+        // SEV GET_ID is available from SEV API v0.16 and up
+        get_id.address = (uint64_t) virt_to_maddr(&certs->hwid);
+        get_id.len = sizeof(certs->hwid); 
+        
+        rc = sev_do_cmd(SEV_CMD_GET_ID, (void *)(&get_id), &psp_ret, true);
+        if ( rc || psp_ret )
+        {
+            printk(XENLOG_ERR "asp: failed to GET_ID: rc %u psp_ret %u\n", rc, psp_ret);
+            return rc;
+        }
+        certs->cpu_number = nr_sockets;
+    }
+
+    pdh_cert_export.pdh_cert_address = (uint64_t) virt_to_maddr(&certs->sev.pdh);
+    pdh_cert_export.pdh_cert_len = sizeof(certs->sev.pdh);
+
+    /* PSP needs contiguous memory for the 3 certificates */
+    pdh_cert_export.cert_chain_address = (uint64_t) virt_to_maddr(&certs->sev.pek);
+    pdh_cert_export.cert_chain_len = sizeof(certs->sev.pek) * 3;
+    pdh_cert_export.reserved = 0;
+    
+    rc = sev_do_cmd(SEV_CMD_PDH_CERT_EXPORT, (void *)(&pdh_cert_export), &psp_ret, true);
+    if ( rc || psp_ret )
+    {
+        printk(XENLOG_ERR "asp: failed to PDH_CERT_EXPORT: rc %u psp_ret %u\n", rc, psp_ret);
+        return rc;
+    }
+    return 0;
+}
+
 static struct coco_domain_ops *sev_get_domain_ops(struct domain *d,
     const struct xen_domctl_createdomain *config)
 {
@@ -495,6 +546,7 @@ struct coco_ops sev_coco_ops = {
     .name = "SEV",
     .init = sev_init,
     .get_platform_status = sev_get_platform_status,
+    .get_platform_certs = sev_get_platform_certs,
     .get_domain_ops = sev_get_domain_ops,
 };
 

@@ -97,7 +97,7 @@ struct sev_session {
     uint8_t wrap_iv[16];
     uint8_t wrap_mac[32];
     uint8_t policy_mac[32];
-};
+} __attribute__((packed));
 
 struct sev_certificate {
 	uint32_t version;
@@ -105,30 +105,34 @@ struct sev_certificate {
 	uint8_t api_minor;
 	uint8_t reserved;
 	uint8_t reserved1;
-	uint32_t pubkey_usage; /* should be 0x1000 */
-	uint32_t pubkey_algo;  /* should be 0x0 */
-	uint8_t pubkey[1028];  /*sevctl generate works */
+	uint32_t pubkey_usage;
+	uint32_t pubkey_algo;
+	uint8_t pubkey[1028];
 	uint32_t sig1_usage;
 	uint32_t sig1_algo;
 	uint8_t sig1[512];
 	uint32_t sig2_usage;
 	uint32_t sig2_algo;
 	uint8_t sig2[512];
-};
-
-struct sev_certificate_fullchain {
-    struct sev_certificate phd_cert;
-    struct sev_certificate phd_cert_chain[3];
-};
+} __attribute__((packed));
 
 /**
+ * Note : this cek is not signed by amd,
+ * you need to use it with the cpuid to get the signed version from amd's server
  */
+struct sev_certificate_fullchain {
+    struct sev_certificate pdh;
+    struct sev_certificate pek;
+    struct sev_certificate oca;
+    struct sev_certificate cek; 
+} __attribute__((packed));
+
 struct coco_platform_certs {
     uint8_t hwid[128];          /* OUT */
     uint8_t cpu_number;          /* OUT */
     struct coco_platform_status status;          /* OUT */
     union {
-        struct sev_certificate_fullchain sev;
+        struct sev_certificate_fullchain sev; /* OUT */
     };
 };
 typedef struct coco_platform_certs coco_platform_certs_t;

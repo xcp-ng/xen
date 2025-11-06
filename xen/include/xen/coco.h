@@ -33,6 +33,7 @@ struct coco_ops {
     const char *name;
     int (*init)(void);
     int (*get_platform_status)(coco_platform_status_t *status);
+    int (*get_platform_certs)(coco_platform_certs_t *certs);
     struct coco_domain_ops *(*get_domain_ops)(struct domain *d,
         const struct xen_domctl_createdomain *config);
 };

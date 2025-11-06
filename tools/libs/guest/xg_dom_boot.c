@@ -194,12 +194,7 @@ int xc_dom_boot_image(struct xc_dom_image *dom)
 
     if ( dom->coco ) {
         /* We need to check if we are actually a SEV-ES guest to set SIF_HVM_GHCB */
-        
-        /* Really wierd pointer */
-        // printf("%s: %p\n", __func__, info.arch_config.coco.sev.sp.p);
         dom->use_ghcb = info.arch_config.coco.sev.policy & 0x4;
-
-        // dom->use_ghcb = info.arch_config.coco.sev.policy & 0x4;
     }
     /* start info page */
     if ( dom->arch_hooks->start_info )

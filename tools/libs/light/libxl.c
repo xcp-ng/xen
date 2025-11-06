@@ -430,22 +430,25 @@ int libxl_coco_platform_certs(libxl_ctx *ctx) {
             return -1;
         }
 
-        size_t written = write(file, &certs.sev.phd_cert, sizeof(certs.sev.phd_cert));
-        // the union used does not matter, we use the pointer
-        if (written != sizeof(certs.sev.phd_cert)) {
-            perror("write phd.bin");
-            close(file);
-            return -1;
-        }
-        written = write(file, &certs.sev.phd_cert_chain, sizeof(certs.sev.phd_cert_chain));
-        // the union used does not matter, we use the pointer
-        if (written != sizeof(certs.sev.phd_cert_chain)) {
-            perror("write phd_certs.bin");
+        size_t written = write(file, &certs.sev, sizeof(certs.sev));
+        if (written != sizeof(certs.sev)) {
+            perror("write phd.bin :");
             close(file);
             return -1;
         }
 
-        printf("Version: %d.%d.%d\n", certs.status.version_major, certs.status.version_minor, certs.status.version_build);
+        printf("Platform Version: %d.%d.%d\n", 
+            certs.status.version_major, 
+            certs.status.version_minor, 
+            certs.status.version_build);
+        
+        for (size_t cpu_n = 0; cpu_n < certs.cpu_number; cpu_n++) {
+            printf("CPU ID %lu: ", cpu_n);
+            for (size_t i = 0; i < 64; i++) {
+                printf("%02X", certs.hwid[i + cpu_n * 64]);
+            }
+            printf("\n");
+        }
     }
 
     return rc;
