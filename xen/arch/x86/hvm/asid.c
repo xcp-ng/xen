@@ -12,8 +12,8 @@
 #include <xen/spinlock.h>
 #include <xen/xvmalloc.h>
 
-#include <asm/hvm/asid.h>
 #include <asm/bitops.h>
+#include <asm/hvm/asid.h>
 
 /* Xen command-line option to enable ASIDs */
 static bool __read_mostly opt_asid_enabled = true;
