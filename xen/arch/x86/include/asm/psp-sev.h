@@ -68,6 +68,19 @@ enum sev_cmd {
     SEV_CMD_MAX,
 };
 
+/** 
+ * Sev platform guest status
+ */
+enum sev_guest_status {
+    SEV_GUEST_UNINIT = 0,
+    SEV_GUEST_LUPDATE,
+    SEV_GUEST_LSECRET,
+    SEV_GUEST_RUNNING,
+    SEV_GUEST_SUPDATE,
+    SEV_GUEST_RUPDATE,
+    SEV_GUEST_SENT
+};
+
 /**
  * struct sev_data_init - INIT command parameters
  *

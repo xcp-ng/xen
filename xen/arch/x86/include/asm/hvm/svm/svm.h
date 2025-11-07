@@ -31,6 +31,7 @@ bool svm_load_segs(unsigned int ldt_ents, unsigned long ldt_base,
                    unsigned long gs_shadow);
 
 struct sev_state {
+    enum sev_guest_status status;
     uint32_t asp_handle;
     union sev_guest_policy asp_policy;
     uint8_t  measure[48];

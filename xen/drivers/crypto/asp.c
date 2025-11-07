@@ -278,7 +278,7 @@ int _sev_do_cmd(struct amd_sp_dev *sp, int cmd, void *data, unsigned int *psp_re
         if ( rc && psp_ret )
             *psp_ret = SEV_CMDRESP_STS(cmdresp);
 
-        if ( data && (!rc) )
+        if ( data )
             memcpy(data, sp->cmd_buff, buf_len);
     }
     else

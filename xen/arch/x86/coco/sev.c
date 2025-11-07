@@ -32,6 +32,11 @@ static int sev_domain_initialise(struct domain *d)
     unsigned int psp_ret = 0;
     long rc = 0;
 
+    if (d->arch.hvm.svm.sev.status != SEV_GUEST_UNINIT) {
+        /* This should never happen */
+        printk(XENLOG_ERR "sev: Trying to init an already init guest\n");
+    }
+
     if ( sev_policy.rsvd0 || sev_policy.rsvd1 )
     {
         printk(XENLOG_ERR "sev: Reserved bits set in policy\n");
@@ -85,6 +90,7 @@ static int sev_domain_initialise(struct domain *d)
     }
 
     d->arch.hvm.svm.sev.asp_handle = sd_ls.handle;
+    d->arch.hvm.svm.sev.status = SEV_GUEST_LUPDATE;
     return 0;
 }
 
@@ -97,6 +103,11 @@ static int sev_domain_prepare_initial_mem(struct domain *d, gfn_t gfn, size_t co
 
     mfn_t mfn = INVALID_MFN, mfn_base = INVALID_MFN;
     size_t segment_size = 0;
+
+    if (d->arch.hvm.svm.sev.status != SEV_GUEST_LUPDATE) {
+        /* This should never happen */
+        printk(XENLOG_ERR "sev: Trying to update a guest in wrong state\n");
+    }
 
     flush_all(FLUSH_CACHE_WRITEBACK);
 
@@ -161,12 +172,15 @@ static int sev_domain_prepare_initial_mem(struct domain *d, gfn_t gfn, size_t co
     return rc;
 }
 
-static int sev_domain_creation_finished(struct domain *d)
-{
+static int sev_domain_finish_memory(struct domain *d) {
     struct sev_data_launch_measure sd_lm;
-    struct sev_data_launch_finish sd_lf;
-    unsigned int psp_ret;
+    unsigned int psp_ret = 0;
     long rc = 0;
+
+    if (d->arch.hvm.svm.sev.status != SEV_GUEST_LUPDATE) {
+        /* This should never happen */
+        printk(XENLOG_ERR "sev: Trying to measure a guest in wrong state\n");
+    }
 
     sd_lm.handle = d->arch.hvm.svm.sev.asp_handle;
     sd_lm.address = virt_to_maddr(d->arch.hvm.svm.sev.measure);
@@ -184,6 +198,23 @@ static int sev_domain_creation_finished(struct domain *d)
         return rc;
     }
 
+    d->arch.hvm.svm.sev.status = SEV_GUEST_LSECRET;
+    d->arch.hvm.svm.sev.measure_len = sd_lm.len;
+
+    return 0;
+}
+
+static int sev_domain_creation_finished(struct domain *d)
+{
+    struct sev_data_launch_finish sd_lf;
+    unsigned int psp_ret;
+    long rc = 0;
+
+    if (d->arch.hvm.svm.sev.status != SEV_GUEST_LSECRET) {
+        /* This should never happen */
+        printk(XENLOG_ERR "sev: Trying to measure a guest in wrong state\n");
+    }
+
     sd_lf.handle = d->arch.hvm.svm.sev.asp_handle;
 
     rc = sev_do_cmd(SEV_CMD_LAUNCH_FINISH, (void *)(&sd_lf), &psp_ret, true);
@@ -193,8 +224,7 @@ static int sev_domain_creation_finished(struct domain *d)
                 d->domain_id, psp_ret, rc);
         return rc;
     }
-
-    d->arch.hvm.svm.sev.measure_len = sd_lm.len;
+    d->arch.hvm.svm.sev.status = SEV_GUEST_RUNNING;
     return 0;
 }
 
@@ -261,6 +291,7 @@ static void sev_domain_destroy(struct domain *d)
     }
 
     d->arch.hvm.svm.sev.asp_handle = 0;
+    d->arch.hvm.svm.sev.status = SEV_GUEST_UNINIT;
 }
 
 static int sev_asid_alloc(struct domain *d, struct hvm_asid *asid)
@@ -307,6 +338,7 @@ static struct coco_domain_ops sev_domain_ops = {
     .prepare_initial_mem = sev_domain_prepare_initial_mem,
     .domain_initialise = sev_domain_initialise,
     .domain_creation_finished = sev_domain_creation_finished,
+    .domain_memory_finished = sev_domain_finish_memory,
     .domain_attestation_report = sev_attestation_report,
     .domain_destroy = sev_domain_destroy,
     .asid_alloc = sev_asid_alloc,
@@ -389,6 +421,7 @@ static struct coco_domain_ops sev_es_domain_ops = {
     .prepare_initial_mem = sev_domain_prepare_initial_mem,
     .domain_initialise = sev_domain_initialise,
     .domain_creation_finished = sev_es_domain_creation_finished,
+    .domain_memory_finished = sev_domain_finish_memory,
     .domain_destroy = sev_domain_destroy,
     .domain_attestation_report = sev_attestation_report,
     .asid_alloc = sev_es_asid_alloc,
