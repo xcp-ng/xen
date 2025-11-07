@@ -33,8 +33,8 @@ bool svm_load_segs(unsigned int ldt_ents, unsigned long ldt_base,
 struct sev_state {
     uint32_t asp_handle;
     union sev_guest_policy asp_policy;
-    uint8_t  measure[96];
-    uint32_t measure_len; /* 96 bytes */
+    uint8_t  measure[48];
+    uint32_t measure_len; /* 48 bytes */
     unsigned long flags;
     struct sev_certificate *owner_crt;
     struct sev_session *session;
