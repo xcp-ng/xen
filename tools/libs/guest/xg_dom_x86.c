@@ -58,6 +58,9 @@
 #define MTRR_TYPE_WRBACK     6
 #define MTRR_DEF_TYPE_ENABLE (1u << 11)
 
+#define APIC_BASE_EXTD   (1UL << 10)
+#define APIC_BASE_ENABLE (1UL << 11)
+
 #define SPECIALPAGE_PAGING   0
 #define SPECIALPAGE_ACCESS   1
 #define SPECIALPAGE_SHARING  2
@@ -1129,6 +1132,45 @@ static int vcpu_hvm(struct xc_dom_image *dom)
                 xc_dom_panic(dom->xch, XC_INTERNAL_ERROR,
                              "%s: SETHVMCONTEXT failed (rc=%d)", __func__, rc);
         }
+    }
+
+    if ( dom->preenable_x2apic )
+    {
+        struct {
+            struct hvm_save_descriptor header_d;
+            HVM_SAVE_TYPE(HEADER) header;
+            struct hvm_save_descriptor lapic_d;
+            HVM_SAVE_TYPE(LAPIC) lapic;
+            struct hvm_save_descriptor end_d;
+            HVM_SAVE_TYPE(END) end;
+        } lapic = {
+            .header_d = bsp_ctx.header_d,
+            .header = bsp_ctx.header,
+            .lapic_d.typecode = HVM_SAVE_CODE(LAPIC),
+            .lapic_d.length = HVM_SAVE_LENGTH(LAPIC),
+            .end_d = bsp_ctx.end_d,
+            .end = bsp_ctx.end,
+        };
+        const HVM_SAVE_TYPE(LAPIC) *lapic_record =
+            hvm_get_save_record(full_ctx, HVM_SAVE_CODE(LAPIC), 0);
+
+        if ( !lapic_record )
+        {
+            xc_dom_panic(dom->xch, XC_INTERNAL_ERROR,
+                         "%s: unable to get LAPIC save record", __func__);
+            goto out;
+        }
+
+        memcpy(&lapic.lapic, lapic_record, sizeof(lapic.lapic));
+
+        lapic.lapic.apic_base_msr |= APIC_BASE_ENABLE | APIC_BASE_EXTD;
+
+        rc = xc_domain_hvm_setcontext(dom->xch, dom->guest_domid,
+                                      (uint8_t *)&lapic, sizeof(lapic));
+
+        if ( rc != 0 )
+            xc_dom_panic(dom->xch, XC_INTERNAL_ERROR,
+                         "%s: SETHVMCONTEXT failed (rc=%d)", __func__, rc);
     }
 
     /*
