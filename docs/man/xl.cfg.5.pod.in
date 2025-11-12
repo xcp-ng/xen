@@ -3221,6 +3221,22 @@ option.
 
 If using this option is necessary to fix an issue, please report a bug.
 
+=item B<x2apic_mode="MODE">
+
+Sets the x2apic mode of the domain. The valid values are as follows:
+
+=over 4
+
+=item B<"default">
+
+Use default Xen LAPIC behavior.
+
+=item B<"pre_enable">
+
+Initially enable x2apic for the BSP of the domain.
+
+=back
+
 =back
 
 =head1 SEE ALSO

@@ -555,6 +555,9 @@ int libxl__arch_domain_init_hw_description(libxl__gc *gc,
                                            libxl__domain_build_state *state,
                                            struct xc_dom_image *dom)
 {
+    if (libxl_defbool_val(d_config->b_info.arch_x86.x2apic_preenable))
+        dom->preenable_x2apic = true;
+
     return 0;
 }
 
@@ -818,6 +821,7 @@ int libxl__arch_domain_build_info_setdefault(libxl__gc *gc,
 {
     libxl_defbool_setdefault(&b_info->acpi, true);
     libxl_defbool_setdefault(&b_info->arch_x86.msr_relaxed, false);
+    libxl_defbool_setdefault(&b_info->arch_x86.x2apic_preenable, false);
     libxl_defbool_setdefault(&b_info->trap_unmapped_accesses, false);
 
     if (b_info->type == LIBXL_DOMAIN_TYPE_HVM) {

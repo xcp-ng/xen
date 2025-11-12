@@ -3095,6 +3095,17 @@ skip_usbdev:
                     "WARNING: msr_relaxed will be removed in future versions.\n"
                     "If it fixes an issue you are having please report to "
                     "xen-devel@lists.xenproject.org.\n");
+    
+    if (!xlu_cfg_get_string(config, "x2apic_mode", &buf, 1)) {
+        if (!strcmp(buf, "pre_enable"))
+            libxl_defbool_set(&b_info->arch_x86.x2apic_preenable, true);
+        else if (!strcmp(buf, "default"))
+            libxl_defbool_set(&b_info->arch_x86.x2apic_preenable, false);
+        else {
+            fprintf(stderr, "Unknown x2apic mode \"%s\" specified\n", buf);
+            exit(EXIT_FAILURE);
+        }
+    }
 
     xlu_cfg_get_defbool(config, "vpmu", &b_info->vpmu, 0);
 
