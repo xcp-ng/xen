@@ -745,6 +745,7 @@ static const struct iommu_ops __initconst_cf_clobber _iommu_ops = {
     .suspend = amd_iommu_suspend,
     .resume = amd_iommu_resume,
     .crash_shutdown = amd_iommu_crash_shutdown,
+    .lookup_page = amd_iommu_lookup_page,
     .get_reserved_device_memory = amd_iommu_get_reserved_device_memory,
     .dump_page_tables = amd_dump_page_tables,
     .quiesce = amd_iommu_quiesce,

@@ -622,6 +622,96 @@ int cf_check amd_iommu_flush_iotlb_pages(
     return 0;
 }
 
+static int lookup_pagewalk(struct page_info *table, dfn_t dfn, unsigned long level,
+                           mfn_t *mfn, unsigned int *flags)
+{
+    int rc = 0;
+    union amd_iommu_pte entry, *pagetable;
+
+    pagetable = __map_domain_page(table);
+    if ( !pagetable )
+        return -ENOMEM;
+
+    entry = pagetable[pfn_to_pde_idx(dfn_x(dfn), level)];
+
+    if ( !entry.pr || WARN_ON(!entry.mfn) )
+    {
+        /* Missing mapping has no flag. */
+        *flags = 0;
+        rc = -ENOENT;
+        goto out;
+    }
+
+    /*
+     * AMD-Vi Specification, 2.2.3 I/O Page Tables for Host Translations
+     *
+     * Effective write permission is calculated using the IW(resp IR) bits in the DTE,
+     * the I/O PDEs, and the I/O PTE. At each step of the translation process,
+     * I/O write permission (IW) bits (resp IR) from fetched page table entries are
+     * logically ANDed into cumulative I/O write permissions for the translation
+     * including the IW (resp IR) bit in the DTE.
+     */
+
+    if ( !entry.ir )
+        *flags &= ~IOMMUF_readable;
+
+    if ( !entry.iw )
+        *flags &= ~IOMMUF_writable;
+
+    if ( entry.next_level )
+    {
+        /* Go to the next mapping */
+        if ( WARN_ON(entry.next_level >= level) )
+        {
+            rc = -EILSEQ;
+            goto out;
+        }
+
+        unmap_domain_page(pagetable);
+        return lookup_pagewalk(mfn_to_page(_mfn(entry.mfn)), dfn, entry.next_level,
+                               mfn, flags);
+    }
+    else
+    {
+        /*
+         * Terminal mapping (either superpage or PTE). Compute that by combining entry
+         * address with dfn (for taking account of sub-entry frames in case of a superpage).
+         */
+        *mfn = _mfn(entry.mfn |
+               (dfn_x(dfn) & ((1ULL << ((level - 1) * PTE_PER_TABLE_SHIFT)) - 1)));
+    }
+
+out:
+    unmap_domain_page(pagetable);
+    return rc;
+}
+
+int cf_check amd_iommu_lookup_page(struct domain *d, struct iommu_context *ctx,
+                                   dfn_t dfn, mfn_t *mfn, unsigned int *flags)
+{
+    struct page_info *root_table;
+    unsigned long level;
+
+    if ( ctx->opaque )
+        return -EOPNOTSUPP;
+
+    if ( !ctx->arch.amd.root_table )
+        return -ENOENT;
+
+    root_table = ctx->arch.amd.root_table;
+    level = dom_iommu(d)->arch.amd.paging_mode;
+
+    if ( dfn_x(dfn) >> (PTE_PER_TABLE_SHIFT * level) )
+        return -ENOENT;
+
+    /*
+     * We initially consider the page writable and readable, lookup_pagewalk will
+     * remove these flags if it is not actually the case.
+     */
+    *flags |= IOMMUF_writable | IOMMUF_readable;
+    return lookup_pagewalk(root_table, dfn, level, mfn, flags);
+}
+
 int amd_iommu_reserve_domain_unity_map(struct domain *d, struct iommu_context *ctx,
                                        const struct ivrs_unity_map *map,
                                        unsigned int flag)
