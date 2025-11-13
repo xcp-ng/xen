@@ -765,6 +765,20 @@ static void cf_check amd_dump_page_tables(struct domain *d)
                               hd->arch.amd.paging_mode, 0, 0);
 }
 
+static uint64_t cf_check amd_iommu_get_max_iova(struct domain *d)
+{
+    struct domain_iommu *hd = dom_iommu(d);
+    unsigned int bits = 12 + hd->arch.amd.paging_mode * 9;
+
+    /* If paging_mode == 6, which indicates 6-level page tables,
+       we have bits == 66 while the GPA space is still 64-bits
+     */
+    if (bits >= 64)
+        return ~0LLU;
+
+    return (1LLU << bits) - 1;
+}
+
 static const struct iommu_ops __initconst_cf_clobber _iommu_ops = {
     .page_sizes = PAGE_SIZE_4K | PAGE_SIZE_2M | PAGE_SIZE_1G,
     .init = amd_iommu_domain_init,
@@ -792,6 +806,7 @@ static const struct iommu_ops __initconst_cf_clobber _iommu_ops = {
     .get_reserved_device_memory = amd_iommu_get_reserved_device_memory,
     .dump_page_tables = amd_dump_page_tables,
     .quiesce = amd_iommu_quiesce,
+    .get_max_iova = amd_iommu_get_max_iova,
 };
 
 static const struct iommu_init_ops __initconstrel _iommu_init_ops = {

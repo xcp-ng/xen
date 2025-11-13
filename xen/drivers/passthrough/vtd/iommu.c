@@ -3218,6 +3218,13 @@ static int cf_check intel_iommu_quarantine_init(struct pci_dev *pdev,
     return rc;
 }
 
+static uint64_t cf_check intel_iommu_get_max_iova(struct domain *d)
+{
+    struct domain_iommu *hd = dom_iommu(d);
+
+    return (1LLU << agaw_to_width(hd->arch.vtd.agaw)) - 1;
+}
+
 static void cf_check vtd_quiesce(void)
 {
     const struct acpi_drhd_unit *drhd;
@@ -3266,6 +3273,7 @@ static const struct iommu_ops __initconst_cf_clobber vtd_ops = {
     .get_reserved_device_memory = intel_iommu_get_reserved_device_memory,
     .dump_page_tables = vtd_dump_page_tables,
     .quiesce = vtd_quiesce,
+    .get_max_iova = intel_iommu_get_max_iova,
 };
 
 const struct iommu_init_ops __initconstrel intel_iommu_init_ops = {

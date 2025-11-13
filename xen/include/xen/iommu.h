@@ -320,6 +320,9 @@ struct iommu_ops {
 #endif
     /* Inhibit all interrupt generation, to be used at shutdown. */
     void (*quiesce)(void);
+
+    /* Get maximum domain device address (IOVA). */
+    uint64_t (*get_max_iova)(struct domain *d);
 };
 
 /*
