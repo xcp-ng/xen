@@ -1334,6 +1334,51 @@ static int __init cf_check amd_iommu_setup_device_table(
     return 0;
 }
 
+static void cf_check amd_dump_domain_iommu_contexts(struct domain *d)
+{
+    unsigned int i, iommu_no;
+    struct domain_iommu *hd = dom_iommu(d);
+    struct iommu_context *ctx;
+    struct pci_dev *pdev;
+
+    if (d == dom_io)
+        printk("d[IO] contexts\n");
+    else
+        printk("d%hu contexts\n", d->domain_id);
+
+    for (i = 0; i < (1 + hd->other_contexts.count); ++i)
+    {
+        if ( (ctx = iommu_get_context(d, i)) )
+        {
+            printk(" Context %d (%"PRI_mfn")\n", i,
+                   mfn_x(page_to_mfn(ctx->arch.amd.root_table)));
+
+            for (iommu_no = 0; iommu_no < nr_amd_iommus; iommu_no++)
+                printk("  IOMMU %u (used=%lu; did=%hu)\n", iommu_no,
+                       ctx->arch.amd.iommu_dev_cnt[iommu_no],
+                       ctx->arch.amd.didmap[iommu_no]);
+
+            list_for_each_entry(pdev, &ctx->devices, context_list)
+            {
+                printk("  - %pp\n", &pdev->sbdf);
+            }
+
+            iommu_put_context(ctx);
+        }
+    }
+}
+
+static void cf_check amd_dump_iommu_contexts(unsigned char key)
+{
+    struct domain *d;
+
+    for_each_domain(d)
+        if (is_iommu_enabled(d))
+            amd_dump_domain_iommu_contexts(d);
+
+    amd_dump_domain_iommu_contexts(dom_io);
+}
+
 /* Check whether SP5100 SATA Combined mode is on */
 static bool __init amd_sp5100_erratum28(void)
 {
@@ -1490,6 +1535,7 @@ int __init amd_iommu_init(bool xt)
         register_keyhandler('V', &amd_iommu_dump_intremap_tables,
                             "dump IOMMU intremap tables", 0);
 
+    register_keyhandler('X', amd_dump_iommu_contexts, "dump iommu contexts", 1);
     return 0;
 
 error_out:

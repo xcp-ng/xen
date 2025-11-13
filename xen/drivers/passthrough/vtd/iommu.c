@@ -1954,6 +1954,49 @@ static int __must_check init_vtd_hw(bool resume)
     return iommu_flush_all();
 }
 
+static void cf_check vtd_dump_domain_contexts(struct domain *d)
+{
+    unsigned int i, iommu_no;
+    struct pci_dev *pdev;
+    struct iommu_context *ctx;
+    struct domain_iommu *hd = dom_iommu(d);
+
+    if (d == dom_io)
+        printk("d[IO] contexts\n");
+    else
+        printk("d%hu contexts\n", d->domain_id);
+
+    for (i = 0; i < (1 + hd->other_contexts.count); ++i)
+    {
+        if ( (ctx = iommu_get_context(d, i)) )
+        {
+            printk(" Context %d (%"PRIx64")\n", i, ctx->arch.vtd.pgd_maddr);
+
+            for (iommu_no = 0; iommu_no < nr_iommus; iommu_no++)
+                printk("  IOMMU %u (used=%lu; did=%hu)\n", iommu_no,
+                       ctx->arch.vtd.iommu_dev_cnt[iommu_no],
+                       ctx->arch.vtd.didmap[iommu_no]);
+
+            list_for_each_entry(pdev, &ctx->devices, context_list)
+            {
+                printk("  - %pp\n", &pdev->sbdf);
+            }
+
+            iommu_put_context(ctx);
+        }
+    }
+}
+
+static void cf_check vtd_dump_contexts(unsigned char key)
+{
+    struct domain *d;
+
+    for_each_domain(d)
+        if (is_iommu_enabled(d))
+            vtd_dump_domain_contexts(d);
+
+    vtd_dump_domain_contexts(dom_io);
+}
 
 static struct iommu_state {
     uint32_t fectl;
@@ -2088,7 +2131,7 @@ static int __init cf_check vtd_setup(void)
     iommu_ops.page_sizes |= large_sizes;
 
     register_keyhandler('V', vtd_dump_iommu_info, "dump iommu info", 1);
-
+    register_keyhandler('X', vtd_dump_contexts, "dump iommu contexts", 1);
     return 0;
 
  error:
