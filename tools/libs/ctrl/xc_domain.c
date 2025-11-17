@@ -355,7 +355,7 @@ int xc_domain_getinfo_single(xc_interface *xch,
         .cmd = XEN_DOMCTL_getdomaininfo,
         .domain = domid,
     };
-    
+
     if ( do_domctl(xch, &domctl) < 0 )
         return -1;
 
@@ -655,7 +655,7 @@ long long xc_logdirty_control(xc_interface *xch,
     if ( stats )
         memcpy(stats, &domctl.u.shadow_op.stats,
                sizeof(xc_shadow_op_stats_t));
-
+    
     return (rc == 0) ? domctl.u.shadow_op.pages : rc;
 }
 
@@ -2080,10 +2080,10 @@ int xc_domain_debug_control(xc_interface *xc, uint32_t domid, uint32_t sop, uint
     return do_domctl(xc, &domctl);
 }
 
-int xc_domain_p2m_audit(xc_interface *xch,
+int xc_domain_p2m_audit(xc_interface *xch, 
                         uint32_t domid,
                         uint64_t *orphans,
-                        uint64_t *m2p_bad,
+                        uint64_t *m2p_bad,   
                         uint64_t *p2m_bad)
 {
     struct xen_domctl domctl = {};

@@ -15,8 +15,6 @@
 #include "libxl_osdeps.h"
 
 #include "libxl_internal.h"
-#include "xenctrl.h"
-#include <stdio.h>
 
 int libxl_ctx_alloc(libxl_ctx **pctx, int version,
                     unsigned flags, xentoollog_logger * lg)

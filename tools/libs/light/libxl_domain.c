@@ -15,8 +15,6 @@
 #include "libxl_osdeps.h"
 
 #include "libxl_internal.h"
-#include "xenctrl.h"
-#include <stdint.h>
 
 #define PAGE_TO_MEMKB(pages) ((pages) * 4)
 

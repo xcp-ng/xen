@@ -31,7 +31,7 @@ int libxl__arch_domain_prepare_config(libxl__gc *gc,
 
     if (libxl_defbool_val(d_config->b_info.arch_x86.x2apic_force))
         config->arch.emulation_flags |= XEN_X86_EMU_FORCE_X2APIC;
-    
+
     if ( d_config->b_info.arch_x86.sev_policy != ~0 )
     {
         config->arch.coco.sev.flags |= XEN_X86_SEV_POLICY_VALID;

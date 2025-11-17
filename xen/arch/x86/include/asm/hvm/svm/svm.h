@@ -9,9 +9,9 @@
 #ifndef __ASM_X86_HVM_SVM_H__
 #define __ASM_X86_HVM_SVM_H__
 
-#include "public/hvm/coco.h"
-#include <xen/stdint.h>
 #include <asm/psp-sev.h>
+#include <public/hvm/coco.h>
+#include <xen/stdint.h>
 
 void svm_asid_init(void);
 void svm_vcpu_assign_asid(struct vcpu *v);
