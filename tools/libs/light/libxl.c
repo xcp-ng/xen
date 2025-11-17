@@ -417,43 +417,6 @@ int libxl_get_physinfo(libxl_ctx *ctx, libxl_physinfo *physinfo)
     return 0;
 }
 
-int libxl_coco_platform_certs(libxl_ctx *ctx, char* path) {
-    int rc;
-    coco_platform_certs_t certs;
-
-    rc = xc_coco_get_platform_certs(ctx->xch, &certs);
-
-    if (!rc) {
-        int file = open(path, O_WRONLY | O_CREAT, 0644);
-        if (!file) {
-            perror("open:");
-            return -1;
-        }
-
-        size_t written = write(file, &certs.sev, sizeof(certs.sev));
-        if (written != sizeof(certs.sev)) {
-            perror("write:");
-            close(file);
-            return -1;
-        }
-
-        printf("Platform Version: %d.%d.%d\n", 
-            certs.status.version_major, 
-            certs.status.version_minor, 
-            certs.status.version_build);
-        
-        for (size_t cpu_n = 0; cpu_n < certs.cpu_number; cpu_n++) {
-            printf("CPU ID %lu: ", cpu_n);
-            for (size_t i = 0; i < 64; i++) {
-                printf("%02X", certs.hwid[i + cpu_n * 64]);
-            }
-            printf("\n");
-        }
-    }
-
-    return rc;
-}
-
 libxl_cputopology *libxl_get_cpu_topology(libxl_ctx *ctx, int *nb_cpu_out)
 {
     GC_INIT(ctx);

@@ -1687,6 +1687,9 @@ int xc_coco_platform_status(xc_interface *handle, coco_platform_status_t *status
 int xc_coco_prepare_initial_mem(xc_interface *handle, coco_prepare_initial_mem_t *cmd);
 int xc_coco_get_attestation(xc_interface *handle, coco_attestation_report_t *report);
 int xc_coco_get_platform_certs(xc_interface *handle, coco_platform_certs_t *cmd);
+int xc_coco_get_csr(xc_interface *handle, coco_certificate_t *cmd);
+int xc_coco_regen_certificate(xc_interface *handle, coco_certificate_name_t cert);
+int xc_coco_import_certificate(xc_interface *handle, coco_platform_import_certs_t *cmd);
 
 /* HVM guest pass-through */
 int xc_assign_device(xc_interface *xch,

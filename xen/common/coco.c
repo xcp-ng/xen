@@ -131,6 +131,24 @@ static long coco_op_certs(coco_platform_certs_t *certs) {
     }
     return -EOPNOTSUPP;
 }
+static long coco_op_csr(coco_certificate_t *cert) {
+    if (coco_ops && coco_ops->get_certificate_signing_request) {
+        return coco_ops->get_certificate_signing_request(cert);
+    }
+    return -EOPNOTSUPP;
+}
+static long coco_op_regen_platform_cert(coco_certificate_name_t cert) {
+    if (coco_ops && coco_ops->regen_platform_cert) {
+        return coco_ops->regen_platform_cert(cert);
+    }
+    return -EOPNOTSUPP;
+}
+static long coco_op_import_certificate(coco_platform_import_certs_t *cert) {
+    if (coco_ops && coco_ops->import_certificates) {
+        return coco_ops->import_certificates(cert);
+    }
+    return -EOPNOTSUPP;
+}
 
 long do_coco_op(unsigned int cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
 {
@@ -193,6 +211,38 @@ long do_coco_op(unsigned int cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
             xfree(certs);
             return rc;
         }
+        case XEN_COCO_platform_csr:
+        {
+            coco_certificate_t cert;
+            int rc = 0;
+
+            if ( copy_from_guest(&cert, arg, 1) )
+                return -EFAULT;
+            
+            rc = coco_op_csr(&cert);
+
+            if (copy_to_guest(arg, &cert, 1))
+                return -EFAULT;
+
+            return rc;
+        }
+        case XEN_COCO_platform_regen_cert:
+        {
+            coco_certificate_name_t cert;
+
+            if ( copy_from_guest(&cert, arg, 1) )
+                return -EFAULT;
+            return coco_op_regen_platform_cert(cert);
+        }
+        case XEN_COCO_platform_cert_import:
+        {
+            coco_platform_import_certs_t cert;
+
+            if ( copy_from_guest(&cert, arg, 1) )
+                return -EFAULT;
+            return coco_op_import_certificate(&cert);
+        }
+        
         default:
             return -ENOSYS;
     }

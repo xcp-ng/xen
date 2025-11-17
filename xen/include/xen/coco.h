@@ -35,6 +35,9 @@ struct coco_ops {
     int (*init)(void);
     int (*get_platform_status)(coco_platform_status_t *status);
     int (*get_platform_certs)(coco_platform_certs_t *certs);
+    int (*get_certificate_signing_request)(coco_certificate_t *certs);
+    int (*import_certificates)(coco_platform_import_certs_t *certs);
+    int (*regen_platform_cert)(coco_certificate_name_t cert);
     struct coco_domain_ops *(*get_domain_ops)(struct domain *d,
         const struct xen_domctl_createdomain *config);
 };

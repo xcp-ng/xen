@@ -226,3 +226,61 @@ int xc_coco_get_platform_certs(xc_interface *handle, coco_platform_certs_t *cmd)
     xc_hypercall_buffer_free(handle, arg);
     return rc;
 }
+
+int xc_coco_get_csr(xc_interface *handle, coco_certificate_t *cmd)
+{
+    DECLARE_HYPERCALL_BUFFER(coco_certificate_t, arg);
+    int rc;
+
+    arg = xc_hypercall_buffer_alloc(handle, arg, sizeof(*arg));
+    if ( arg == NULL )
+        return -1;
+    memcpy(arg, cmd, sizeof(coco_certificate_t));
+
+    rc = xencall2(handle->xcall, __HYPERVISOR_coco_op, XEN_COCO_platform_csr,
+        HYPERCALL_BUFFER_AS_ARG(arg));
+
+    if (!rc) {
+        memcpy(cmd, arg, sizeof(coco_certificate_t));
+    }
+    xc_hypercall_buffer_free(handle, arg);
+    return rc;
+}
+
+int xc_coco_regen_certificate(xc_interface *handle, coco_certificate_name_t cert)
+{
+    /* Maybe it's not necessary to add another syscall for that */
+    DECLARE_HYPERCALL_BUFFER(coco_certificate_name_t, arg);
+    int rc;
+    
+    arg = xc_hypercall_buffer_alloc(handle, arg, sizeof(*arg));
+    if ( arg == NULL )
+        return -1;
+    *arg = cert;
+
+    rc = xencall2(handle->xcall, __HYPERVISOR_coco_op, XEN_COCO_platform_regen_cert,
+        HYPERCALL_BUFFER_AS_ARG(arg));
+
+    xc_hypercall_buffer_free(handle, arg);
+    return rc;
+}
+
+int xc_coco_import_certificate(xc_interface *handle, coco_platform_import_certs_t *cmd)
+{
+    DECLARE_HYPERCALL_BUFFER(coco_platform_import_certs_t, arg);
+    int rc;
+
+    arg = xc_hypercall_buffer_alloc(handle, arg, sizeof(*arg));
+    if ( arg == NULL )
+        return -1;
+    memcpy(arg, cmd, sizeof(coco_platform_import_certs_t));
+
+    rc = xencall2(handle->xcall, __HYPERVISOR_coco_op, XEN_COCO_platform_cert_import,
+        HYPERCALL_BUFFER_AS_ARG(arg));
+
+    if (!rc) {
+        memcpy(cmd, arg, sizeof(coco_platform_import_certs_t));
+    }
+    xc_hypercall_buffer_free(handle, arg);
+    return rc;
+}

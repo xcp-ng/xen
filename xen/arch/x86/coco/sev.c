@@ -499,6 +499,7 @@ static int sev_get_platform_certs(struct coco_platform_certs *certs) {
     certs->status.version_major = status.api_major;
     certs->status.version_minor = status.api_minor;
     certs->status.version_build = status.build;
+    certs->status.features = (status.flags & 0x1) ? COCO_STATUS_FEATURES_PLATFORM_OWNER : 0;     
     
     if (status.api_major > 1 || status.api_minor > 15) { // > 0.16
         // SEV GET_ID is available from SEV API v0.16 and up
@@ -529,6 +530,65 @@ static int sev_get_platform_certs(struct coco_platform_certs *certs) {
         return rc;
     }
     return 0;
+}
+
+static int sev_get_csr(coco_certificate_t *cert) {
+    struct sev_data_pek_csr arg;
+    struct sev_certificate *c = &(cert->sev);
+    unsigned int psp_ret = 0;
+    int rc = 0;
+
+    arg.len = sizeof(cert->sev);
+    arg.address = (uint64_t) virt_to_maddr(c);
+
+    rc = sev_do_cmd(SEV_CMD_PEK_CSR, (void *)(&arg),
+    &psp_ret, true);
+    
+    if (!rc && !psp_ret) {
+        return 0;
+    }
+    printk(XENLOG_ERR "asp: PEK_CSR: rc %d psp %x size=%u\n",rc, psp_ret, arg.len);
+    return rc;
+}
+
+static int sev_regen_certificate(enum coco_certificate_name cert) {
+    int rc;
+    unsigned int psp_ret;
+    switch (cert) {
+        case sev_pek: {
+            rc = sev_do_cmd(SEV_CMD_PEK_GEN, NULL, &psp_ret, true);
+            break;
+        }
+        case sev_pdh:{
+            rc = sev_do_cmd(SEV_CMD_PDH_GEN, NULL, &psp_ret, true);
+            break;
+        }
+        default: 
+        printk(XENLOG_ERR"sev: Invalid certificate");
+        return -EINVAL;
+    }
+    if (rc || psp_ret) {
+        printk(XENLOG_ERR "sev: regen certificate %d failed: rc %d psp %x \n", cert, rc, psp_ret);
+    } else {
+        printk(XENLOG_ERR "sev: %s certificate regenerate\n", cert == sev_pdh ? "PDH" : "PEK");
+    }
+    return rc;
+}
+static int sev_import_certificate(coco_platform_import_certs_t *certs) {
+    int rc;
+    unsigned int psp_ret = 0;
+    struct sev_data_pek_cert_import arg;
+    arg.oca_cert_address = virt_to_maddr(&(certs->sev.oca));
+    arg.oca_cert_len = sizeof(certs->sev.oca);
+    arg.pek_cert_address = virt_to_maddr(&(certs->sev.pek));
+    arg.pek_cert_len = sizeof(certs->sev.pek);
+    
+    rc = sev_do_cmd(SEV_CMD_PEK_CERT_IMPORT, &arg, &psp_ret, true);
+    
+    if (rc || psp_ret) {
+        printk(XENLOG_ERR "asp: SEV_CMD_PEK_CERT_IMPORT: rc %d psp %x \n", rc, psp_ret);
+    } 
+    return rc;
 }
 
 static struct coco_domain_ops *sev_get_domain_ops(struct domain *d,
@@ -567,6 +627,9 @@ struct coco_ops sev_coco_ops = {
     .init = sev_init,
     .get_platform_status = sev_get_platform_status,
     .get_platform_certs = sev_get_platform_certs,
+    .get_certificate_signing_request = sev_get_csr,
+    .import_certificates = sev_import_certificate,
+    .regen_platform_cert = sev_regen_certificate,
     .get_domain_ops = sev_get_domain_ops,
 };
 

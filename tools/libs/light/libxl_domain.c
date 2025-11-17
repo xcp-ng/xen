@@ -2625,66 +2625,6 @@ out:
     libxl__ao_complete(egc, ao, rc);
 }
 
-static int hex_char_to_int(char c) {
-    if ('0' <= c && c <= '9') return c - '0';
-    if ('a' <= c && c <= 'f') return c - 'a' + 10;
-    if ('A' <= c && c <= 'F') return c - 'A' + 10;
-    return -1;
-}
-
-int libxl_coco_domain_attestation(libxl_ctx *ctx, uint32_t domid, int file, bool is_mmonce_file, char *mmonce) {
-    coco_attestation_report_t report;
-    int rc, r;
-
-    if (is_mmonce_file) {
-        int datalen = 0;
-        void *data = NULL;
-
-        r = libxl_read_file_contents(ctx, mmonce, &data, &datalen);
-
-        if (datalen != 16) {
-            fprintf(stderr, "Error: invalid mmonce length\n");
-            return ERROR_INVAL;
-        }
-        memcpy(&report.mnonce, data, 16);
-        free(data);
-    } else {
-        if (strnlen(mmonce, 33) != 32) {
-            fprintf(stderr, "Error: invalid mmonce length\n");
-        }
-        for (int i = 0; i < 16; i++) {
-            int hi = hex_char_to_int(mmonce[2*i]);
-            int lo = hex_char_to_int(mmonce[2*i + 1]);
-
-            if (hi < 0 || lo < 0) {
-                fprintf(stderr, "Error: invalid hex character\n");
-                return -1;
-            }
-
-            report.mnonce[i] = (hi << 4) | lo;
-        }
-
-    }
-
-    report.domid = domid;
-    report.len = 0;
-
-    rc = xc_coco_get_attestation(ctx->xch, &report);
-
-    if (!rc) {
-        size_t written = write(file, &report.sev, report.len);
-        // the union used does not matter, we use the pointer
-        if (written != report.len) {
-            perror("write");
-            close(file);
-            return -1;
-        }
-    }
-
-    close(file);
-    return rc;
-}
-
 /*
  * Local variables:
  * mode: C

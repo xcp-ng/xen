@@ -10,11 +10,11 @@
 #include "xl.h"
 #include "xl_utils.h"
 
-
-
 static int main_coco_attestation(int argc, char **argv);
 static int main_coco_get_platform_certs(int argc, char **argv);
-//static int main_coco_set_owner_key(int argc, char **argv);
+static int main_coco_certificate_signing_request(int argc, char **argv);
+static int main_coco_certificate_import(int argc, char **argv);
+static int main_coco_regen_certificate(int argc, char **argv);
 
 static const struct cmd_spec coco_cmd_table[] = {
         { "attestation",
@@ -26,13 +26,86 @@ static const struct cmd_spec coco_cmd_table[] = {
       &main_coco_get_platform_certs, 0, 0,
       "Get the platform public key and identification",
       "<Options> <Domain>",
-    }
-    //    { "takeownership",
-    //  &main_coco_set_owner_key, 0, 0,
-    //  "Get the platform owner key",
-    //  "<Options> <Domain>",
-    //},
+    },
+    { "csr",
+      &main_coco_certificate_signing_request, 0, 0,
+      "Certificate Signing Request",
+      "<Options> <Domain>",
+    },
+    { "import",
+      &main_coco_certificate_import, 0, 0,
+      "Import signed certificate",
+      "<Options> <Domain>",
+    },
+    { "regen",
+      &main_coco_regen_certificate, 0, 0,
+      "Regenerate the platform keys",
+      "<Options> <Domain>",
+    },
 };
+
+static int main_coco_certificate_signing_request(int argc, char **argv) {
+    int opt, rc;
+    char *path = "to_sign.bin";
+    static struct option opts[] = {
+        {"file", 1, 0, 'f'},
+        COMMON_LONG_OPTS
+    };
+
+    SWITCH_FOREACH_OPT(opt, "f:", opts, "coco csr", 0) {
+        case 'f':
+            path = optarg;
+            break;
+    }
+    
+    rc = libxl_coco_csr(ctx, path);
+    
+    return rc;
+}
+
+static int main_coco_certificate_import(int argc, char **argv) {
+    int opt, rc;
+    char *crt = "crt.bin";
+    char *pek = "pek.bin";
+    
+    static struct option opts[] = {
+        {"crt", 1, 0, 'c'},
+        {"pek", 1, 0, 'p'},
+        COMMON_LONG_OPTS
+    };
+    
+    SWITCH_FOREACH_OPT(opt, "c:p:", opts, "coco import", 0) {
+        case 'c':
+            crt = optarg;
+            break;
+        case 'p':
+            pek = optarg;
+            break;
+    }
+    
+    rc = libxl_coco_import_certificate(ctx, pek, crt);
+    
+    return rc;
+    /*  platform get status
+        -> if init && owned
+            -> ERR : ask do a pek gen
+        -> if init && !owned
+            -> Perform cert import
+        -> else
+            -> Guest running / init error
+    */
+}
+static int main_coco_regen_certificate(int argc, char **argv) {
+    int opt, rc;
+    
+    SWITCH_FOREACH_OPT(opt, "", NULL, "coco regen", 1) {
+        /* No options */
+    }
+    
+    rc = libxl_coco_regen_certificate(ctx, argv[optind]);
+    
+    return rc;
+}
 
 static int main_coco_attestation(int argc, char **argv) {
     int rc;

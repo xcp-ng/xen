@@ -5,6 +5,12 @@
 #include "../xen.h"
 
 #define XEN_COCO_platform_status 0
+#define XEN_COCO_prepare_initial_mem 1
+#define XEN_COCO_attestation_report 2
+#define XEN_COCO_platform_certs 3
+#define XEN_COCO_platform_csr 4
+#define XEN_COCO_platform_regen_cert 5
+#define XEN_COCO_platform_cert_import 6
 
 /**
  * XEN_COCO_platform_status: Get the status of confidential computing platform.
@@ -34,6 +40,7 @@ struct coco_platform_status {
 #define COCO_STATUS_FLAG_supported (1 << 0) /* Confidential computing is supported and usable */
 #define COCO_STATUS_FLAG_unsafe    (1 << 1) /* Confidential computing is unsafe (e.g debug mode) */
     uint32_t flags;    /* OUT */
+#define COCO_STATUS_FEATURES_PLATFORM_OWNER (1 << 0) /* Confidential computing is supported and usable */
     uint32_t features; /* OUT */
 
     uint32_t version_major; /* OUT */
@@ -43,9 +50,6 @@ struct coco_platform_status {
 typedef struct coco_platform_status coco_platform_status_t;
 DEFINE_XEN_GUEST_HANDLE(coco_platform_status_t);
 
-#define XEN_COCO_prepare_initial_mem 1
-#define XEN_COCO_attestation_report 2
-#define XEN_COCO_platform_certs 3
 
 /**
  * XEN_COCO_prepare_initial_mem: Prepare early memory pages of a guest
@@ -137,6 +141,32 @@ struct coco_platform_certs {
 };
 typedef struct coco_platform_certs coco_platform_certs_t;
 DEFINE_XEN_GUEST_HANDLE(coco_platform_certs_t);
+
+struct coco_certificate {
+    union {
+        struct sev_certificate sev; /* OUT */
+    };
+};
+typedef struct coco_certificate coco_certificate_t;
+DEFINE_XEN_GUEST_HANDLE(coco_certificate_t);
+
+struct coco_platform_import_certs {
+    union {
+        struct {
+            struct sev_certificate pek;
+            struct sev_certificate oca;
+        } sev;
+    };
+};
+
+typedef struct coco_platform_import_certs coco_platform_import_certs_t;
+DEFINE_XEN_GUEST_HANDLE(coco_platform_import_certs_t);
+
+enum coco_certificate_name {
+    sev_pek = 0, 
+    sev_pdh, 
+};
+typedef enum coco_certificate_name coco_certificate_name_t;
 
 
 #endif /* __XEN_PUBLIC_HVM_COCO_H__ */

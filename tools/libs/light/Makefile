@@ -27,6 +27,8 @@ OBJS-y += libxl_colo_nic.o
 else
 OBJS-y += libxl_no_colo.o
 endif
+# TODO: add something like CONFIG_COCO ?
+OBJS-y += libxl_coco.o
 
 ACPI_PATH  = $(XEN_ROOT)/tools/libacpi
 DSDT_FILES-$(CONFIG_X86) = dsdt_pvh.c
