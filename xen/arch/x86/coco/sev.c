@@ -582,6 +582,12 @@ static int sev_regen_certificate(enum coco_certificate_name cert) {
     }
     if (rc || psp_ret) {
         printk(XENLOG_ERR "sev: regen certificate %d failed: rc %d psp %x \n", cert, rc, psp_ret);
+        switch (psp_ret) {
+            case  SEV_RET_INVALID_PLATFORM_STATE:
+            printk(XENLOG_ERR "asp: the platform is not in the right state," 
+                       "no guest should run and the platform must be init\n");
+            break;
+        }
     } else {
         printk(XENLOG_ERR "sev: %s certificate regenerate\n", certs_name[cert]);
     }
