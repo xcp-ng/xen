@@ -32,7 +32,7 @@ static int sev_domain_initialise(struct domain *d)
     unsigned int psp_ret = 0;
     long rc = 0;
 
-    if (d->arch.hvm.svm.sev.status != SEV_GUEST_UNINIT) {
+    if (unlikely(d->arch.hvm.svm.sev.status != SEV_GUEST_UNINIT)) {
         /* This should never happen */
         printk(XENLOG_ERR "sev: Trying to init an already init guest\n");
     }
@@ -104,7 +104,7 @@ static int sev_domain_prepare_initial_mem(struct domain *d, gfn_t gfn, size_t co
     mfn_t mfn = INVALID_MFN, mfn_base = INVALID_MFN;
     size_t segment_size = 0;
 
-    if (d->arch.hvm.svm.sev.status != SEV_GUEST_LUPDATE) {
+    if (unlikely(d->arch.hvm.svm.sev.status != SEV_GUEST_LUPDATE)) {
         /* This should never happen */
         printk(XENLOG_ERR "sev: Trying to update a guest in wrong state\n");
     }
@@ -177,7 +177,7 @@ static int sev_domain_finish_memory(struct domain *d) {
     unsigned int psp_ret = 0;
     long rc = 0;
 
-    if (d->arch.hvm.svm.sev.status != SEV_GUEST_LUPDATE) {
+    if (unlikely(d->arch.hvm.svm.sev.status != SEV_GUEST_LUPDATE)) {
         /* This should never happen */
         printk(XENLOG_ERR "sev: Trying to measure a guest in wrong state\n");
     }
@@ -210,7 +210,7 @@ static int sev_domain_creation_finished(struct domain *d)
     unsigned int psp_ret;
     long rc = 0;
 
-    if (d->arch.hvm.svm.sev.status != SEV_GUEST_LSECRET) {
+    if (unlikely(d->arch.hvm.svm.sev.status != SEV_GUEST_LSECRET)) {
         /* This should never happen */
         printk(XENLOG_ERR "sev: Trying to measure a guest in wrong state\n");
     }
@@ -307,6 +307,14 @@ static int sev_attestation_report(struct domain *d,
     struct sev_data_attestation_report report;
     unsigned int psp_ret = 0;
     int rc = 0;
+    
+    
+    if (unlikely(!(d->arch.hvm.svm.sev.status == SEV_GUEST_LSECRET ||
+                    d->arch.hvm.svm.sev.status == SEV_GUEST_SENT ||
+                    d->arch.hvm.svm.sev.status == SEV_GUEST_SUPDATE ||
+                    d->arch.hvm.svm.sev.status == SEV_GUEST_RUNNING))) {
+        printk(XENLOG_ERR "sev: Trying to get an attestation for a guest in wrong state\n");
+    }
 
     report.handle = d->arch.hvm.svm.sev.asp_handle;
     report.len = sizeof(struct sev_attestation_report_response);
@@ -472,7 +480,8 @@ static int sev_init(void)
 static int sev_get_platform_status(struct coco_platform_status *status)
 {
     status->platform = COCO_PLATFORM_amd_sev;
-
+    /* cannot call do_sev_cmd, platform isn't initialized yet
+        so the structure is missing information like version... */
     if ( cpu_has_sev_es )
         status->platform_flags |= COCO_PLATFORM_FLAG_sev_es;
 
@@ -499,9 +508,10 @@ static int sev_get_platform_certs(struct coco_platform_certs *certs) {
     certs->status.version_major = status.api_major;
     certs->status.version_minor = status.api_minor;
     certs->status.version_build = status.build;
-    certs->status.features = (status.flags & 0x1) ? COCO_STATUS_FEATURES_PLATFORM_OWNER : 0;     
+    certs->status.flags = certs->status.flags | 
+            (status.flags & 0x1) ? COCO_STATUS_FEATURES_PLATFORM_OWNED : 0;     
     
-    if (status.api_major > 1 || status.api_minor > 15) { // > 0.16
+    if (status.api_major > 1 || status.api_minor > 15) {
         // SEV GET_ID is available from SEV API v0.16 and up
         get_id.address = (uint64_t) virt_to_maddr(&certs->hwid);
         get_id.len = sizeof(certs->hwid); 
@@ -544,16 +554,19 @@ static int sev_get_csr(coco_certificate_t *cert) {
     rc = sev_do_cmd(SEV_CMD_PEK_CSR, (void *)(&arg),
     &psp_ret, true);
     
-    if (!rc && !psp_ret) {
-        return 0;
+    if (rc || psp_ret) {
+        printk(XENLOG_ERR "asp: PEK_CSR: rc %d psp %x size=%u\n",rc, psp_ret, arg.len);
+        return rc;
     }
-    printk(XENLOG_ERR "asp: PEK_CSR: rc %d psp %x size=%u\n",rc, psp_ret, arg.len);
-    return rc;
+    return 0;
 }
 
 static int sev_regen_certificate(enum coco_certificate_name cert) {
     int rc;
     unsigned int psp_ret;
+    
+    COCO_CERTIFICATE_NAME_ARRAY_DEF()
+    
     switch (cert) {
         case sev_pek: {
             rc = sev_do_cmd(SEV_CMD_PEK_GEN, NULL, &psp_ret, true);
@@ -570,7 +583,7 @@ static int sev_regen_certificate(enum coco_certificate_name cert) {
     if (rc || psp_ret) {
         printk(XENLOG_ERR "sev: regen certificate %d failed: rc %d psp %x \n", cert, rc, psp_ret);
     } else {
-        printk(XENLOG_ERR "sev: %s certificate regenerate\n", cert == sev_pdh ? "PDH" : "PEK");
+        printk(XENLOG_ERR "sev: %s certificate regenerate\n", certs_name[cert]);
     }
     return rc;
 }
@@ -587,6 +600,11 @@ static int sev_import_certificate(coco_platform_import_certs_t *certs) {
     
     if (rc || psp_ret) {
         printk(XENLOG_ERR "asp: SEV_CMD_PEK_CERT_IMPORT: rc %d psp %x \n", rc, psp_ret);
+        switch (psp_ret) {
+            case  SEV_RET_ALREADY_OWNED:
+            printk(XENLOG_ERR "asp: the platform is already owned, regenerate the certificate to own it\n");
+            break;
+        }
     } 
     return rc;
 }

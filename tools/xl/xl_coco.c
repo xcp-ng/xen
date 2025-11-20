@@ -175,7 +175,6 @@ static int main_coco_get_platform_certs(int argc, char **argv) {
     return rc;
 }
 
-
 static const int coco_cmdtable_len = ARRAY_SIZE(coco_cmd_table);
 
 /* Look up a command in the table, allowing unambiguous truncation */

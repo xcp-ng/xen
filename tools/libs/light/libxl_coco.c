@@ -90,7 +90,7 @@ int libxl_coco_platform_certs(libxl_ctx *ctx, char* path) {
             certs.status.version_minor, 
             certs.status.version_build);
             
-        printf("Platform owned %s\n", certs.status.features & COCO_STATUS_FEATURES_PLATFORM_OWNER ? "True" : "False");
+        printf("Platform owned %s\n", certs.status.flags & COCO_STATUS_FEATURES_PLATFORM_OWNED ? "True" : "False");
             
         for (size_t cpu_n = 0; cpu_n < certs.cpu_number; cpu_n++) {
             printf("CPU ID %lu: ", cpu_n);
@@ -130,10 +130,7 @@ int libxl_coco_csr(libxl_ctx *ctx, char* path) {
 int libxl_coco_regen_certificate(libxl_ctx *ctx, char* crt) {
     coco_certificate_name_t cert = 0;
     size_t i = 0;
-    char *certs_name[] = {
-        "sev_pek",
-        "sev_pdh",
-    };
+    COCO_CERTIFICATE_NAME_ARRAY_DEF()
     for (; i < sizeof(certs_name) / 8; i++) {
         if (strcmp(crt, certs_name[i]) == 0) {
             cert = i;
@@ -141,7 +138,11 @@ int libxl_coco_regen_certificate(libxl_ctx *ctx, char* crt) {
         }
     }
     if (i == (sizeof(certs_name) / 8)) {
-        printf("Invalid certificate name");
+        printf("Invalid certificate name, not in :\n");
+        for (i = 0; i < sizeof(certs_name) / 8; i++) {
+            printf("%s ", certs_name[i]);
+        }
+        puts("");
         return -1;
     }
     

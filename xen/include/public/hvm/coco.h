@@ -39,9 +39,8 @@ struct coco_platform_status {
 
 #define COCO_STATUS_FLAG_supported (1 << 0) /* Confidential computing is supported and usable */
 #define COCO_STATUS_FLAG_unsafe    (1 << 1) /* Confidential computing is unsafe (e.g debug mode) */
+#define COCO_STATUS_FEATURES_PLATFORM_OWNED (1 << 31) /* Confidential computing is supported and usable */
     uint32_t flags;    /* OUT */
-#define COCO_STATUS_FEATURES_PLATFORM_OWNER (1 << 0) /* Confidential computing is supported and usable */
-    uint32_t features; /* OUT */
 
     uint32_t version_major; /* OUT */
     uint32_t version_minor; /* OUT */
@@ -168,5 +167,10 @@ enum coco_certificate_name {
 };
 typedef enum coco_certificate_name coco_certificate_name_t;
 
+#define COCO_CERTIFICATE_NAME_ARRAY_DEF() \
+    const char *certs_name[] = { \
+        [sev_pek] = "sev_pek", \
+        [sev_pdh] = "sev_pdh", \
+    }; \
 
 #endif /* __XEN_PUBLIC_HVM_COCO_H__ */
