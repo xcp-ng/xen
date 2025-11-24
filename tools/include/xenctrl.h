@@ -1690,6 +1690,7 @@ int xc_coco_get_platform_certs(xc_interface *handle, coco_platform_certs_t *cmd)
 int xc_coco_get_csr(xc_interface *handle, coco_certificate_t *cmd);
 int xc_coco_regen_certificate(xc_interface *handle, coco_certificate_name_t cert);
 int xc_coco_import_certificate(xc_interface *handle, coco_platform_import_certs_t *cmd);
+int xc_coco_update(xc_interface *handle, coco_update_t *cmd);
 
 /* HVM guest pass-through */
 int xc_assign_device(xc_interface *xch,

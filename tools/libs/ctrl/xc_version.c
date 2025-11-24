@@ -247,6 +247,25 @@ int xc_coco_get_csr(xc_interface *handle, coco_certificate_t *cmd)
     return rc;
 }
 
+int xc_coco_update(xc_interface *handle, coco_update_t *cmd)
+{
+    DECLARE_HYPERCALL_BUFFER(coco_update_t, arg);
+    int rc;
+
+    arg = xc_hypercall_buffer_alloc(handle, arg, sizeof(*arg));
+    if ( arg == NULL )
+        return -1;
+    memcpy(arg, cmd, sizeof(coco_update_t));
+
+    rc = xencall2(handle->xcall, __HYPERVISOR_coco_op, XEN_COCO_platform_update,
+        HYPERCALL_BUFFER_AS_ARG(arg));
+
+    if (!rc) {
+        memcpy(cmd, arg, sizeof(coco_update_t));
+    }
+    xc_hypercall_buffer_free(handle, arg);
+    return rc;
+}
 int xc_coco_regen_certificate(xc_interface *handle, coco_certificate_name_t cert)
 {
     /* Maybe it's not necessary to add another syscall for that */

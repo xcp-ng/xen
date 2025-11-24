@@ -15,6 +15,7 @@ static int main_coco_get_platform_certs(int argc, char **argv);
 static int main_coco_certificate_signing_request(int argc, char **argv);
 static int main_coco_certificate_import(int argc, char **argv);
 static int main_coco_regen_certificate(int argc, char **argv);
+static int main_coco_update_firmware(int argc, char **argv);
 
 static const struct cmd_spec coco_cmd_table[] = {
         { "attestation",
@@ -42,7 +43,27 @@ static const struct cmd_spec coco_cmd_table[] = {
       "Regenerate the platform keys",
       "<Options> <Domain>",
     },
+    { "update",
+      &main_coco_update_firmware, 0, 0,
+      "Update the platform firmware",
+      "<Firmware>",
+    },
 };
+
+static int main_coco_update_firmware(int argc, char **argv) {
+    int opt, rc;
+    char *path = NULL;
+    
+    SWITCH_FOREACH_OPT(opt, "", NULL, "coco update", 1) {
+        /* No options */
+    }
+    
+    path = argv[optind];
+    
+    rc = libxl_coco_update(ctx, path);
+    
+    return rc;
+}
 
 static int main_coco_certificate_signing_request(int argc, char **argv) {
     int opt, rc;

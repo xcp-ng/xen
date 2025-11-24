@@ -105,7 +105,6 @@ int libxl_coco_platform_certs(libxl_ctx *ctx, char* path) {
 }
     
 int libxl_coco_csr(libxl_ctx *ctx, char* path) {
-
     int rc;
     coco_certificate_t cert;
     
@@ -127,6 +126,34 @@ int libxl_coco_csr(libxl_ctx *ctx, char* path) {
     }
     return rc;
 }
+
+int libxl_coco_update(libxl_ctx *ctx, char* path) {
+    int rc = 0;
+    coco_update_t update;
+    struct stat st;
+    if (stat(path, &st) != 0) {
+         perror("can't stat firmware");
+        return -1;
+    }
+    DECLARE_HYPERCALL_BUFFER(void, buf);
+    update.size = st.st_size;
+    buf = xc_hypercall_buffer_alloc(ctx->xch, buf, update.size);
+    
+    int fd = open(path, O_RDONLY);
+    update.size = read(fd, buf,update.size);
+    if (update.size == -1 ) {
+        perror("could not open firmware file");
+        return -1;
+    }
+    set_xen_guest_handle(update.data, buf);
+    
+    rc = xc_coco_update(ctx->xch, &update);
+    
+    xc_hypercall_buffer_free(ctx->xch, buf);
+    
+    return rc;
+}
+
 int libxl_coco_regen_certificate(libxl_ctx *ctx, char* crt) {
     coco_certificate_name_t cert = 0;
     size_t i = 0;

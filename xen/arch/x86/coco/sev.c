@@ -366,6 +366,11 @@ static int sev_es_domain_creation_finished(struct domain *d)
     struct sev_data_launch_update_vmsa sd_luv = {};
     sd_luv.handle = d->arch.hvm.svm.sev.asp_handle;
     sd_luv.reserved = 0;
+    
+    if (unlikely(d->arch.hvm.svm.sev.status != SEV_GUEST_LUPDATE)) {
+        /* This should never happen */
+        printk(XENLOG_ERR "sev: Trying to update a guest in wrong state\n");
+    }
 
     for_each_vcpu ( d, v )
     {
@@ -416,7 +421,7 @@ static int sev_es_domain_creation_finished(struct domain *d)
         rc = sev_do_cmd(SEV_CMD_LAUNCH_UPDATE_VMSA, (void *)(&sd_luv), &psp_ret, true);
         if ( rc )
         {
-            printk(XENLOG_ERR "asp: failed to LAUNCH_UPDATE_VMSA d%huv%d: err %u\n",
+            printk(XENLOG_ERR "asp: failed to LAUNCH_UPDATE_VMSA d%huv%d: psp_ret %u\n",
                    d->domain_id, v->vcpu_id, psp_ret);
             return rc;
         }
@@ -593,6 +598,7 @@ static int sev_regen_certificate(enum coco_certificate_name cert) {
     }
     return rc;
 }
+
 static int sev_import_certificate(coco_platform_import_certs_t *certs) {
     int rc;
     unsigned int psp_ret = 0;
@@ -612,6 +618,21 @@ static int sev_import_certificate(coco_platform_import_certs_t *certs) {
             break;
         }
     } 
+    return rc;
+}
+
+static int sev_platform_update(void* firmware, int len) {
+    int rc;
+    unsigned int psp_ret = 0;
+    
+    rc = sev_do_cmd(SEV_CMD_SHUTDOWN, NULL, &psp_ret, true);
+    if (rc || psp_ret) {
+        printk(XENLOG_ERR "asp: SEV_CMD_SHUTDOWN: rc %d psp %x \n", rc, psp_ret);
+        printk(XENLOG_ERR "sev: can't update, is there running guest ?\n");
+        return rc;
+    } 
+    rc = sp_update_firmware(firmware, len, &psp_ret);
+    
     return rc;
 }
 
@@ -653,6 +674,7 @@ struct coco_ops sev_coco_ops = {
     .get_platform_certs = sev_get_platform_certs,
     .get_certificate_signing_request = sev_get_csr,
     .import_certificates = sev_import_certificate,
+    .update_platform = sev_platform_update,
     .regen_platform_cert = sev_regen_certificate,
     .get_domain_ops = sev_get_domain_ops,
 };

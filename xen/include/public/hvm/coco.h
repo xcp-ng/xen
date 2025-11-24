@@ -11,6 +11,7 @@
 #define XEN_COCO_platform_csr 4
 #define XEN_COCO_platform_regen_cert 5
 #define XEN_COCO_platform_cert_import 6
+#define XEN_COCO_platform_update 7
 
 /**
  * XEN_COCO_platform_status: Get the status of confidential computing platform.
@@ -148,6 +149,13 @@ struct coco_certificate {
 };
 typedef struct coco_certificate coco_certificate_t;
 DEFINE_XEN_GUEST_HANDLE(coco_certificate_t);
+
+struct coco_update {
+    XEN_GUEST_HANDLE(void) data;
+    uint32_t size;
+};
+typedef struct coco_update coco_update_t;
+DEFINE_XEN_GUEST_HANDLE(coco_update_t);
 
 struct coco_platform_import_certs {
     union {

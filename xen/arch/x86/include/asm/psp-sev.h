@@ -689,4 +689,6 @@ struct sev_user_data_get_id2 {
 
 extern int sev_do_cmd(int cmd, void *data, unsigned int *psp_ret, bool poll);
 
+extern int sp_update_firmware(void *firmware, int len, unsigned int *psp_ret);
+
 #endif  /* __PSP_SEV_H__ */

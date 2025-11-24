@@ -3040,6 +3040,8 @@ int libxl_coco_platform_certs(libxl_ctx *ctx, char *path);
  */
 int libxl_coco_csr(libxl_ctx *ctx, char* path);
 
+int libxl_coco_update(libxl_ctx *ctx, char* path);
+
 int libxl_coco_regen_certificate(libxl_ctx *ctx, char* cert);
 
 int libxl_coco_import_certificate(libxl_ctx *ctx, char* pek, char *crt);
