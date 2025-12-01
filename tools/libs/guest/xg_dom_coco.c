@@ -33,3 +33,7 @@ int xg_dom_coco_encrypt_seg(xc_interface *xch, struct xc_dom_image *dom,
     
     return xc_coco_prepare_initial_mem(xch, &cmd);
 }
+int xg_dom_coco_finish_encrypt(xc_interface *xch, struct xc_dom_image *dom)
+{
+    return xc_coco_finish_initial_mem(xch, dom->guest_domid);
+}

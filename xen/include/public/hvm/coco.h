@@ -6,6 +6,7 @@
 
 #define XEN_COCO_platform_status 0
 #define XEN_COCO_prepare_initial_mem 1
+#define XEN_COCO_finish_initial_mem 8
 #define XEN_COCO_attestation_report 2
 #define XEN_COCO_platform_certs 3
 #define XEN_COCO_platform_csr 4

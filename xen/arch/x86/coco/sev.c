@@ -42,19 +42,19 @@ static int sev_domain_initialise(struct domain *d)
         printk(XENLOG_ERR "sev: Reserved bits set in policy\n");
         return -EINVAL;
     }
-    
+
     if ( sev_policy.es && !cpu_has_sev_es )
     {
         printk(XENLOG_ERR "sev: SEV-ES is not supported\n");
         return -EINVAL;
     }
-    
+
     if ( !(d->arch.emulation_flags & XEN_X86_EMU_FORCE_X2APIC) )
     {
         printk(XENLOG_ERR "sev: Guest must have forced x2apic\n");
         return -EINVAL;
     }
-    
+
     sd_ls.handle = 0; /* generate new one */
     sd_ls.policy = sev_policy;
     if (d->arch.hvm.svm.sev.owner_crt && d->arch.hvm.svm.sev.session) {
@@ -129,7 +129,7 @@ static int sev_domain_prepare_initial_mem(struct domain *d, gfn_t gfn, size_t co
                 printk(XENLOG_DEBUG
                        "asp: LAUNCH_UPDATE_DATA d%hu: base=%"PRI_xen_pfn", size=%zx\n",
                        d->domain_id, mfn_x(mfn_base), segment_size);
-                
+
                 sd_lud.reserved = 0;
                 sd_lud.handle = d->arch.hvm.svm.sev.asp_handle;
                 sd_lud.address = mfn_x(mfn_base) << PAGE_SHIFT;
@@ -147,7 +147,7 @@ static int sev_domain_prepare_initial_mem(struct domain *d, gfn_t gfn, size_t co
                 mfn_base = mfn;
                 segment_size = 0;
             }
-        }  
+        }
 
         gfn = gfn_add(gfn, 1);
         segment_size++;
@@ -191,13 +191,14 @@ static int sev_domain_finish_memory(struct domain *d) {
     if ( rc )
     {
         printk(XENLOG_ERR "asp: failed to LAUNCH_MEASURE for d%hu: psp_ret %u, rc %ld\n",
-               d->domain_id, psp_ret, rc);
-        
+            d->domain_id, psp_ret, rc);
+
         if (psp_ret == SEV_RET_INVALID_LEN)
             printk(XENLOG_ERR "asp: Expected %"PRIu32" bytes\n", sd_lm.len);
         return rc;
     }
 
+    printk(XENLOG_DEBUG"asp: LAUNCH_MEASURE for d%hu: \n",  d->domain_id);
     d->arch.hvm.svm.sev.status = SEV_GUEST_LSECRET;
     d->arch.hvm.svm.sev.measure_len = sd_lm.len;
 
@@ -212,7 +213,7 @@ static int sev_domain_creation_finished(struct domain *d)
 
     if (unlikely(d->arch.hvm.svm.sev.status != SEV_GUEST_LSECRET)) {
         /* This should never happen */
-        printk(XENLOG_ERR "sev: Trying to measure a guest in wrong state\n");
+        printk(XENLOG_ERR "sev: Trying to finish a guest in wrong state\n");
     }
 
     sd_lf.handle = d->arch.hvm.svm.sev.asp_handle;
@@ -307,8 +308,8 @@ static int sev_attestation_report(struct domain *d,
     struct sev_data_attestation_report report;
     unsigned int psp_ret = 0;
     int rc = 0;
-    
-    
+
+
     if (unlikely(!(d->arch.hvm.svm.sev.status == SEV_GUEST_LSECRET ||
                     d->arch.hvm.svm.sev.status == SEV_GUEST_SENT ||
                     d->arch.hvm.svm.sev.status == SEV_GUEST_SUPDATE ||
@@ -360,16 +361,16 @@ static int sev_es_asid_alloc(struct domain *d, struct hvm_asid *asid)
     return hvm_asid_alloc_range(asid, 1, raw_cpu_policy.extd.min_no_es_asid - 1);
 }
 
-static int sev_es_domain_creation_finished(struct domain *d)
+static int sev_es_domain_vcpu_initialise(struct domain *d)
 {
     struct vcpu *v;
     struct sev_data_launch_update_vmsa sd_luv = {};
     sd_luv.handle = d->arch.hvm.svm.sev.asp_handle;
     sd_luv.reserved = 0;
-    
+
     if (unlikely(d->arch.hvm.svm.sev.status != SEV_GUEST_LUPDATE)) {
         /* This should never happen */
-        printk(XENLOG_ERR "sev: Trying to update a guest in wrong state\n");
+        printk(XENLOG_ERR "sev: Trying to update a guest in wrong state. Stage : %d\n", d->arch.hvm.svm.sev.status);
     }
 
     for_each_vcpu ( d, v )
@@ -379,7 +380,7 @@ static int sev_es_domain_creation_finished(struct domain *d)
         struct vmcb_struct *vmcb = v->arch.hvm.svm.vmcb;
         struct cpu_user_regs *regs = &v->arch.user_regs;
         void *vmsa;
-        
+
         /* Stash guest CPU registers into VMCB including VMSA fields */
         vmcb->rax = regs->rax;
         vmcb->vmsa_regs.rbx = regs->rbx;
@@ -411,13 +412,13 @@ static int sev_es_domain_creation_finished(struct domain *d)
                sizeof(struct vmcb_struct) - offsetof(struct vmcb_struct, vmsa_start));
         cache_flush(vmsa, PAGE_SIZE);
         unmap_domain_page(vmsa);
-        
+
         /* Clear VMSA-specific fields from VMCB (marked as reserved). */
         memset(&vmcb->vmsa_regs, 0, sizeof(vmcb->vmsa_regs));
 
         sd_luv.address = page_to_maddr(v->arch.hvm.svm.sev.vmsa_page);
         sd_luv.len = PAGE_SIZE_4K;
-        
+
         rc = sev_do_cmd(SEV_CMD_LAUNCH_UPDATE_VMSA, (void *)(&sd_luv), &psp_ret, true);
         if ( rc )
         {
@@ -425,15 +426,19 @@ static int sev_es_domain_creation_finished(struct domain *d)
                    d->domain_id, v->vcpu_id, psp_ret);
             return rc;
         }
+        
+        printk(XENLOG_DEBUG "asp: LAUNCH_UPDATE_VMSA d%huv%d:\n",
+                   d->domain_id, v->vcpu_id);
     }
 
-    return sev_domain_creation_finished(d);
+    return 0;
 }
 
 static struct coco_domain_ops sev_es_domain_ops = {
     .prepare_initial_mem = sev_domain_prepare_initial_mem,
     .domain_initialise = sev_domain_initialise,
-    .domain_creation_finished = sev_es_domain_creation_finished,
+    .domain_vcpu_initialise = sev_es_domain_vcpu_initialise,
+    .domain_creation_finished = sev_domain_creation_finished,
     .domain_memory_finished = sev_domain_finish_memory,
     .domain_destroy = sev_domain_destroy,
     .domain_attestation_report = sev_attestation_report,
@@ -448,7 +453,7 @@ static int sev_init(void)
     if ( WARN_ON(!cpu_has_sme || !cpu_has_sev) )
         return -ENOSYS;
 
-    /* AMD SME and SmmLock are required for SEV. */	
+    /* AMD SME and SmmLock are required for SEV. */
     rdmsrl(MSR_K8_SYSCFG, syscfg);
 
     if ( !(syscfg & SYSCFG_MEM_ENCRYPT) )
@@ -458,7 +463,7 @@ static int sev_init(void)
     }
 
     rdmsrl(MSR_K8_HWCR, hwcr);
-    
+
     if ( !(hwcr & K8_HWCR_SMM_LOCK) )
     {
         printk(XENLOG_ERR "sev: SMM Lock is not enabled\n");
@@ -502,7 +507,7 @@ static int sev_get_platform_certs(struct coco_platform_certs *certs) {
     struct sev_user_data_status status;
     struct sev_data_get_id get_id;
 
-    
+
     rc = sev_do_cmd(SEV_CMD_PLATFORM_STATUS, (void *)(&status), &psp_ret, true);
     if ( rc || psp_ret )
     {
@@ -513,14 +518,14 @@ static int sev_get_platform_certs(struct coco_platform_certs *certs) {
     certs->status.version_major = status.api_major;
     certs->status.version_minor = status.api_minor;
     certs->status.version_build = status.build;
-    certs->status.flags = certs->status.flags | 
-            (status.flags & 0x1) ? COCO_STATUS_FEATURES_PLATFORM_OWNED : 0;     
-    
+    certs->status.flags = certs->status.flags |
+            (status.flags & 0x1) ? COCO_STATUS_FEATURES_PLATFORM_OWNED : 0;
+
     if (status.api_major > 1 || status.api_minor > 15) {
         // SEV GET_ID is available from SEV API v0.16 and up
         get_id.address = (uint64_t) virt_to_maddr(&certs->hwid);
-        get_id.len = sizeof(certs->hwid); 
-        
+        get_id.len = sizeof(certs->hwid);
+
         rc = sev_do_cmd(SEV_CMD_GET_ID, (void *)(&get_id), &psp_ret, true);
         if ( rc || psp_ret )
         {
@@ -537,7 +542,7 @@ static int sev_get_platform_certs(struct coco_platform_certs *certs) {
     pdh_cert_export.cert_chain_address = (uint64_t) virt_to_maddr(&certs->sev.pek);
     pdh_cert_export.cert_chain_len = sizeof(certs->sev.pek) * 3;
     pdh_cert_export.reserved = 0;
-    
+
     rc = sev_do_cmd(SEV_CMD_PDH_CERT_EXPORT, (void *)(&pdh_cert_export), &psp_ret, true);
     if ( rc || psp_ret )
     {
@@ -558,7 +563,7 @@ static int sev_get_csr(coco_certificate_t *cert) {
 
     rc = sev_do_cmd(SEV_CMD_PEK_CSR, (void *)(&arg),
     &psp_ret, true);
-    
+
     if (rc || psp_ret) {
         printk(XENLOG_ERR "asp: PEK_CSR: rc %d psp %x size=%u\n",rc, psp_ret, arg.len);
         return rc;
@@ -569,9 +574,9 @@ static int sev_get_csr(coco_certificate_t *cert) {
 static int sev_regen_certificate(enum coco_certificate_name cert) {
     int rc;
     unsigned int psp_ret;
-    
+
     COCO_CERTIFICATE_NAME_ARRAY_DEF()
-    
+
     switch (cert) {
         case sev_pek: {
             rc = sev_do_cmd(SEV_CMD_PEK_GEN, NULL, &psp_ret, true);
@@ -581,7 +586,7 @@ static int sev_regen_certificate(enum coco_certificate_name cert) {
             rc = sev_do_cmd(SEV_CMD_PDH_GEN, NULL, &psp_ret, true);
             break;
         }
-        default: 
+        default:
         printk(XENLOG_ERR"sev: Invalid certificate");
         return -EINVAL;
     }
@@ -589,7 +594,7 @@ static int sev_regen_certificate(enum coco_certificate_name cert) {
         printk(XENLOG_ERR "sev: regen certificate %d failed: rc %d psp %x \n", cert, rc, psp_ret);
         switch (psp_ret) {
             case  SEV_RET_INVALID_PLATFORM_STATE:
-            printk(XENLOG_ERR "asp: the platform is not in the right state," 
+            printk(XENLOG_ERR "asp: the platform is not in the right state,"
                        "no guest should run and the platform must be init\n");
             break;
         }
@@ -607,9 +612,9 @@ static int sev_import_certificate(coco_platform_import_certs_t *certs) {
     arg.oca_cert_len = sizeof(certs->sev.oca);
     arg.pek_cert_address = virt_to_maddr(&(certs->sev.pek));
     arg.pek_cert_len = sizeof(certs->sev.pek);
-    
+
     rc = sev_do_cmd(SEV_CMD_PEK_CERT_IMPORT, &arg, &psp_ret, true);
-    
+
     if (rc || psp_ret) {
         printk(XENLOG_ERR "asp: SEV_CMD_PEK_CERT_IMPORT: rc %d psp %x \n", rc, psp_ret);
         switch (psp_ret) {
@@ -617,22 +622,22 @@ static int sev_import_certificate(coco_platform_import_certs_t *certs) {
             printk(XENLOG_ERR "asp: the platform is already owned, regenerate the certificate to own it\n");
             break;
         }
-    } 
+    }
     return rc;
 }
 
 static int sev_platform_update(void* firmware, int len) {
     int rc;
     unsigned int psp_ret = 0;
-    
+
     rc = sev_do_cmd(SEV_CMD_SHUTDOWN, NULL, &psp_ret, true);
     if (rc || psp_ret) {
         printk(XENLOG_ERR "asp: SEV_CMD_SHUTDOWN: rc %d psp %x \n", rc, psp_ret);
         printk(XENLOG_ERR "sev: can't update, is there running guest ?\n");
         return rc;
-    } 
+    }
     rc = sp_update_firmware(firmware, len, &psp_ret);
-    
+
     return rc;
 }
 
@@ -646,7 +651,7 @@ static struct coco_domain_ops *sev_get_domain_ops(struct domain *d,
         sev_policy->raw = config->arch.coco.sev.policy;
     }
     else
-        // Use a reasonable default policy 
+        // Use a reasonable default policy
         *sev_policy = (union sev_guest_policy){
             .no_key_sharing = true,
             .no_debug = true,

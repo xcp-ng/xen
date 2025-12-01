@@ -16,6 +16,7 @@ struct coco_domain_ops {
     /* HVM domain hooks */
     int (*domain_initialise)(struct domain *d);
     int (*domain_memory_finished)(struct domain *d);
+    int (*domain_vcpu_initialise)(struct domain *d);
     int (*domain_creation_finished)(struct domain *d);
     void (*domain_destroy)(struct domain *d);
 
@@ -61,12 +62,26 @@ static inline int coco_domain_initialise(struct domain *d)
     return 0;
 }
 
+static inline int coco_domain_vcpu_initialise(struct domain *d)
+{
+    if ( d->coco_ops && d->coco_ops->domain_vcpu_initialise )
+        return d->coco_ops->domain_vcpu_initialise(d);
+
+    return 0;
+}
+
+static inline int coco_domain_memory_finished(struct domain *d)
+{
+    if ( d->coco_ops && d->coco_ops->domain_memory_finished )
+        return d->coco_ops->domain_memory_finished(d);
+
+    return 0;
+}
+
 static inline int coco_domain_creation_finished(struct domain *d)
 {
-    if ( d->coco_ops && d->coco_ops->domain_memory_finished
-                        && d->coco_ops->domain_creation_finished )
-        return d->coco_ops->domain_memory_finished(d) || 
-                d->coco_ops->domain_creation_finished(d);
+    if ( d->coco_ops && d->coco_ops->domain_creation_finished )
+        return d->coco_ops->domain_creation_finished(d);
 
     return 0;
 }
@@ -93,6 +108,16 @@ static inline bool coco_is_supported(void)
 }
 
 static inline int coco_domain_initialise(struct domain *d)
+{
+    return 0;
+}
+
+static inline int coco_domain_vcpu_initialise(struct domain *d)
+{
+    return 0;
+}
+
+static inline int coco_domain_memory_finished(struct domain *d)
 {
     return 0;
 }

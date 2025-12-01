@@ -241,6 +241,12 @@ int xc_dom_boot_image(struct xc_dom_image *dom)
     /* let the vm run */
     if ( (rc = dom->arch_hooks->vcpu(dom)) != 0 )
         return rc;
+    
+    if (dom->coco) {
+        /* vcpu needs to be initialized */
+        if ( (rc = xg_dom_coco_finish_encrypt(dom->xch, dom)) != 0 )
+            return rc;
+    }
     xc_dom_unmap_all(dom);
 
     return rc;

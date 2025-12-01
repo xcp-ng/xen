@@ -104,6 +104,29 @@ out:
     put_domain(d);
     return rc;
 }
+long coco_op_finish_initial_mem(domid_t domid)
+{
+    long rc = 0;
+    struct domain *d = get_domain_by_id(domid);
+
+    if ( !d )
+        return -ENOENT;
+    
+    if ( !is_coco_domain(d) )
+    {
+        rc = -EOPNOTSUPP;
+        goto out;
+    }
+
+    rc = coco_domain_vcpu_initialise(d);
+    if (rc)
+        goto out;
+    rc = coco_domain_memory_finished(d);
+
+out:
+    put_domain(d);
+    return rc;
+}
 
 static long coco_op_get_attestation_report(coco_attestation_report_t *report) {
     struct domain *d;
@@ -179,6 +202,18 @@ long do_coco_op(unsigned int cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
                 return -EFAULT;
 
             return coco_op_prepare_initial_mem(prepare_initial_mem);
+        }
+        case XEN_COCO_finish_initial_mem:
+        {
+            domid_t domid;
+            
+            if ( copy_from_guest(&domid, arg, 1) )
+                return -EFAULT;
+            
+            printk(XENLOG_DEBUG"%s: called\n", __func__);
+                
+            
+            return coco_op_finish_initial_mem(domid);
         }
         case XEN_COCO_attestation_report:
         {
