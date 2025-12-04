@@ -616,6 +616,10 @@ long do_domctl(XEN_GUEST_HANDLE_PARAM(xen_domctl_t) u_domctl)
         copyback = true;
         goto domctl_out_unlock_domonly;
 
+    case XEN_DOMCTL_numa_op:
+        ret = numa_domctl(d, &op->u.numa_op, &copyback);
+        goto domctl_out_unlock_domonly;
+
     default:
         /* Everything else handled further up or further down. */
         break;

@@ -127,6 +127,8 @@ extern bool numa_memblks_available(void);
 extern bool numa_update_node_memblks(nodeid_t node, unsigned int arch_nid,
                                      paddr_t start, paddr_t size, bool hotplug);
 extern void numa_set_processor_nodes_parsed(nodeid_t node);
+extern int numa_domctl(
+    struct domain *d, struct xen_domctl_numa_op *numa, bool *copyback);
 
 #else
 
@@ -146,6 +148,12 @@ extern mfn_t first_valid_mfn;
 static inline nodeid_t mfn_to_nid(mfn_t mfn)
 {
     return 0;
+}
+
+static inline int numa_domctl(
+    struct domain *d, struct xen_domctl_numa_op *numa, bool *copyback)
+{
+    return -EOPNOTSUPP;
 }
 
 #endif
