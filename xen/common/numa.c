@@ -5,6 +5,7 @@
  */
 
 #include <xen/init.h>
+#include <xen/guest_access.h>
 #include <xen/keyhandler.h>
 #include <xen/mm.h>
 #include <xen/nodemask.h>
@@ -818,3 +819,69 @@ static int __init cf_check register_numa_trigger(void)
     return 0;
 }
 __initcall(register_numa_trigger);
+
+/**
+ * @brief Copy d->node_tot_pages[<node>] to guest memory.
+ * @param d The domain whose NUMA info is being retrieved.
+ * @param nodes The data structure to fill with total pages per node.
+ * @return 0 on success, negative error code on failure.
+ *
+ * This function copies the total number of pages per NUMA node
+ * from the host domain structure to the guest memory specified
+ * in the `node_pages` structure.
+ *
+ * On success, it updates `nr_nodes` to reflect the actual
+ * number of nodes copied. When the caller provided nr_nodes as 0
+ * to query the number of nodes, it just sets `nr_nodes` and returns 0.
+ * Otherwise, if the provided `nr_nodes` is less than the number of online
+ * nodes, it returns -ERANGE.
+ */
+static int domain_get_node_tot_pages(struct domain *d, struct node_pages *nodes)
+{
+    const nodeid_t online_nodes = last_node(node_online_map) + 1;
+    nodeid_t node;
+    uint64_t node_tot_pages[MAX_NUMNODES];
+
+    if ( nodes->nr_nodes == 0 )
+    {
+        /* For callers who want to know the number of nodes to allocate for */
+        nodes->nr_nodes = online_nodes;
+        return 0;
+    }
+
+    if ( online_nodes > nodes->nr_nodes )
+        return -ERANGE;
+
+    nrspin_lock(&d->page_alloc_lock);
+    for ( node = 0; node < online_nodes; node++ )
+        node_tot_pages[node] = d->node_tot_pages[node];
+    nrspin_unlock(&d->page_alloc_lock);
+
+    if ( copy_to_guest(nodes->node_tot_pages, node_tot_pages, online_nodes) )
+    {
+        nodes->nr_nodes = 0;
+        return -EFAULT;
+    }
+    nodes->nr_nodes = online_nodes;
+    return 0;
+}
+
+/* Domain NUMA operations */
+int numa_domctl(
+    struct domain *d, struct xen_domctl_numa_op *numa, bool *copyback)
+{
+    int ret;
+
+    switch ( numa->op )
+    {
+    case XEN_DOMCTL_NUMA_OP_GET_NODE_PAGES:
+        ret = domain_get_node_tot_pages(d, &numa->u.node_pages);
+        *copyback = true;
+        break;
+
+    default:
+        ret = -EOPNOTSUPP;
+    }
+
+    return ret;
+}
