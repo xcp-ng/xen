@@ -1506,6 +1506,11 @@ void domain_destroy(struct domain *d)
     /* Remove from the domlist/hash. */
     domlist_remove(d);
 
+    /* Sanity check the NUMA node page count sum before destroying domain. */
+    nrspin_lock(&d->page_alloc_lock);
+    ASSERT_NUMA_PAGE_COUNT(d);
+    nrspin_unlock(&d->page_alloc_lock);
+
     /* Schedule RCU asynchronous completion of domain destroy. */
     call_rcu(&d->rcu, complete_domain_destroy);
 }

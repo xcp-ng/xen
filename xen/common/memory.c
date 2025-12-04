@@ -651,6 +651,8 @@ static long memory_exchange(XEN_GUEST_HANDLE_PARAM(xen_memory_exchange_t) arg)
     long          rc = 0;
     struct domain *d;
     struct page_info *page;
+    /* Shadow page count adjustments. */
+    long node_tot_pages_adjustments[MAX_NUMNODES] = {};
 
     if ( copy_from_guest(&exch, arg, 1) )
         return -EFAULT;
@@ -801,6 +803,8 @@ static long memory_exchange(XEN_GUEST_HANDLE_PARAM(xen_memory_exchange_t) arg)
                 }
 
                 page_list_add(page, &in_chunk_list);
+                /* Account the removed page for updating the per-node pages */
+                node_tot_pages_adjustments[page_to_nid(page)]--;
 #ifdef CONFIG_X86
                 put_gfn(d, gmfn + k);
 #endif
@@ -849,23 +853,36 @@ static long memory_exchange(XEN_GUEST_HANDLE_PARAM(xen_memory_exchange_t) arg)
             if ( assign_page(page, exch.out.extent_order, d,
                              MEMF_no_refcount) )
             {
-                unsigned long dec_count;
-                bool drop_dom_ref;
+                bool drop_dom_ref = false;
 
                 /*
                  * Pages in in_chunk_list is stolen without
                  * decreasing the tot_pages. If the domain is dying when
                  * assign pages, we need decrease the count. For those pages
                  * that has been assigned, it should be covered by
-                 * domain_relinquish_resources().
+                 * domain_relinquish_resources().  This requires adjusting the
+                 * per NUMA node domain stats.
                  */
-                dec_count = (((1UL << exch.in.extent_order) *
-                              (1UL << in_chunk_order)) -
-                             (j * (1UL << exch.out.extent_order)));
 
                 nrspin_lock(&d->page_alloc_lock);
-                drop_dom_ref = (dec_count &&
-                                !domain_adjust_tot_pages(d, page_to_nid(page), -dec_count));
+                for_each_online_node ( k )
+                {
+                    if ( !node_tot_pages_adjustments[k] )
+                        continue;
+                    d->node_tot_pages[k] += node_tot_pages_adjustments[k];
+                    d->tot_pages += node_tot_pages_adjustments[k];
+
+                    /*
+                     * drop_dom_ref needs setting if and only if d->tot_pages
+                     * drops to 0.
+                     *
+                     * d->tot_pages can only become 0 once, and doesn't
+                     * underflow.  Therefore, if it becomes 0, it does so on
+                     * the final iteration of the loop.
+                     */
+                    drop_dom_ref = !d->tot_pages;
+                }
+                ASSERT_NUMA_PAGE_COUNT(d);
                 nrspin_unlock(&d->page_alloc_lock);
 
                 if ( drop_dom_ref )
@@ -874,6 +891,9 @@ static long memory_exchange(XEN_GUEST_HANDLE_PARAM(xen_memory_exchange_t) arg)
                 free_domheap_pages(page, exch.out.extent_order);
                 goto dying;
             }
+            /* Account the assigned page for updating the per-node pages */
+            node_tot_pages_adjustments[page_to_nid(page)] +=
+                1 << exch.out.extent_order;
 
             if ( __copy_from_guest_offset(&gpfn, exch.out.extent_start,
                                           (i << out_chunk_order) + j, 1) )
@@ -896,6 +916,16 @@ static long memory_exchange(XEN_GUEST_HANDLE_PARAM(xen_memory_exchange_t) arg)
 
         if ( rc )
             goto fail;
+
+        nrspin_lock(&d->page_alloc_lock);
+        /* Success: Adjust d->node_tot_pages[]. d->tot_pages did not change. */
+        for_each_online_node ( k )
+            if ( node_tot_pages_adjustments[k] )
+                d->node_tot_pages[k] += node_tot_pages_adjustments[k];
+        ASSERT_NUMA_PAGE_COUNT(d);
+        nrspin_unlock(&d->page_alloc_lock);
+        memset(node_tot_pages_adjustments, 0,
+               sizeof(node_tot_pages_adjustments));
     }
 
     exch.nr_exchanged = exch.in.nr_extents;
@@ -915,11 +945,31 @@ static long memory_exchange(XEN_GUEST_HANDLE_PARAM(xen_memory_exchange_t) arg)
      * cleared PGC_allocated.
      */
     while ( (page = page_list_remove_head(&in_chunk_list)) )
+    {
         if ( assign_pages(page, 1, d, MEMF_no_refcount) )
         {
             BUG_ON(!d->is_dying);
             free_domheap_page(page);
         }
+        else
+            node_tot_pages_adjustments[page_to_nid(page)] += 1;
+    }
+
+    /*
+     * Adjust page stats with any pages we failed to add assign back to the
+     * domain.
+     */
+    nrspin_lock(&d->page_alloc_lock);
+    for_each_online_node ( k )
+    {
+        if ( !node_tot_pages_adjustments[k] )
+            continue;
+        d->node_tot_pages[k] += node_tot_pages_adjustments[k];
+        d->tot_pages += node_tot_pages_adjustments[k];
+    }
+    ASSERT_NUMA_PAGE_COUNT(d);
+    nrspin_unlock(&d->page_alloc_lock);
+    ASSERT(page_list_empty(&out_chunk_list));
 
  dying:
     rcu_unlock_domain(d);
