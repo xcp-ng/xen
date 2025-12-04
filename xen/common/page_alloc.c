@@ -497,6 +497,13 @@ unsigned long domain_adjust_tot_pages(struct domain *d, nodeid_t node, long page
     ASSERT(rspin_is_locked(&d->page_alloc_lock));
     d->tot_pages += pages;
 
+#ifdef CONFIG_NUMA
+    ASSERT(node != NUMA_NO_NODE);
+    ASSERT(node_online(node));
+    d->node_tot_pages[node] += pages;
+    ASSERT_NUMA_PAGE_COUNT(d);
+#endif
+
     return d->tot_pages;
 }
 

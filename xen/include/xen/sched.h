@@ -625,6 +625,11 @@ struct domain
     unsigned int last_alloc_node;
     spinlock_t node_affinity_lock;
 
+#ifdef CONFIG_NUMA
+    /* Distribution of tot_pages across NUMA nodes. */
+    unsigned int node_tot_pages[MAX_NUMNODES];
+#endif
+
     /* vNUMA topology accesses are protected by rwlock. */
     rwlock_t vnuma_rwlock;
     struct vnuma_info *vnuma;
@@ -692,6 +697,21 @@ static inline unsigned int domain_tot_pages(const struct domain *d)
     ASSERT(d->extra_pages <= d->tot_pages);
 
     return d->tot_pages - d->extra_pages;
+}
+
+/* Called while holding d->page_alloc_lock and in domain_destroy() */
+static inline void ASSERT_NUMA_PAGE_COUNT(const struct domain *d)
+{
+#if defined(CONFIG_NUMA) && defined(CONFIG_DEBUG)
+    unsigned int i, node_total = 0;
+
+    ASSERT(rspin_is_locked(&d->page_alloc_lock));
+
+    for_each_online_node ( i )
+        node_total += d->node_tot_pages[i];
+
+    ASSERT(node_total == d->tot_pages);
+#endif
 }
 
 /* Protect updates/reads (resp.) of domain_list and domain_hash. */
