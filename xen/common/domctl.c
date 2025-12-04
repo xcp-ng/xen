@@ -536,6 +536,10 @@ long do_domctl(XEN_GUEST_HANDLE_PARAM(xen_domctl_t) u_domctl)
         copyback = 1;
         break;
 
+    case XEN_DOMCTL_numa_op:
+        ret = numa_domctl(d, &op->u.numa_op, &copyback);
+        break;
+
     case XEN_DOMCTL_setvcpuaffinity:
     case XEN_DOMCTL_getvcpuaffinity:
         ret = vcpu_affinity_domctl(d, op->cmd, &op->u.vcpuaffinity);

@@ -1203,6 +1203,11 @@ int xc_domain_getvnuma(xc_interface *xch,
                        unsigned int *vdistance,
                        unsigned int *vcpu_to_vnode);
 
+int xc_domain_numa_get_node_pages(xc_interface *xch,
+                                  uint32_t domid,
+                                  uint32_t *nr_nodes,
+                                  uint64_t *tot_pages_per_node);
+
 int xc_domain_soft_reset(xc_interface *xch,
                          uint32_t domid);
 

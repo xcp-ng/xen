@@ -1058,6 +1058,23 @@ struct xen_domctl_vcpu_msrs {
 };
 #endif
 
+/*
+ * Domain NUMA operations
+ * GET_NODE_PAGES: get the number of pages per NUMA node
+ */
+#define XEN_DOMCTL_NUMA_OP_GET_NODE_PAGES       0
+
+/* XEN_DOMCTL_numa_op */
+struct xen_domctl_numa_op {
+    uint32_t op; /* IN */
+    union {
+        struct node_pages {
+            uint32_t nr_nodes; /* IN/OUT: number of nodes for node_tot_pages */
+            XEN_GUEST_HANDLE_64(uint64) node_tot_pages; /* OUT */
+        } node_pages;
+    } u;
+};
+
 /* XEN_DOMCTL_setvnumainfo: specifies a virtual NUMA topology for the guest */
 struct xen_domctl_vnuma {
     /* IN: number of vNUMA nodes to setup. Shall be greater than 0 */
@@ -1300,6 +1317,7 @@ struct xen_domctl {
 #define XEN_DOMCTL_shadow_op                     10
 #define XEN_DOMCTL_max_mem                       11
 #define XEN_DOMCTL_get_runstate_info           1099
+#define XEN_DOMCTL_numa_op                     1101
 #define XEN_DOMCTL_setvcpucontext                12
 #define XEN_DOMCTL_getvcpucontext                13
 #define XEN_DOMCTL_getvcpuinfo                   14
@@ -1390,6 +1408,7 @@ struct xen_domctl {
         struct xen_domctl_getpageframeinfo3 getpageframeinfo3;
         struct xen_domctl_nodeaffinity      nodeaffinity;
         struct xen_domctl_runstate_info_ext domain_runstate;
+        struct xen_domctl_numa_op           numa_op;
         struct xen_domctl_vcpuaffinity      vcpuaffinity;
         struct xen_domctl_shadow_op         shadow_op;
         struct xen_domctl_max_mem           max_mem;

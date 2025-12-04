@@ -628,6 +628,61 @@ static int get_cpumap_len(xc_interface *xch, value cpumap)
 		return xc_len;
 }
 
+/*
+ * Retrieve the total number of pages per NUMA node for a given domain.
+ *
+ * This function will return the total number of pages for each NUMA node
+ * associated with the specified domain ID. The information is retrieved
+ * from the Xen hypervisor and returned as an array of integers, where each
+ * element corresponds to a NUMA node.
+ */
+CAMLprim value stub_xc_domain_numa_get_node_pages(value xch_val, value domid)
+{
+	CAMLparam2(xch_val, domid);
+	CAMLlocal2(o_result, o_result_array);
+	xc_interface *xch = xch_of_val(xch_val);
+	uint64_t *c_node_tot_pages;
+	uint32_t c_nr_nodes = 0, c_domid = Int_val(domid);
+	unsigned int node;
+	int retval;
+
+	/* First call to get the number of nodes to be returned by the hypercall */
+	caml_enter_blocking_section();
+	retval = xc_domain_numa_get_node_pages(xch, c_domid, &c_nr_nodes, NULL);
+	caml_leave_blocking_section();
+
+	if (retval < 0)
+		failwith_xc(xch);
+
+	/* Now get the actual data from xc_domain_numa_get_node_pages() */
+	c_node_tot_pages = malloc(c_nr_nodes * sizeof(*c_node_tot_pages));
+	if (!c_node_tot_pages)
+		caml_raise_out_of_memory();
+
+	caml_enter_blocking_section();
+	retval = xc_domain_numa_get_node_pages(xch, c_domid,
+					       &c_nr_nodes, c_node_tot_pages);
+	caml_leave_blocking_section();
+
+	/* c_nr_nodes has been reduced by the hypercall to the #nodes of the host */
+	if (retval < 0) {
+		free(c_node_tot_pages);
+		failwith_xc(xch);
+	}
+
+	o_result_array = caml_alloc(c_nr_nodes, 0);
+	for (node = 0; node < c_nr_nodes; node++)
+		Store_field(o_result_array, node,
+			    caml_copy_int64(c_node_tot_pages[node]));
+
+	free(c_node_tot_pages);
+
+	o_result = caml_alloc_tuple(1);
+	Store_field(o_result, 0, o_result_array);
+
+	CAMLreturn(o_result);
+}
+
 CAMLprim value stub_xc_vcpu_setaffinity(value xch_val, value domid,
                                         value vcpu, value cpumap)
 {

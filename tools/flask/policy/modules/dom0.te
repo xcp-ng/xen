@@ -98,6 +98,7 @@ allow dom0_t dom0_t:domain2 {
 	gettsc
 	settsc
 	get_runstate_info
+	numa_op
 	setscheduler
 	set_vnumainfo
 	get_vnumainfo

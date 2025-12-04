@@ -2263,6 +2263,53 @@ int xc_domain_getvnuma(xc_interface *xch,
     return rc;
 }
 
+int xc_domain_numa_get_node_pages(xc_interface *xch,
+                                  uint32_t domid,
+                                  uint32_t *nr_nodes,
+                                  uint64_t *node_tot_pages)
+{
+    struct xen_domctl domctl = {
+        .cmd = XEN_DOMCTL_numa_op,
+        .domain = domid,
+        .u.numa_op = {
+            .op = XEN_DOMCTL_NUMA_OP_GET_NODE_PAGES,
+            .u.node_pages.nr_nodes = *nr_nodes,
+        },
+    };
+    DECLARE_HYPERCALL_BOUNCE(node_tot_pages,
+                             *nr_nodes * sizeof(*node_tot_pages),
+                             XC_HYPERCALL_BUFFER_BOUNCE_OUT);
+    int rc = -1;
+    bool fetch_size = !*nr_nodes;
+
+    if ( fetch_size && node_tot_pages )
+    {
+        errno = EINVAL;
+        return -1;
+    }
+
+    if ( xc_hypercall_bounce_pre(xch, node_tot_pages) )
+        return rc;
+
+    set_xen_guest_handle(
+        domctl.u.numa_op.u.node_pages.node_tot_pages,
+        node_tot_pages);
+
+    rc = do_domctl(xch, &domctl);
+    if ( rc )
+        return rc;
+
+    *nr_nodes = domctl.u.numa_op.u.node_pages.nr_nodes;
+    if ( fetch_size )
+        return 0;
+
+    HYPERCALL_BOUNCE_SET_SIZE(node_tot_pages,
+                              *nr_nodes * sizeof(*node_tot_pages));
+    xc_hypercall_bounce_post(xch, node_tot_pages);
+
+    return rc;
+}
+
 int xc_domain_soft_reset(xc_interface *xch,
                          uint32_t domid)
 {
