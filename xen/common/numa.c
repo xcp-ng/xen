@@ -737,26 +737,14 @@ static void cf_check dump_numa(unsigned char key)
     printk("Memory location of each domain:\n");
     for_each_domain ( d )
     {
-        const struct page_info *page;
-        unsigned int page_num_node[MAX_NUMNODES];
         const struct vnuma_info *vnuma;
 
         process_pending_softirqs();
 
         printk("%pd (total: %u):\n", d, domain_tot_pages(d));
 
-        memset(page_num_node, 0, sizeof(page_num_node));
-
-        nrspin_lock(&d->page_alloc_lock);
-        page_list_for_each ( page, &d->page_list )
-        {
-            i = page_to_nid(page);
-            page_num_node[i]++;
-        }
-        nrspin_unlock(&d->page_alloc_lock);
-
         for_each_online_node ( i )
-            printk("    Node %u: %u\n", i, page_num_node[i]);
+            printk("    Node %u: %u\n", i, d->node_tot_pages[i]);
 
         if ( !read_trylock(&d->vnuma_rwlock) )
             continue;
