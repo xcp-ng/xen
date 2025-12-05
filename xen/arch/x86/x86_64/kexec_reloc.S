@@ -93,10 +93,8 @@ FUNC(kexec_reloc, PAGE_SIZE)
         testq   $KEXEC_RELOC_FLAG_COMPAT, %r8
         jnz     .L_call_32_bit
 
-.L_call_64_bit:
-        /* Call the image entry point.  This should never return. */
-        callq   *%rbp
-        ud2
+        /* Jump to the image entry point */
+        jmp     *%rbp
 
 .L_call_32_bit:
 
@@ -186,9 +184,8 @@ FUNC_LOCAL(compatibility_mode)
         xorl    %eax, %eax
         movl    %eax, %cr4
 
-        /* Call the image entry point.  This should never return. */
-        call    *%ebp
-        ud2
+        /* Jump to the image entry point. */
+        jmp     *%ebp
 END(compatibility_mode)
 
         /* Separate code and data into into different cache lines */
