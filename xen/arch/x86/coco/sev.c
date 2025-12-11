@@ -198,7 +198,12 @@ static int sev_domain_finish_memory(struct domain *d) {
         return rc;
     }
 
-    printk(XENLOG_DEBUG"asp: LAUNCH_MEASURE for d%hu: \n",  d->domain_id);
+    printk(XENLOG_DEBUG"asp: LAUNCH_MEASURE for d%hu: ",  d->domain_id);
+    for (int i = 0; i < sd_lm.len; i++) {
+        printk("%02x", d->arch.hvm.svm.sev.measure[i]);
+    }
+    printk("\n");
+    
     d->arch.hvm.svm.sev.status = SEV_GUEST_LSECRET;
     d->arch.hvm.svm.sev.measure_len = sd_lm.len;
 
@@ -335,23 +340,72 @@ static int sev_attestation_report(struct domain *d,
     if (!rc && !psp_ret) {
         return 0;
     }
-    printk(XENLOG_ERR "asp: failed to ATTESTATION for d%hu: psp_ret %d\n",
+    printk(XENLOG_ERR "asp: failed to ATTESTATION for d%hu: psp_ret %x\n",
            d->domain_id, psp_ret);
 
     return rc;
 }
 
-
-
-static struct coco_domain_ops sev_domain_ops = {
-    .prepare_initial_mem = sev_domain_prepare_initial_mem,
-    .domain_initialise = sev_domain_initialise,
-    .domain_creation_finished = sev_domain_creation_finished,
-    .domain_memory_finished = sev_domain_finish_memory,
-    .domain_attestation_report = sev_attestation_report,
-    .domain_destroy = sev_domain_destroy,
-    .asid_alloc = sev_asid_alloc,
-};
+static int sev_domain_update_secret(struct domain *d,
+    coco_domain_secret_t *args) {
+    struct page_info *page;
+    struct sev_data_launch_secret cmd;
+    unsigned int psp_ret = 0;
+    gfn_t gfn;
+    mfn_t mfn = INVALID_MFN;
+    int rc = 0;
+    void *data = _xmalloc(args->sev.secret_len, __alignof__(args->sev.secret));
+    
+    if ( copy_from_guest(data, args->sev.secret, args->sev.secret_len))
+        return -EFAULT;
+    
+    if (unlikely(d->arch.hvm.svm.sev.status != SEV_GUEST_LSECRET)) {
+        printk(XENLOG_ERR "sev: Trying to get an attestation for a guest in wrong state\n");
+    }
+    
+    if (args->sev.secret_len > PAGE_SIZE - (args->sev.gpa & 0xFFF)) {
+        return -ENOSPC;
+    }
+    //TODO : max pages or tot pages ?
+    if (args->sev.gpa + args->sev.secret_len > d->max_pages << 12) {
+        return -ENOSPC;
+    }
+    
+    flush_all(FLUSH_CACHE_WRITEBACK);
+        
+    gfn = gaddr_to_gfn(args->sev.gpa);
+    put_gfn(d, gfn);
+    page = get_page_from_gfn(d, gfn_x(gfn), NULL, P2M_ALLOC);
+    if ( unlikely(!page) )
+        return rc;
+    mfn = page_to_mfn(page);
+    put_page(page);
+    if (!mfn_valid(mfn)) {
+        return -EFAULT;
+    }
+    printk(XENLOG_DEBUG"asp: LAUNCH_UPDATE_DATA d%hu: base=%"PRI_xen_pfn", size=%zx\n",d->domain_id,  mfn_to_maddr(mfn) + (args->sev.gpa & 0xFFF), args->sev.secret_len);
+    
+    cmd.guest_address = mfn_to_maddr(mfn) + (args->sev.gpa & 0xFFF);
+    cmd.guest_len = args->sev.secret_len;
+    
+    cmd.handle = d->arch.hvm.svm.sev.asp_handle;
+    cmd.trans_address = (uint64_t) virt_to_maddr(data);
+    cmd.trans_len = args->sev.secret_len;
+    cmd.hdr_address = (uint64_t) virt_to_maddr(&args->sev.header);
+    cmd.hdr_len = sizeof(args->sev.header);
+    rc = sev_do_cmd(SEV_CMD_LAUNCH_UPDATE_SECRET, (&cmd),
+    &psp_ret, true);
+    
+    xfree(data);
+    
+    if (!rc && !psp_ret) {
+        return 0;
+    }
+    printk(XENLOG_ERR "asp: failed SEV_CMD_LAUNCH_UPDATE_SECRET for d%hu: psp_ret %x\n",
+        d->domain_id, psp_ret);
+        
+    return rc;
+}
 
 static int sev_es_asid_alloc(struct domain *d, struct hvm_asid *asid)
 {
@@ -433,18 +487,6 @@ static int sev_es_domain_vcpu_initialise(struct domain *d)
 
     return 0;
 }
-
-static struct coco_domain_ops sev_es_domain_ops = {
-    .prepare_initial_mem = sev_domain_prepare_initial_mem,
-    .domain_initialise = sev_domain_initialise,
-    .domain_vcpu_initialise = sev_es_domain_vcpu_initialise,
-    .domain_creation_finished = sev_domain_creation_finished,
-    .domain_memory_finished = sev_domain_finish_memory,
-    .domain_destroy = sev_domain_destroy,
-    .domain_attestation_report = sev_attestation_report,
-    .asid_alloc = sev_es_asid_alloc,
-    .show_execution_state = sev_vmsa_dump,
-};
 
 static int sev_init(void)
 {
@@ -640,6 +682,30 @@ static int sev_platform_update(void* firmware, int len) {
 
     return rc;
 }
+
+static struct coco_domain_ops sev_domain_ops = {
+    .prepare_initial_mem = sev_domain_prepare_initial_mem,
+    .domain_initialise = sev_domain_initialise,
+    .domain_creation_finished = sev_domain_creation_finished,
+    .domain_memory_finished = sev_domain_finish_memory,
+    .domain_attestation_report = sev_attestation_report,
+    .domain_destroy = sev_domain_destroy,
+    .asid_alloc = sev_asid_alloc,
+    .domain_update_secret = sev_domain_update_secret
+};
+
+static struct coco_domain_ops sev_es_domain_ops = {
+    .prepare_initial_mem = sev_domain_prepare_initial_mem,
+    .domain_initialise = sev_domain_initialise,
+    .domain_vcpu_initialise = sev_es_domain_vcpu_initialise,
+    .domain_creation_finished = sev_domain_creation_finished,
+    .domain_memory_finished = sev_domain_finish_memory,
+    .domain_destroy = sev_domain_destroy,
+    .domain_attestation_report = sev_attestation_report,
+    .asid_alloc = sev_es_asid_alloc,
+    .show_execution_state = sev_vmsa_dump,
+    .domain_update_secret = sev_domain_update_secret
+};
 
 static struct coco_domain_ops *sev_get_domain_ops(struct domain *d,
     const struct xen_domctl_createdomain *config)

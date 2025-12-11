@@ -6,13 +6,14 @@
 
 #define XEN_COCO_platform_status 0
 #define XEN_COCO_prepare_initial_mem 1
-#define XEN_COCO_finish_initial_mem 8
 #define XEN_COCO_attestation_report 2
 #define XEN_COCO_platform_certs 3
 #define XEN_COCO_platform_csr 4
 #define XEN_COCO_platform_regen_cert 5
 #define XEN_COCO_platform_cert_import 6
 #define XEN_COCO_platform_update 7
+#define XEN_COCO_finish_initial_mem 8
+#define XEN_COCO_update_secrets 9
 
 /**
  * XEN_COCO_platform_status: Get the status of confidential computing platform.
@@ -169,6 +170,28 @@ struct coco_platform_import_certs {
 
 typedef struct coco_platform_import_certs coco_platform_import_certs_t;
 DEFINE_XEN_GUEST_HANDLE(coco_platform_import_certs_t);
+
+struct sev_launch_secret_packet_header {
+	uint32_t compressed:1,
+            rsvd:31;
+	uint8_t iv[16];
+	uint8_t mac[32];
+} __attribute__((packed));
+
+struct coco_domain_secret {
+    domid_t domid;
+    union {
+        struct {
+            struct sev_launch_secret_packet_header header;
+            XEN_GUEST_HANDLE(void) secret;
+            uint64_t secret_len;
+            uint64_t gpa;
+        } sev;
+    };
+};
+
+typedef struct coco_domain_secret coco_domain_secret_t;
+DEFINE_XEN_GUEST_HANDLE(coco_domain_secret_t);
 
 enum coco_certificate_name {
     sev_pek = 0, 

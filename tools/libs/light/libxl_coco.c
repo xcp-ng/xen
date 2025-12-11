@@ -201,3 +201,48 @@ int libxl_coco_import_certificate(libxl_ctx *ctx, char *pek, char *crt) {
     
     return xc_coco_import_certificate(ctx->xch, &import);
 }
+
+int libxl_coco_update_secrets(libxl_ctx *ctx, char *secret_file, char *header_file, uint64_t gpa, uint32_t domid) {
+    coco_domain_secret_t cmd;
+    DECLARE_HYPERCALL_BUFFER(void, buf);
+    int rc, fd = 0;
+
+    puts(secret_file);
+    puts(header_file);
+    
+    cmd.domid = domid;
+    cmd.sev.gpa = gpa;
+    
+    struct stat st;
+    if (stat(secret_file, &st) != 0) {
+         perror("could not stat secret payload");
+        return -1;
+    }
+    cmd.sev.secret_len = st.st_size;
+    
+    if (header_file) {
+        fd = open(header_file, O_RDONLY);
+        rc = read(fd, &cmd.sev.header,sizeof(cmd.sev.header));
+        if (rc != sizeof(cmd.sev.header)) {
+            perror("could not open header file");
+            return -1;
+        }
+    }
+
+    buf = xc_hypercall_buffer_alloc(ctx->xch, buf, cmd.sev.secret_len);
+    fd = open(secret_file, O_RDONLY);
+    rc = read(fd, buf,cmd.sev.secret_len);
+    if (rc != cmd.sev.secret_len) {
+        perror("could not open secret payload file");
+        return -1;
+    }
+
+    set_xen_guest_handle(cmd.sev.secret, buf);
+    
+    rc = xc_coco_update_secret(ctx->xch, &cmd);
+    
+    xc_hypercall_buffer_free(ctx->xch, buf);
+    return rc;
+    
+}
+

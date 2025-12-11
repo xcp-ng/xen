@@ -148,6 +148,24 @@ static long coco_op_get_attestation_report(coco_attestation_report_t *report) {
     return rc;
 }
 
+static long coco_op_update_secret(coco_domain_secret_t *cmd) {
+    struct domain *d;
+    int rc;
+
+    d = get_domain_by_id(cmd->domid);
+
+    if (!d)
+        return -ENOENT;
+    if (!is_coco_domain(d))
+        return -EOPNOTSUPP;
+    if (!d->coco_ops || !d->coco_ops->domain_update_secret)
+        return -EOPNOTSUPP;
+
+    rc = d->coco_ops->domain_update_secret(d, cmd);
+
+    return rc;
+}
+
 static long coco_op_certs(coco_platform_certs_t *certs) {
     if (coco_ops && coco_ops->get_platform_certs) {
         return coco_ops->get_platform_certs(certs);
@@ -209,9 +227,6 @@ long do_coco_op(unsigned int cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
             
             if ( copy_from_guest(&domid, arg, 1) )
                 return -EFAULT;
-            
-            printk(XENLOG_DEBUG"%s: called\n", __func__);
-                
             
             return coco_op_finish_initial_mem(domid);
         }
@@ -299,6 +314,14 @@ long do_coco_op(unsigned int cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
             
             xfree(data);
             return rc;
+        }
+        case XEN_COCO_update_secrets:
+        {
+            coco_domain_secret_t cmd;
+            
+            if ( copy_from_guest(&cmd, arg, 1) )
+                return -EFAULT;
+            return coco_op_update_secret(&cmd);
         }
         
         default:

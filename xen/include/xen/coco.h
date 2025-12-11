@@ -19,10 +19,11 @@ struct coco_domain_ops {
     int (*domain_vcpu_initialise)(struct domain *d);
     int (*domain_creation_finished)(struct domain *d);
     void (*domain_destroy)(struct domain *d);
-
+    
     /* Returns false if the general handler needs to be used. */
     bool (*show_execution_state)(struct vcpu *v);
-
+    
+    int (*domain_update_secret)(struct domain *d, coco_domain_secret_t* cmd);
     int (*domain_attestation_report)(struct domain *d,
         struct coco_attestation_report *report);
 #ifdef CONFIG_X86

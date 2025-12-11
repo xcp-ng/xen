@@ -1569,6 +1569,26 @@ int xc_coco_get_attestation(xc_interface *handle, coco_attestation_report_t *cmd
     return rc;
 }
 
+int xc_coco_update_secret(xc_interface *handle, coco_domain_secret_t *cmd)
+{
+    DECLARE_HYPERCALL_BUFFER(coco_domain_secret_t, arg);
+    int rc;
+
+    arg = xc_hypercall_buffer_alloc(handle, arg, sizeof(*arg));
+    if ( arg == NULL )
+        return -1;
+    memcpy(arg, cmd, sizeof(coco_domain_secret_t));
+
+    rc = xencall2(handle->xcall, __HYPERVISOR_coco_op, XEN_COCO_update_secrets,
+        HYPERCALL_BUFFER_AS_ARG(arg));
+
+    if (!rc) {
+        memcpy(cmd, arg, sizeof(coco_domain_secret_t));
+    }
+    xc_hypercall_buffer_free(handle, arg);
+    return rc;
+}
+
 int xc_domain_setdebugging(xc_interface *xch,
                            uint32_t domid,
                            unsigned int enable)

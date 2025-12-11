@@ -1,5 +1,6 @@
 #include <fcntl.h>
 #include <limits.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 #include <libxl.h>
@@ -16,6 +17,7 @@ static int main_coco_certificate_signing_request(int argc, char **argv);
 static int main_coco_certificate_import(int argc, char **argv);
 static int main_coco_regen_certificate(int argc, char **argv);
 static int main_coco_update_firmware(int argc, char **argv);
+static int main_coco_update_secrets(int argc, char **argv);
 
 static const struct cmd_spec coco_cmd_table[] = {
         { "attestation",
@@ -48,7 +50,33 @@ static const struct cmd_spec coco_cmd_table[] = {
       "Update the platform firmware",
       "<Firmware>",
     },
+    { "secrets",
+      &main_coco_update_secrets, 0, 0,
+      "Update a domain's secrets",
+      "<secret file> <header file> <gpa> <domain>",
+    },
 };
+
+static int main_coco_update_secrets(int argc, char **argv) {
+    char *secret = NULL;
+    char *header = NULL;
+    uint64_t gpa = 0;
+    int opt, rc = 0;
+    uint32_t domid = 0;
+    
+    SWITCH_FOREACH_OPT(opt, "", NULL, "coco update", 4) {
+        /* No options */
+    }
+    
+    /* order subject to change */
+    secret = argv[optind];
+    header = argv[optind+1];
+    gpa = strtoull(argv[optind + 2], NULL, 16);
+    domid = find_domain(argv[optind+3]);
+    rc = libxl_coco_update_secrets(ctx, secret, header, gpa, domid);
+    
+    return rc;
+}
 
 static int main_coco_update_firmware(int argc, char **argv) {
     int opt, rc;
