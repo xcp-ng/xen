@@ -4443,7 +4443,8 @@ int steal_page(
     page_list_del(page, &d->page_list);
 
     /* Unlink from original owner. */
-    if ( !(memflags & MEMF_no_refcount) && !domain_adjust_tot_pages(d, -1) )
+    if ( !(memflags & MEMF_no_refcount) &&
+         !domain_adjust_tot_pages(d, page_to_nid(page), -1) )
         drop_dom_ref = true;
 
     nrspin_unlock(&d->page_alloc_lock);

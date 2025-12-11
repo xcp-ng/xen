@@ -2455,7 +2455,7 @@ gnttab_transfer(
         }
 
         /* Okay, add the page to 'e'. */
-        if ( unlikely(domain_adjust_tot_pages(e, 1) == 1) )
+        if ( unlikely(domain_adjust_tot_pages(e, page_to_nid(page), 1) == 1) )
             get_knownalive_domain(e);
 
         /*
@@ -2481,7 +2481,7 @@ gnttab_transfer(
              * page in the page total
              */
             nrspin_lock(&e->page_alloc_lock);
-            drop_dom_ref = !domain_adjust_tot_pages(e, -1);
+            drop_dom_ref = !domain_adjust_tot_pages(e, page_to_nid(page), -1);
             nrspin_unlock(&e->page_alloc_lock);
 
             if ( ver /* i.e. e->is_dying due to the surrounding if() */ )
