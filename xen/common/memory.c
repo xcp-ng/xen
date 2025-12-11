@@ -876,7 +876,7 @@ static long memory_exchange(XEN_GUEST_HANDLE_PARAM(xen_memory_exchange_t) arg)
 
                 nrspin_lock(&d->page_alloc_lock);
                 drop_dom_ref = (dec_count &&
-                                !domain_adjust_tot_pages(d, -dec_count));
+                                !domain_adjust_tot_pages(d, page_to_nid(page), -dec_count));
                 nrspin_unlock(&d->page_alloc_lock);
 
                 if ( drop_dom_ref )

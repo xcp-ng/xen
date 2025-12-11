@@ -720,7 +720,7 @@ static int page_make_sharable(struct domain *d,
     if ( !validate_only )
     {
         page_set_owner(page, dom_cow);
-        drop_dom_ref = !domain_adjust_tot_pages(d, -1);
+        drop_dom_ref = !domain_adjust_tot_pages(d, page_to_nid(page), -1);
         page_list_del(page, &d->page_list);
     }
 
@@ -766,7 +766,7 @@ static int page_make_private(struct domain *d, struct page_info *page)
     ASSERT(page_get_owner(page) == dom_cow);
     page_set_owner(page, d);
 
-    if ( domain_adjust_tot_pages(d, 1) == 1 )
+    if ( domain_adjust_tot_pages(d, page_to_nid(page), 1) == 1 )
         get_knownalive_domain(d);
     page_list_add_tail(page, &d->page_list);
     nrspin_unlock(&d->page_alloc_lock);
