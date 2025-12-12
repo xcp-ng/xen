@@ -191,9 +191,9 @@ static long coco_op_import_certificate(coco_platform_import_certs_t *cert) {
     }
     return -EOPNOTSUPP;
 }
-static long coco_op_update(void *firmware, int len) {
+static long coco_op_update(coco_update_t *update) {
     if (coco_ops && coco_ops->update_platform) {
-        return coco_ops->update_platform(firmware, len);
+        return coco_ops->update_platform(update);
     }
     return -EOPNOTSUPP;
 }
@@ -302,17 +302,13 @@ long do_coco_op(unsigned int cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
         case XEN_COCO_platform_update:
         {
             coco_update_t update;
-            void *data;
             int rc;
             
             if ( copy_from_guest(&update, arg, 1) )
                 return -EFAULT;
-            data = _xmalloc(update.size, __alignof__(update.size));
-            if ( copy_from_guest(data, update.data, update.size) )
-                return -EFAULT;
-            rc = coco_op_update(data, update.size);
+
+            rc = coco_op_update(&update);
             
-            xfree(data);
             return rc;
         }
         case XEN_COCO_update_secrets:

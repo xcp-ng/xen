@@ -71,7 +71,6 @@ struct coco_prepare_initial_mem {
 typedef struct coco_prepare_initial_mem coco_prepare_initial_mem_t;
 DEFINE_XEN_GUEST_HANDLE(coco_prepare_initial_mem_t);
 
-
 struct sev_attestation_report_response {
 	uint8_t mnonce[16];
 	uint8_t launch_digest[32];
@@ -88,10 +87,12 @@ struct sev_attestation_report_response {
  */
 struct coco_attestation_report {
     domid_t domid;          /* IN */
-	uint8_t mnonce[16];     /* IN */
-	uint32_t len;           /* OUT */
+    uint32_t len;           /* OUT */
     union {
-        struct sev_attestation_report_response sev;
+        struct {
+            uint8_t mnonce[16];     /* IN */
+            struct sev_attestation_report_response rsp; /* OUT */
+        } sev;
     } /* OUT */;
 };
 typedef struct coco_attestation_report coco_attestation_report_t;
@@ -134,11 +135,13 @@ struct sev_certificate_fullchain {
 } __attribute__((packed));
 
 struct coco_platform_certs {
-    uint8_t hwid[128];          /* OUT */
     uint8_t cpu_number;          /* OUT */
     struct coco_platform_status status;          /* OUT */
     union {
-        struct sev_certificate_fullchain sev; /* OUT */
+        struct {
+            struct sev_certificate_fullchain crt; /* OUT */
+            uint8_t hwid[128];          /* OUT */
+        }sev;
     };
 };
 typedef struct coco_platform_certs coco_platform_certs_t;
@@ -153,8 +156,12 @@ typedef struct coco_certificate coco_certificate_t;
 DEFINE_XEN_GUEST_HANDLE(coco_certificate_t);
 
 struct coco_update {
-    XEN_GUEST_HANDLE(void) data;
-    uint32_t size;
+    union {
+        struct {
+            XEN_GUEST_HANDLE(void) data;
+            uint32_t size;
+        } sev;
+    };
 };
 typedef struct coco_update coco_update_t;
 DEFINE_XEN_GUEST_HANDLE(coco_update_t);

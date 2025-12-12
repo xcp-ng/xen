@@ -327,8 +327,8 @@ static int sev_attestation_report(struct domain *d,
     args->len = sizeof(struct sev_attestation_report_response);
     report.reserved = 0;
     report.address = (uint64_t) virt_to_maddr(&args->sev);
-    for (size_t i =0; i < 16; i++) { // or memset ?
-        report.mnonce[i] = args->mnonce[i];
+    for (size_t i =0; i < 16; i++) { // or memcpy ?
+        report.mnonce[i] = args->sev.mnonce[i];
     }
 
     printk(XENLOG_ERR
@@ -565,8 +565,8 @@ static int sev_get_platform_certs(struct coco_platform_certs *certs) {
 
     if (status.api_major > 1 || status.api_minor > 15) {
         // SEV GET_ID is available from SEV API v0.16 and up
-        get_id.address = (uint64_t) virt_to_maddr(&certs->hwid);
-        get_id.len = sizeof(certs->hwid);
+        get_id.address = (uint64_t) virt_to_maddr(&certs->sev.hwid);
+        get_id.len = sizeof(certs->sev.hwid);
 
         rc = sev_do_cmd(SEV_CMD_GET_ID, (void *)(&get_id), &psp_ret, true);
         if ( rc || psp_ret )
@@ -577,12 +577,12 @@ static int sev_get_platform_certs(struct coco_platform_certs *certs) {
         certs->cpu_number = nr_sockets;
     }
 
-    pdh_cert_export.pdh_cert_address = (uint64_t) virt_to_maddr(&certs->sev.pdh);
-    pdh_cert_export.pdh_cert_len = sizeof(certs->sev.pdh);
+    pdh_cert_export.pdh_cert_address = (uint64_t) virt_to_maddr(&certs->sev.crt.pdh);
+    pdh_cert_export.pdh_cert_len = sizeof(certs->sev.crt.pdh);
 
     /* PSP needs contiguous memory for the 3 certificates */
-    pdh_cert_export.cert_chain_address = (uint64_t) virt_to_maddr(&certs->sev.pek);
-    pdh_cert_export.cert_chain_len = sizeof(certs->sev.pek) * 3;
+    pdh_cert_export.cert_chain_address = (uint64_t) virt_to_maddr(&certs->sev.crt.pek);
+    pdh_cert_export.cert_chain_len = sizeof(certs->sev.crt.pek) * 3;
     pdh_cert_export.reserved = 0;
 
     rc = sev_do_cmd(SEV_CMD_PDH_CERT_EXPORT, (void *)(&pdh_cert_export), &psp_ret, true);
@@ -668,9 +668,12 @@ static int sev_import_certificate(coco_platform_import_certs_t *certs) {
     return rc;
 }
 
-static int sev_platform_update(void* firmware, int len) {
+static int sev_platform_update(coco_update_t *update) {
     int rc;
     unsigned int psp_ret = 0;
+    void *firmware = _xmalloc(update->sev.size, __alignof__(update->sev.size));
+    if ( copy_from_guest(firmware, update->sev.data, update->sev.size) )
+        return -EFAULT;
 
     rc = sev_do_cmd(SEV_CMD_SHUTDOWN, NULL, &psp_ret, true);
     if (rc || psp_ret) {
@@ -678,7 +681,8 @@ static int sev_platform_update(void* firmware, int len) {
         printk(XENLOG_ERR "sev: can't update, is there running guest ?\n");
         return rc;
     }
-    rc = sp_update_firmware(firmware, len, &psp_ret);
+    rc = sp_update_firmware(firmware, update->sev.size, &psp_ret);
+    xfree(firmware);
 
     return rc;
 }

@@ -25,7 +25,7 @@ int libxl_coco_domain_attestation(libxl_ctx *ctx, uint32_t domid, int file, bool
             fprintf(stderr, "Error: invalid mmonce length\n");
             return ERROR_INVAL;
         }
-        memcpy(&report.mnonce, data, 16);
+        memcpy(&report.sev.mnonce, data, 16);
         free(data);
     } else {
         if (strnlen(mmonce, 33) != 32) {
@@ -40,7 +40,7 @@ int libxl_coco_domain_attestation(libxl_ctx *ctx, uint32_t domid, int file, bool
                 return -1;
             }
 
-            report.mnonce[i] = (hi << 4) | lo;
+            report.sev.mnonce[i] = (hi << 4) | lo;
         }
 
     }
@@ -95,7 +95,7 @@ int libxl_coco_platform_certs(libxl_ctx *ctx, char* path) {
         for (size_t cpu_n = 0; cpu_n < certs.cpu_number; cpu_n++) {
             printf("CPU ID %lu: ", cpu_n);
             for (size_t i = 0; i < 64; i++) {
-                printf("%02X", certs.hwid[i + cpu_n * 64]);
+                printf("%02X", certs.sev.hwid[i + cpu_n * 64]);
             }
             printf("\n");
         }
@@ -136,16 +136,16 @@ int libxl_coco_update(libxl_ctx *ctx, char* path) {
         return -1;
     }
     DECLARE_HYPERCALL_BUFFER(void, buf);
-    update.size = st.st_size;
-    buf = xc_hypercall_buffer_alloc(ctx->xch, buf, update.size);
+    update.sev.size = st.st_size;
+    buf = xc_hypercall_buffer_alloc(ctx->xch, buf, update.sev.size);
     
     int fd = open(path, O_RDONLY);
-    update.size = read(fd, buf,update.size);
-    if (update.size == -1 ) {
+    update.sev.size = read(fd, buf,update.sev.size);
+    if (update.sev.size == -1 ) {
         perror("could not open firmware file");
         return -1;
     }
-    set_xen_guest_handle(update.data, buf);
+    set_xen_guest_handle(update.sev.data, buf);
     
     rc = xc_coco_update(ctx->xch, &update);
     
