@@ -41,6 +41,8 @@ endif
 # new domain builder
 OBJS-y                 += xg_dom_core.o
 OBJS-y                 += xg_dom_boot.o
+# TODO: add something like CONFIG_COCO ?
+OBJS-y                 += xg_dom_coco.o
 OBJS-y                 += xg_dom_elfloader.o
 OBJS-$(CONFIG_X86)     += xg_dom_bzimageloader.o
 OBJS-$(CONFIG_X86)     += xg_dom_decompress_lz4.o

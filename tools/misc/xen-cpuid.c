@@ -38,6 +38,7 @@ static const struct {
     { "MSR_ARCH_CAPS.lo",         "m10Al" },
     { "MSR_ARCH_CAPS.hi",         "m10Ah" },
     { "CPUID 0x80000021.ecx",      "e21c" },
+    { "CPUID 0x8000001f.eax",      "e1fa" },
 };
 
 #define COL_ALIGN "24"

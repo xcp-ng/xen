@@ -3056,6 +3056,8 @@ skip_usbdev:
 
     xlu_cfg_get_defbool(config, "vpmu", &b_info->vpmu, 0);
 
+    xlu_cfg_get_defbool(config, "coco", &b_info->coco, 0);
+
     xlu_cfg_destroy(config);
 }
 

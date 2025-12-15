@@ -219,6 +219,7 @@ struct xc_dom_image {
     xen_paddr_t lowmem_end;
     xen_paddr_t highmem_end;
     xen_pfn_t vga_hole_size;
+    bool coco; /* 1 if this is a confidential computing guest, 0 otherwise */
 
     /* If unset disables the setup of the IOREQ pages. */
     bool device_model;
