@@ -17,6 +17,7 @@
 #include <asm/hvm/hvm.h>
 #include <asm/hvm/io.h>
 #include <asm/hvm/vlapic.h>
+#include <asm/hvm/svm/sev_es.h>
 #include <asm/hvm/nestedhvm.h> /* for nestedhvm_vcpu_in_guestmode */
 #include <asm/vm_event.h>
 #include <xen/event.h>
@@ -50,9 +51,15 @@ static void svm_inject_nmi(struct vcpu *v)
     /*
      * SVM does not virtualise the NMI mask, so we emulate it by intercepting
      * the next IRET and blocking NMI injection until the intercept triggers.
+     *
+     * Under SEV-ES, we can't intercept IRET, and need to use the alternative
+     * approach described in GHCB specification.
      */
-    vmcb_set_general1_intercepts(
-        vmcb, general1_intercepts | GENERAL1_INTERCEPT_IRET);
+    if ( is_sev_es_domain(v->domain) )
+        v->arch.hvm.svm.sev.in_nmi = true;
+    else
+        vmcb_set_general1_intercepts(
+            vmcb, general1_intercepts | GENERAL1_INTERCEPT_IRET);
 }
 
 static void svm_inject_extint(struct vcpu *v, int vector)
@@ -115,7 +122,8 @@ static void svm_enable_intr_window(struct vcpu *v, struct hvm_intack intack)
      * we inject a VINTR, ...).
      */
     if ( (intack.source == hvm_intsrc_nmi) &&
-         (general1_intercepts & GENERAL1_INTERCEPT_IRET) )
+         ((general1_intercepts & GENERAL1_INTERCEPT_IRET) ||
+          (is_sev_es_domain(v->domain) && v->arch.hvm.svm.sev.in_nmi)) )
         return;
 
     intr = vmcb_get_vintr(vmcb);

@@ -20,6 +20,10 @@
 
 #include "cpu.h"
 
+#ifdef CONFIG_COCO_AMD_SEV
+#include <asm/coco.h>
+#endif
+
 /* 1 = allow, 0 = don't allow guest creation, -1 = don't allow boot */
 int8_t __read_mostly opt_allow_unsafe;
 boolean_param("allow_unsafe", opt_allow_unsafe);
@@ -1325,6 +1329,11 @@ static void cf_check init_amd(struct cpuinfo_x86 *c)
 		setup_force_cpu_cap(X86_FEATURE_XEN_REP_MOVSB);
 
 	amd_log_freq(c);
+
+#ifdef CONFIG_COCO_AMD_SEV
+	if ( cpu_has_sev )
+		coco_register_ops(&sev_coco_ops);
+#endif
 }
 
 const struct cpu_dev __initconst_cf_clobber amd_cpu_dev = {

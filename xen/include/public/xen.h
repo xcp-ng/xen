@@ -898,6 +898,8 @@ typedef struct start_info start_info_t;
 #define SIF_MOD_START_PFN (1<<3)  /* Is mod_start a PFN? */
 #define SIF_VIRT_P2M_4TOOLS (1<<4) /* Do Xen tools understand a virt. mapped */
                                    /* P->M making the 3 level tree obsolete? */
+#define SIF_HVM_GHCB      (1<<5)   /* Domain is SEV-ES/SNP guest so require */
+                                   /* use of GHCB protocol. */
 #define SIF_PM_MASK       (0xFF<<8) /* reserve 1 byte for xen-pm options */
 
 /*

@@ -14,14 +14,18 @@
 #include <xen/sched.h>
 #include <xen/softirq.h>
 
+#include <asm/cpu-policy.h>
 #include <asm/guest-msr.h>
 #include <asm/hvm/svm.h>
+#include <asm/hvm/svm/sev.h>
+#include <asm/hvm/svm/sev_es.h>
 #include <asm/msr-index.h>
 #include <asm/p2m.h>
 #include <asm/spec_ctrl.h>
 
 #include "svm.h"
 #include "vmcb.h"
+#include "sev_es.h"
 
 struct vmcb_struct *alloc_vmcb(void)
 {
@@ -73,21 +77,37 @@ static int construct_vmcb(struct vcpu *v)
     if ( cpu_has_svm_bus_lock )
         vmcb->_general3_intercepts |= GENERAL3_INTERCEPT_BUS_LOCK;
 
-    /* Intercept all debug-register writes. */
-    vmcb->_dr_intercepts = ~0u;
+    if ( !is_sev_es_domain(v->domain) )
+    {
+        /* Intercept all debug-register writes. */
+        vmcb->_dr_intercepts = ~0u;
+        
+        /* Intercept all control-register accesses except for CR2 and CR8. */
+        vmcb->_cr_intercepts = ~(CR_INTERCEPT_CR2_READ |
+                                 CR_INTERCEPT_CR2_WRITE |
+                                 CR_INTERCEPT_CR8_READ |
+                                 CR_INTERCEPT_CR8_WRITE);
+    }
 
-    /* Intercept all control-register accesses except for CR2 and CR8. */
-    vmcb->_cr_intercepts = ~(CR_INTERCEPT_CR2_READ |
-                             CR_INTERCEPT_CR2_WRITE |
-                             CR_INTERCEPT_CR8_READ |
-                             CR_INTERCEPT_CR8_WRITE);
+    if ( is_sev_es_domain(v->domain) )
+    {
+        svm->sev.vmsa_page = alloc_domheap_page(v->domain, MEMF_no_owner);
+        if ( svm->sev.vmsa_page == NULL )
+            return -ENOMEM;
+
+        vmcb->vmsa_pa = page_to_maddr(svm->sev.vmsa_page);
+    }
 
     svm->vmcb_sync_state = vmcb_needs_vmload;
 
     /* I/O and MSR permission bitmaps. */
     svm->msrpm = alloc_xenheap_pages(get_order_from_bytes(MSRPM_SIZE), 0);
     if ( svm->msrpm == NULL )
+    {
+        if ( is_sev_es_domain(v->domain) )
+            free_domheap_page(svm->sev.vmsa_page);
         return -ENOMEM;
+    }
     memset(svm->msrpm, 0xff, MSRPM_SIZE);
 
     svm_disable_intercept_for_msr(v, MSR_FS_BASE);
@@ -187,6 +207,43 @@ static int construct_vmcb(struct vcpu *v)
 
     vmcb->_vintr.fields.vnmi_enable = cpu_has_svm_vnmi;
 
+    if ( is_sev_domain(v->domain) )
+    {
+        vmcb_set_sev(vmcb, true);
+
+        vmcb->_general1_intercepts &= ~(
+            /* SEV guests needs cache management */
+            GENERAL1_INTERCEPT_INVD |
+            /* Intercept not implementable under SEV/SEV-ES */
+            GENERAL1_INTERCEPT_TASK_SWITCH
+        );
+
+        vmcb->_general2_intercepts &= ~GENERAL2_INTERCEPT_WBINVD;
+    }
+
+    if ( is_sev_es_domain(v->domain) )
+    {
+        vmcb_set_sev_es(vmcb, true);
+
+        vmcb->virt_ext.fields.lbr_enable = 1;
+        svm_disable_intercept_for_msr(v, MSR_IA32_DEBUGCTLMSR);
+        svm_disable_intercept_for_msr(v, MSR_IA32_LASTBRANCHFROMIP);
+        svm_disable_intercept_for_msr(v, MSR_IA32_LASTBRANCHTOIP);
+        svm_disable_intercept_for_msr(v, MSR_IA32_LASTINTFROMIP);
+        svm_disable_intercept_for_msr(v, MSR_IA32_LASTINTTOIP);
+
+        vmcb->_general2_intercepts &= ~GENERAL2_INTERCEPT_XSETBV;
+
+        /* We can't intercept SEV-ES guest EFER */
+        svm_disable_intercept_for_msr(v, MSR_EFER);
+
+        svm_disable_intercept_for_msr(v, MSR_AMD64_SEV_ES_GHCB);
+
+        svm->vmcb->ghcb_msr = GHCB_MSR_SEV_INFO(GHCB_VERSION_MAX,
+                                                GHCB_VERSION_MIN,
+                                                raw_cpu_policy.extd.c_bit_pos);
+    }
+
     return 0;
 }
 
@@ -230,6 +287,12 @@ void svm_destroy_vmcb(struct vcpu *v)
         free_xenheap_pages(
             svm->msrpm, get_order_from_bytes(MSRPM_SIZE));
         svm->msrpm = NULL;
+    }
+
+    if ( svm->sev.vmsa_page != NULL )
+    {
+        free_domheap_page(svm->sev.vmsa_page);
+        svm->sev.vmsa_page = NULL;
     }
 
     nv->nv_n1vmcx = NULL;
@@ -283,8 +346,19 @@ void svm_vmcb_dump(const char *from, const struct vmcb_struct *vmcb)
            vmcb_get_np(vmcb)     ? " NP"     : "",
            vmcb_get_sev(vmcb)    ? " SEV"    : "",
            vmcb_get_sev_es(vmcb) ? " SEV_ES" : "");
+    printk("vmsa_pa = %#"PRIx64" ghcb_msr = %#"PRIx64"\n",
+            vmcb->vmsa_pa, vmcb->ghcb_msr);
+    printk("vmgexit_rax = %#"PRIx64" vmgexit_cpl = %u\n",
+           vmcb->vmgexit_rax, vmcb->vmgexit_cpl);
     printk("virtual vmload/vmsave = %d, virt_ext = %#"PRIx64"\n",
            vmcb->virt_ext.fields.vloadsave_enable, vmcb->virt_ext.bytes);
+
+    if ( is_sev_es_domain(curr->domain) )
+    {
+        sev_vmsa_dump(curr);
+        return;
+    }
+
     printk("cpl = %d efer = %#"PRIx64" star = %#"PRIx64" lstar = %#"PRIx64"\n",
            vmcb_get_cpl(vmcb), vmcb_get_efer(vmcb), vmcb->star, vmcb->lstar);
     printk("CR0 = 0x%016"PRIx64" CR2 = 0x%016"PRIx64"\n",

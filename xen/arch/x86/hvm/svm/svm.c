@@ -28,6 +28,8 @@
 #include <asm/hvm/support.h>
 #include <asm/hvm/svm.h>
 #include <asm/hvm/asid.h>
+#include <asm/hvm/svm/sev.h>
+#include <asm/hvm/svm/sev_es.h>
 #include <asm/i387.h>
 #include <asm/idt.h>
 #include <asm/iocap.h>
@@ -270,7 +272,7 @@ static void svm_save_dr(struct vcpu *v)
     struct vmcb_struct *vmcb = v->arch.hvm.svm.vmcb;
     unsigned int flag_dr_dirty = v->arch.hvm.flag_dr_dirty;
 
-    if ( !flag_dr_dirty )
+    if ( is_sev_es_domain(v->domain) || !flag_dr_dirty )
         return;
 
     /* Clear the DR dirty flag and re-enable intercepts for DR accesses. */
@@ -304,7 +306,7 @@ static void svm_save_dr(struct vcpu *v)
 
 static void __restore_debug_registers(struct vmcb_struct *vmcb, struct vcpu *v)
 {
-    if ( v->arch.hvm.flag_dr_dirty )
+    if ( is_sev_es_domain(v->domain) || v->arch.hvm.flag_dr_dirty )
         return;
 
     v->arch.hvm.flag_dr_dirty = 1;
@@ -503,6 +505,9 @@ static unsigned cf_check int svm_get_interrupt_shadow(struct vcpu *v)
     if ( vmcb->int_stat.intr_shadow )
         intr_shadow |= HVM_INTR_SHADOW_MOV_SS | HVM_INTR_SHADOW_STI;
 
+    if ( is_sev_es_domain(v->domain) && v->arch.hvm.svm.sev.in_nmi )
+        intr_shadow |= HVM_INTR_SHADOW_NMI;
+
     if ( vmcb->_vintr.fields.vnmi_enable
          ? vmcb->_vintr.fields.vnmi_blocking
          : (vmcb_get_general1_intercepts(vmcb) & GENERAL1_INTERCEPT_IRET) )
@@ -519,6 +524,10 @@ static void cf_check svm_set_interrupt_shadow(
 
     vmcb->int_stat.intr_shadow =
         !!(intr_shadow & (HVM_INTR_SHADOW_MOV_SS|HVM_INTR_SHADOW_STI));
+
+    if ( WARN_ON(is_sev_es_domain(v->domain)) )
+        /* Don't enable GENERAL1_INTERCEPT_IRET in SEV-ES domain. */
+        return;
 
     if ( vmcb->_vintr.fields.vnmi_enable )
         vmcb->_vintr.fields.vnmi_blocking = block_nmi;
@@ -554,7 +563,7 @@ static void cf_check svm_cpuid_policy_changed(struct vcpu *v)
     const struct cpu_policy *cp = v->domain->arch.cpu_policy;
     u32 bitmap = vmcb_get_exception_intercepts(vmcb);
 
-    if ( opt_hvm_fep )
+    if ( !is_sev_domain(v->domain) && opt_hvm_fep )
         bitmap |= (1U << X86_EXC_UD);
     else
         bitmap &= ~(1U << X86_EXC_UD);
@@ -1816,6 +1825,11 @@ static int cf_check svm_msr_read_intercept(
         break;
 
     case MSR_K8_SYSCFG:
+        if ( is_sev_domain(d) )
+        {
+            *msr_content = SYSCFG_MEM_ENCRYPT;
+            break;
+        }
     case MSR_K8_TOP_MEM1:
     case MSR_K8_TOP_MEM2:
     case MSR_K8_VM_CR:
@@ -2067,11 +2081,23 @@ static void svm_do_msr_access(struct cpu_user_regs *regs)
 static void svm_vmexit_do_hlt(struct vmcb_struct *vmcb,
                               struct cpu_user_regs *regs)
 {
-    unsigned int inst_len;
+    struct vcpu *v = current;
 
-    if ( (inst_len = svm_get_insn_len(current, INSTR_HLT)) == 0 )
-        return;
-    __update_guest_eip(regs, inst_len);
+    if ( is_sev_es_domain(v->domain) )
+    {
+        /* We need to unlock what could prevent interrupts from being injected,
+           as otherwise, the vcpu would get stuck to the blocked state. */
+        v->arch.hvm.svm.sev.in_nmi = false;
+        vmcb->int_stat.intr_shadow = false;
+    }
+    else
+    {
+        unsigned int inst_len;
+
+        if ( (inst_len = svm_get_insn_len(v, INSTR_HLT)) == 0 )
+            return;
+        __update_guest_eip(regs, inst_len);
+    }
 
     hvm_hlt(regs->eflags);
 }
@@ -2104,9 +2130,13 @@ static void svm_vmexit_do_pause(struct cpu_user_regs *regs)
 {
     unsigned int inst_len;
 
-    if ( (inst_len = svm_get_insn_len(current, INSTR_PAUSE)) == 0 )
-        return;
-    __update_guest_eip(regs, inst_len);
+    /* SEV-ES domains advances RIP on VMEXIT_PAUSE */
+    if ( !is_sev_es_domain(current->domain) )
+    {
+        if ( (inst_len = svm_get_insn_len(current, INSTR_PAUSE)) == 0 )
+            return;
+        __update_guest_eip(regs, inst_len);
+    }
 
     /*
      * The guest is running a contended spinlock and we've detected it.
@@ -2514,17 +2544,27 @@ void asmlinkage svm_vmexit_handler(void)
     bool vcpu_guestmode = false;
     struct vlapic *vlapic = vcpu_vlapic(v);
 
-    regs->rax = vmcb->rax;
-    regs->rip = vmcb->rip;
-    regs->rsp = vmcb->rsp;
-    regs->rflags = vmcb->rflags;
-
-    hvm_sanitize_regs_fields(
-        regs, !(vmcb_get_efer(vmcb) & EFER_LMA) || !(vmcb->cs.l));
-
-    v->arch.hvm.guest_cr[2] = vmcb_get_cr2(vmcb);
-    if ( paging_mode_hap(v->domain) )
-        v->arch.hvm.guest_cr[3] = v->arch.hvm.hw_cr[3] = vmcb_get_cr3(vmcb);
+    if ( is_sev_es_domain(v->domain) )
+    {
+        if ( vmcb->int_stat.guest_intr_mask )
+            regs->eflags |= X86_EFLAGS_IF;
+        else
+            regs->eflags &= ~X86_EFLAGS_IF;
+    }
+    else
+    {
+        regs->rax = vmcb->rax;
+        regs->rip = vmcb->rip;
+        regs->rsp = vmcb->rsp;
+        regs->rflags = vmcb->rflags;
+        
+        hvm_sanitize_regs_fields(
+            regs, !(vmcb_get_efer(vmcb) & EFER_LMA) || !(vmcb->cs.l));
+        
+        v->arch.hvm.guest_cr[2] = vmcb_get_cr2(vmcb);
+        if ( paging_mode_hap(v->domain) )
+            v->arch.hvm.guest_cr[3] = v->arch.hvm.hw_cr[3] = vmcb_get_cr3(vmcb);
+    }
 
     if ( nestedhvm_enabled(v->domain) && nestedhvm_vcpu_in_guestmode(v) )
         vcpu_guestmode = 1;
@@ -2643,6 +2683,13 @@ void asmlinkage svm_vmexit_handler(void)
          hvm_event_needs_reinjection(vmcb->exit_int_info.type,
                                      vmcb->exit_int_info.vector) )
         vmcb->event_inj = vmcb->exit_int_info;
+
+    if ( is_sev_es_domain(v->domain) && !is_sev_es_vmexit_ae(exit_reason) )
+    {
+        gprintk(XENLOG_ERR, "unexpected SEV-ES AE exitcode: %08"PRIx64"\n", exit_reason);
+        domain_crash(v->domain);
+        goto out;
+    }
 
     switch ( exit_reason )
     {
@@ -2995,6 +3042,11 @@ void asmlinkage svm_vmexit_handler(void)
         v->arch.hvm.svm.cached_insn_len = 0;
         break;
     }
+    
+    case VMEXIT_VMGEXIT:
+        ASSERT(is_sev_es_domain(v->domain));
+        sev_es_do_vmgexit(v);
+        break;
 
     case VMEXIT_IRET:
     {

@@ -238,6 +238,7 @@
 #define  SYSCFG_MTRR_VAR_DRAM_EN            (_AC(1, ULL) << 20)
 #define  SYSCFG_MTRR_TOM2_EN                (_AC(1, ULL) << 21)
 #define  SYSCFG_TOM2_FORCE_WB               (_AC(1, ULL) << 22)
+#define  SYSCFG_MEM_ENCRYPT                 (_AC(1, ULL) << 23)
 
 #define MSR_K8_IORR_BASE0                   _AC(0xc0010016, U)
 #define MSR_K8_IORR_MASK0                   _AC(0xc0010017, U)
@@ -252,6 +253,8 @@
 #define  VM_CR_SVM_DISABLE                  (_AC(1, ULL) <<  4)
 
 #define MSR_VIRT_SPEC_CTRL                  _AC(0xc001011f, U) /* Layout matches MSR_SPEC_CTRL */
+#define MSR_AMD64_SEV_ES_GHCB               _AC(0xc0010130, U)
+#define MSR_AMD64_SEV                       _AC(0xc0010131, U)
 
 #define MSR_AMD_CSTATE_CFG                  0xc0010296U
 
@@ -388,6 +391,7 @@
 #define MSR_K8_TOP_MEM2			0xc001001dU
 
 #define MSR_K8_HWCR			0xc0010015U
+#define K8_HWCR_SMM_LOCK            (1ULL << 0)
 #define K8_HWCR_TSC_FREQ_SEL		(1ULL << 24)
 #define K8_HWCR_CPUID_USER_DIS		(1ULL << 35)
 

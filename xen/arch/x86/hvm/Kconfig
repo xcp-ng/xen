@@ -24,6 +24,28 @@ config AMD_SVM
 	  If your system includes a processor with AMD-V support, say Y.
 	  If in doubt, say Y.
 
+config COCO_AMD_SEV
+	bool "AMD SEV (UNSUPPORTED)" if AMD && AMD_SVM && COCO && UNSUPPORTED
+	default y
+	select AMD_SP
+	help
+		Enables support for AMD Secure Encrypted Virtualization technology.
+		This option is needed if you want to run confidential guests on a
+		AMD platform that supports it.
+		If in doubt, say N.
+
+config COCO_SEV_STRICT_GHCB
+	bool "Enforce strict GHCB protocol" if COCO_AMD_SEV
+	default n
+	help
+		Enforce strict adherence to GHCB specification and add additional checks to
+		the valid bitmap. All GHCB calls that are invalid according to specification
+		are rejected as malformed. This option doesn't impact the security posture of
+		the hypervisor.
+		If not set, Xen will not check for the valid bitmap field.
+		You usually don't want this option unless you are looking to debug a guest.
+		If in doubt, say N.
+
 config INTEL_VMX
 	bool "Intel VT-x" if EXPERT
 	default INTEL

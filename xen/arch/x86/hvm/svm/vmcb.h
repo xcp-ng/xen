@@ -61,6 +61,16 @@ enum GenericIntercept2bits
     GENERAL2_INTERCEPT_MWAIT_CONDITIONAL = 1 << 12,
     GENERAL2_INTERCEPT_XSETBV  = 1 << 13,
     GENERAL2_INTERCEPT_RDPRU   = 1 << 14,
+    GENERAL2_TRAP_EFER_WRITE   = 1 << 15,
+    GENERAL2_TRAP_CR0_WRITE    = 1 << 16,
+    GENERAL2_TRAP_CR1_WRITE    = 1 << 17,
+    GENERAL2_TRAP_CR2_WRITE    = 1 << 18,
+    GENERAL2_TRAP_CR3_WRITE    = 1 << 19,
+    GENERAL2_TRAP_CR4_WRITE    = 1 << 20,
+    GENERAL2_TRAP_CR5_WRITE    = 1 << 21,
+    GENERAL2_TRAP_CR6_WRITE    = 1 << 22,
+    GENERAL2_TRAP_CR7_WRITE    = 1 << 23,
+    GENERAL2_TRAP_CR8_WRITE    = 1 << 24,
 };
 
 enum GenericIntercept3bits
@@ -291,9 +301,38 @@ enum VMEXIT_EXITCODE
     VMEXIT_BUS_LOCK         = 165, /* 0xa5 */
     /* Remember to also update VMEXIT_NPF_PERFC! */
     VMEXIT_NPF              = 1024, /* 0x400, nested paging fault */
+    VMEXIT_VMGEXIT          = 1027, /* 0x403, VMGEXIT instruction */
     /* Remember to also update SVM_PERF_EXIT_REASON_SIZE! */
-    VMEXIT_INVALID          =  -1
+    VMEXIT_INVALID          =  -1,
+    VMEXIT_BUSY             =  -2, /* BUSY bit set in VMSA */
 };
+
+static inline
+bool is_sev_es_vmexit_ae(uint64_t exitcode)
+{
+    switch (exitcode) {
+        case VMEXIT_EXCEPTION_MC:
+        case VMEXIT_INTR:
+        case VMEXIT_NMI:
+        case VMEXIT_SMI:
+        case VMEXIT_INIT:
+        case VMEXIT_VINTR:
+        case VMEXIT_PAUSE:
+        case VMEXIT_HLT:
+        case VMEXIT_SHUTDOWN:
+        /* case VMEXIT_EFER_WRITE_TRAP: */
+        /* case VMEXIT_CR[0-15]_WRITE_TRAP: */
+        /* case VMEXIT_BUSLOCK: */
+        /* case VMEXIT_IDLE_HLT: */
+        case VMEXIT_NPF:
+        case VMEXIT_VMGEXIT:
+        case VMEXIT_INVALID:
+        case VMEXIT_BUSY:
+            return true;
+        default:
+            return false;
+    }
+}
 
 enum
 {
@@ -486,7 +525,8 @@ struct vmcb_struct {
         };
         uint64_t _np_ctrl;
     };
-    u64 res08[2];
+    u64 res08[1];
+    u64 ghcb_msr;               /* offset 0xA0 */
     intinfo_t event_inj;        /* offset 0xA8 */
     u64 _h_cr3;                 /* offset 0xB0 - cleanbit 4 */
     virt_ext_t virt_ext;        /* offset 0xB8 */
@@ -495,13 +535,17 @@ struct vmcb_struct {
     u64 nextrip;                /* offset 0xC8 */
     u8  guest_ins_len;          /* offset 0xD0 */
     u8  guest_ins[15];          /* offset 0xD1 */
-    u64 res10a[8];              /* offset 0xE0 */
+    u64 res10a[5];              /* offset 0xE0 */
+    u64 vmsa_pa;                /* offset 0x108 */
+    u64 vmgexit_rax;            /* offset 0x110 */
+    u8  vmgexit_cpl;            /* offset 0x118 */
+    u8  res10b[7];              /* offset 0x119 */
     u16 bus_lock_count;         /* offset 0x120 */
-    u16 res10b[3];              /* offset 0x122 */
-    u64 res10c[91];             /* offset 0x128 pad to save area */
-
+    u16 res10c[3];              /* offset 0x122 */
+    u64 res10d[91];             /* offset 0x128 pad to save area */
     /* State Save area */
     union {
+        uint64_t vmsa_start;
         struct segment_register sreg[6];
         struct {
             struct segment_register es;  /* offset 0x400 - cleanbit 8 */
@@ -553,7 +597,32 @@ struct vmcb_struct {
     u64 _lastinttoip;           /* cleanbit 10 */
     u64 res17[9];
     u64 spec_ctrl;
-    u64 res18[291];
+    /* SEV-ES VMSA-specific fields, reserved in VMCB */
+    struct {
+        u32 pkru;
+        u32 tsc_aux;
+        u64 secure_tsc_scale;
+        u64 secure_tsc_offset;
+        u64 reg_prot_nonce;
+        u64 rcx;
+        u64 rdx;
+        u64 rbx;
+        u64 secure_avic_ctl;
+        u64 rbp;
+        u64 rsi;
+        u64 rdi;
+        u64 r8;
+        u64 r9;
+        u64 r10;
+        u64 r11;
+        u64 r12;
+        u64 r13;
+        u64 r14;
+        u64 r15;
+        u64 res1[13];
+        u64 xcr0;
+    } vmsa_regs;
+    u64 res18[258];
 };
 
 struct vmcb_struct *alloc_vmcb(void);

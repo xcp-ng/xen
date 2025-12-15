@@ -308,6 +308,14 @@ struct xen_arch_domainconfig {
  */
 #define XEN_X86_MSR_RELAXED (1u << 0)
     uint32_t misc_flags;
+    union {
+        struct {
+/* Use provided policy if set. If cleared, use default Xen policy. */
+#define XEN_X86_SEV_POLICY_VALID (1u << 0)
+            uint32_t flags;
+            uint64_t policy;
+        } sev;
+    } coco;
 };
 
 /* Max  XEN_X86_* constant. Used for ABI checking. */

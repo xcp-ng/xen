@@ -23,6 +23,7 @@
 #define FEATURESET_m10Al     16 /* 0x0000010a.eax      */
 #define FEATURESET_m10Ah     17 /* 0x0000010a.edx      */
 #define FEATURESET_e21c      18 /* 0x80000021.ecx      */
+#define FEATURESET_e1fa      19 /* 0x8000001f.eax      */
 
 struct cpuid_leaf
 {
@@ -326,7 +327,13 @@ struct cpu_policy
             uint64_t :64, :64; /* Leaf 0x8000001c. */
             uint64_t :64, :64; /* Leaf 0x8000001d - Cache properties. */
             uint64_t :64, :64; /* Leaf 0x8000001e - Extd APIC/Core/Node IDs. */
-            uint64_t :64, :64; /* Leaf 0x8000001f - AMD Secure Encryption. */
+            /* Leaf 0x8000001f - AMD Secure Memory Encryption. */
+            union {
+                uint32_t e1fa;
+                struct { DECL_BITFIELD(e1fa); };
+            };
+            uint32_t c_bit_pos:6, physaddr_red:6, num_vmpl:4, :16;
+            uint32_t max_sev_guests, min_no_es_asid;
             uint64_t :64, :64; /* Leaf 0x80000020 - Platform QoS. */
 
             /* Leaf 0x80000021 - Extended Feature 2 */

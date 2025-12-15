@@ -41,6 +41,10 @@
 #include <public/domctl.h>
 #include <public/vm_event.h>
 
+#ifdef CONFIG_COCO_AMD_SEV
+#include <asm/hvm/svm/sev.h>
+#endif
+
 static int update_domain_cpu_policy(struct domain *d,
                                     xen_domctl_cpu_policy_t *xdpc)
 {
@@ -149,6 +153,13 @@ void arch_get_domain_info(const struct domain *d,
 
     info->arch_config.emulation_flags = d->arch.emulation_flags;
     info->gpaddr_bits = hap_paddr_bits;
+    #ifdef CONFIG_COCO_AMD_SEV
+    if ( is_sev_domain(d) )
+    {
+        info->arch_config.coco.sev.flags = XEN_X86_SEV_POLICY_VALID;
+        info->arch_config.coco.sev.policy = d->arch.hvm.svm.sev.asp_policy.raw;
+    }
+    #endif
 }
 
 static int do_vmtrace_op(struct domain *d, struct xen_domctl_vmtrace_op *op,

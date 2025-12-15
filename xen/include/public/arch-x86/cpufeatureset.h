@@ -405,6 +405,11 @@ XEN_CPUFEATURE(ITS_NO,             16*32+62) /*!A No Indirect Target Selection *
 XEN_CPUFEATURE(TSA_SQ_NO,          18*32+ 1) /*A  No Store Queue Transitive Scheduler Attacks */
 XEN_CPUFEATURE(TSA_L1_NO,          18*32+ 2) /*A  No L1D Transitive Scheduler Attacks */
 
+/* AMD-defined CPU features, CPUID level 0x8000001f.eax, word 19 */
+XEN_CPUFEATURE(SME,                19*32+ 0) /*   Secure Memory Encryption */
+XEN_CPUFEATURE(SEV,                19*32+ 1) /*   Secure Encrypted Virtualization */
+XEN_CPUFEATURE(SEV_ES,             19*32+ 3) /*   SEV Encrypted State */
+
 #endif /* XEN_CPUFEATURE */
 
 /* Clean up from a default include.  Close the enum (for C). */
