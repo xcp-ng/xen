@@ -38,6 +38,8 @@ TODO:
 #define ASP_CMD_BUFF_SIZE    0x1000
 #define SEV_FW_BLOB_MAX_SIZE 0x4000
 
+#define SEV_ES_TMR_SIZE	 (1024 * 1024)
+
 /*
  * SEV platform state
  */
@@ -116,6 +118,7 @@ struct amd_sp_dev
     struct list_head list;
     struct pci_dev   *pdev;
     struct  psp_vdata *vdata;
+    struct page_info *es_tmr_region;
     void    *io_base;
     paddr_t io_pbase;
     size_t  io_size;
@@ -463,9 +466,12 @@ static int __init sp_update_firmware(struct amd_sp_dev *sp)
 
 static int __init sp_alloc_special_regions(struct amd_sp_dev *sp)
 {
-    /*
-     * FIXME: allocate TMP memory area for SEV-ES
-     */
+    wbinvd();
+    sp->es_tmr_region = alloc_domheap_pages(NULL, get_order_from_bytes(SEV_ES_TMR_SIZE), 0);
+    
+    if ( !sp->es_tmr_region )
+        dprintk(XENLOG_ERR, "asp-%pp: can't allocate TMR memory (ES unavailable)\n", &sp->pdev->sbdf);
+
     return 0;
 }
 
@@ -479,6 +485,13 @@ static int __init sp_do_init(struct amd_sp_dev *sp)
         return 0;
 
     memset(&data, 0, sizeof(data));
+
+    if ( sp->es_tmr_region )
+    {
+        data.flags = SEV_INIT_FLAGS_SEV_ES;
+        data.tmr_address = page_to_maddr(sp->es_tmr_region);
+        data.tmr_len = SEV_ES_TMR_SIZE;
+    }
 
     rc = _sev_do_cmd_sync(sp, SEV_CMD_INIT, &data, &err);
     if ( rc )
@@ -759,6 +772,9 @@ static void sp_dev_destroy(struct amd_sp_dev* sp)
 
     if ( sp->cmd_buff )
         free_xenheap_pages(sp->cmd_buff, get_order_from_bytes(ASP_CMD_BUFF_SIZE));
+
+    if ( sp->es_tmr_region )
+        free_domheap_pages(sp->es_tmr_region, get_order_from_bytes(ASP_CMD_BUFF_SIZE));
 
     xfree(sp);
 }

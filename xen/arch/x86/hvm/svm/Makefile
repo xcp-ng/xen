@@ -3,5 +3,7 @@ obj-y += emulate.o
 obj-bin-y += entry.o
 obj-y += intr.o
 obj-y += nestedsvm.o
+obj-$(CONFIG_COCO_AMD_SEV) += sev_es.o
+obj-$(CONFIG_COCO_AMD_SEV) += sev_es_debug.o
 obj-y += svm.o
 obj-y += vmcb.o

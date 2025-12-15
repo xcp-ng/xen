@@ -9,6 +9,7 @@
 #include <asm/cpuid.h>
 #include <asm/guest-msr.h>
 #include <asm/hvm/viridian.h>
+#include <asm/hvm/svm/sev.h>
 #include <asm/xstate.h>
 
 #define EMPTY_LEAF ((struct cpuid_leaf){})
@@ -252,6 +253,10 @@ void guest_cpuid(const struct vcpu *v, uint32_t leaf,
             return;
 
         *res = array_access_nospec(p->extd.raw, leaf & 0xffff);
+
+        /* For a SEV guest, passthrough the host SEV leaf. */
+        if ( is_sev_domain(d) && leaf == 0x8000001fU )
+            *res = host_cpu_policy.extd.raw[0x1f];
         break;
 
     default:

@@ -10,6 +10,16 @@
 
 #include <xen/types.h>
 
+#include <asm/psp-sev.h>
+
+struct sev_state {
+    uint32_t asp_handle;
+    union sev_guest_policy asp_policy;
+    uint8_t  measure[48];
+    uint32_t measure_len; /* 48 bytes */
+    unsigned long flags;
+};
+
 struct svm_domain {
     /* OSVW MSRs */
     union {
@@ -19,6 +29,25 @@ struct svm_domain {
             uint64_t status;
         };
     } osvw;
+
+#ifdef CONFIG_COCO_AMD_SEV
+    struct sev_state sev;
+#endif
+};
+
+struct ghcb;
+
+struct sev_vcpu {
+    struct page_info *vmsa_page;
+    struct page_info *ghcb_page;
+    uint64_t ghcb_gfn;
+    struct ghcb *ghcb_map;
+
+    /*
+     * Track if vCPU is in NMI, only used for SEV-ES.
+     * This is used to implement GHCB 4.4 Non-Maskable Interrupts.
+     */
+    bool in_nmi;
 };
 
 struct svm_vcpu {
@@ -26,6 +55,8 @@ struct svm_vcpu {
     u64    vmcb_pa;
     unsigned long *msrpm;
     int    launch_core;
+
+    struct sev_vcpu sev;
 
     uint8_t vmcb_sync_state; /* enum vmcb_sync_state */
 
