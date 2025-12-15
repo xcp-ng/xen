@@ -27,6 +27,12 @@ int libxl__arch_domain_prepare_config(libxl__gc *gc,
     if (libxl_defbool_val(d_config->b_info.arch_x86.msr_relaxed))
         config->arch.misc_flags |= XEN_X86_MSR_RELAXED;
 
+    if ( d_config->b_info.arch_x86.sev_policy != ~0 )
+    {
+        config->arch.coco.sev.flags |= XEN_X86_SEV_POLICY_VALID;
+        config->arch.coco.sev.policy = d_config->b_info.arch_x86.sev_policy;
+    }
+
     if (libxl_defbool_val(d_config->b_info.trap_unmapped_accesses)) {
             LOG(ERROR, "trap_unmapped_accesses is not supported on x86\n");
             return ERROR_FAIL;
