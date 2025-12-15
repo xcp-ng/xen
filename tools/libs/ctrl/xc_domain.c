@@ -20,8 +20,10 @@
  */
 
 #include "xc_private.h"
+#include "xenctrl.h"
 #include <xen/memory.h>
 #include <xen/hvm/hvm_op.h>
+#include <xen/hvm/coco.h>
 
 int xc_domain_create(xc_interface *xch, uint32_t *pdomid,
                      struct xen_domctl_createdomain *config)
@@ -1487,6 +1489,40 @@ int xc_get_hvm_param(xc_interface *handle, uint32_t dom, int param, unsigned lon
         return ret;
     *value = v;
     return 0;
+}
+
+int xc_coco_platform_status(xc_interface *handle, coco_platform_status_t *status)
+{
+    DECLARE_HYPERCALL_BUFFER(coco_platform_status_t, arg);
+    int rc;
+
+    arg = xc_hypercall_buffer_alloc(handle, arg, sizeof(*arg));
+    if ( arg == NULL )
+        return -1;
+    memcpy(arg, status, sizeof(coco_platform_status_t));
+
+    rc = xencall2(handle->xcall, __HYPERVISOR_coco_op, XEN_COCO_platform_status,
+                  HYPERCALL_BUFFER_AS_ARG(arg));
+
+    xc_hypercall_buffer_free(handle, arg);
+    return rc;
+}
+
+int xc_coco_prepare_initial_mem(xc_interface *handle, coco_prepare_initial_mem_t *cmd)
+{
+    DECLARE_HYPERCALL_BUFFER(coco_prepare_initial_mem_t, arg);
+    int rc;
+
+    arg = xc_hypercall_buffer_alloc(handle, arg, sizeof(*arg));
+    if ( arg == NULL )
+        return -1;
+    memcpy(arg, cmd, sizeof(coco_prepare_initial_mem_t));
+
+    rc = xencall2(handle->xcall, __HYPERVISOR_coco_op, XEN_COCO_prepare_initial_mem,
+                  HYPERCALL_BUFFER_AS_ARG(arg));
+
+    xc_hypercall_buffer_free(handle, arg);
+    return rc;
 }
 
 int xc_domain_setdebugging(xc_interface *xch,

@@ -46,6 +46,7 @@
 #include <xen/xsm/flask_op.h>
 #include <xen/kexec.h>
 #include <xen/platform.h>
+#include <xen/hvm/coco.h>
 
 #include "xentoollog.h"
 #include "xen-barrier.h"
@@ -1686,6 +1687,9 @@ int xc_hvm_param_get(xc_interface *handle, uint32_t dom, uint32_t param, uint64_
 /* Deprecated: use xc_hvm_param_set/get() instead. */
 int xc_set_hvm_param(xc_interface *handle, uint32_t dom, int param, unsigned long value);
 int xc_get_hvm_param(xc_interface *handle, uint32_t dom, int param, unsigned long *value);
+
+int xc_coco_platform_status(xc_interface *handle, coco_platform_status_t *status);
+int xc_coco_prepare_initial_mem(xc_interface *handle, coco_prepare_initial_mem_t *cmd);
 
 /* HVM guest pass-through */
 int xc_assign_device(xc_interface *xch,

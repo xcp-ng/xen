@@ -343,6 +343,7 @@ int libxl_cpuid_parse_config(libxl_cpuid_policy_list *policy, const char* str)
         MSR_ENTRY(0x10a, CPUID_REG_EAX),
         MSR_ENTRY(0x10a, CPUID_REG_EDX),
         CPUID_ENTRY(0x80000021, NA, CPUID_REG_ECX),
+        CPUID_ENTRY(0x8000001f, NA, CPUID_REG_EAX),
 #undef MSR_ENTRY
 #undef CPUID_ENTRY
     };

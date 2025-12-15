@@ -1112,6 +1112,7 @@ int libxl__build_hvm(libxl__gc *gc, uint32_t domid,
     }
 
     dom->container_type = XC_DOM_HVM_CONTAINER;
+    dom->coco = libxl_defbool_val(info->coco);
 
     /* The params from the configuration file are in Mb, which are then
      * multiplied by 1 Kb. This was then divided off when calling
