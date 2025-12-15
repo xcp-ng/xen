@@ -750,6 +750,7 @@ libxl_domain_build_info = Struct("domain_build_info",[
     ("arch_x86", Struct(None, [("msr_relaxed", libxl_defbool),
                                ("x2apic_preenable", libxl_defbool),
                                ("fixed_mem_layout", libxl_defbool),
+                               ("sev_policy", uint32, {'init_val': '~0U'}),
                               ])),
     # Alternate p2m is not bound to any architecture or guest type, as it is
     # supported by x86 HVM and ARM support is planned.

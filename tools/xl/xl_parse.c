@@ -3113,6 +3113,9 @@ skip_usbdev:
 
     xlu_cfg_get_defbool(config, "coco", &b_info->coco, 0);
 
+    if (!xlu_cfg_get_long(config, "sev_policy", &l, 0))
+        b_info->arch_x86.sev_policy = l;
+
     xlu_cfg_destroy(config);
 }
 
