@@ -131,4 +131,10 @@ long do_coco_op(unsigned int cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
     }
 }
 
+long do_sev_console_op(unsigned long c)
+{
+    printk("%c", (unsigned char)c);
+    return 0;
+}
+
 __initcall(coco_init);

@@ -216,6 +216,9 @@ xenpmu_op(unsigned int op, xen_pmu_params_t *arg)
 coco_op(unsigned int cmd, void *arg)
 #endif
 
+#ifdef CONFIG_COCO_AMD_SEV
+sev_console_op(unsigned long c)
+#endif
 #ifdef CONFIG_PV
 caller: pv64
 #ifdef CONFIG_PV32
@@ -302,6 +305,9 @@ paging_domctl_cont                 do       do       do       do       -
 #endif
 #ifdef CONFIG_COCO
 coco_op                            do       do       do       do       do
+#endif
+#ifdef CONFIG_COCO_AMD_SEV
+sev_console_op                     do       do       do       do       -
 #endif
 
 #endif /* !CPPCHECK */
