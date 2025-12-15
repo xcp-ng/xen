@@ -2,17 +2,18 @@ XEN_ROOT = $(CURDIR)/../..
 include $(XEN_ROOT)/tools/Rules.mk
 
 SUBDIRS-y :=
+SUBDIRS-y += depriv
+SUBDIRS-y += paging-mempool
+SUBDIRS-y += pdx
 SUBDIRS-y += resource
+SUBDIRS-y += vpci
+SUBDIRS-y += xenstore
+
 SUBDIRS-$(CONFIG_X86) += cpu-policy
 SUBDIRS-$(CONFIG_X86) += tsx
 ifneq ($(clang),y)
 SUBDIRS-$(CONFIG_X86) += x86_emulator
 endif
-SUBDIRS-y += xenstore
-SUBDIRS-y += depriv
-SUBDIRS-y += pdx
-SUBDIRS-y += vpci
-SUBDIRS-y += paging-mempool
 
 .PHONY: all clean install distclean uninstall
 all clean distclean install uninstall: %: subdirs-%
