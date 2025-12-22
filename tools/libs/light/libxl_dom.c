@@ -20,6 +20,7 @@
 #include "libxl_internal.h"
 #include "libxl_arch.h"
 
+#include <stdio.h>
 #include <xen/hvm/hvm_info_table.h>
 #include <xen/hvm/hvm_xs_strings.h>
 #include <xen/hvm/e820.h>
@@ -1067,6 +1068,16 @@ static int libxl__domain_firmware(libxl__gc *gc,
             /* Only accept a non-empty file */
             dom->acpi_modules[0].data = data;
             dom->acpi_modules[0].length = (uint32_t)datalen;
+        }
+    }
+    
+    if (dom->coco) {
+        printf("OMG ?\n");
+        void *secrets = calloc(1, 0xC00);
+        rc = xc_dom_module_mem(dom, secrets, 0xC00, "COCO_SECRETS");
+        printf("NO OMG ? 2\n");
+        if (rc) {
+            printf("NO OMG ?\n");
         }
     }
 
