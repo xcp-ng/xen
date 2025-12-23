@@ -1525,7 +1525,7 @@ int xc_coco_prepare_initial_mem(xc_interface *handle, coco_prepare_initial_mem_t
         return -1;
     memcpy(arg, cmd, sizeof(coco_prepare_initial_mem_t));
 
-    rc = xencall2(handle->xcall, __HYPERVISOR_coco_op, XEN_COCO_prepare_initial_mem,
+    rc = xencall2(handle->xcall, __HYPERVISOR_coco_op, XEN_COCO_domain_prepare_initial_mem,
                   HYPERCALL_BUFFER_AS_ARG(arg));
 
     xc_hypercall_buffer_free(handle, arg);
@@ -1542,7 +1542,7 @@ int xc_coco_finish_initial_mem(xc_interface *handle, domid_t domid)
         return -1;
     *arg = domid;
 
-    rc = xencall2(handle->xcall, __HYPERVISOR_coco_op, XEN_COCO_finish_initial_mem,
+    rc = xencall2(handle->xcall, __HYPERVISOR_coco_op, XEN_COCO_domain_finish_initial_mem,
                   HYPERCALL_BUFFER_AS_ARG(arg));
 
     xc_hypercall_buffer_free(handle, arg);
@@ -1559,7 +1559,7 @@ int xc_coco_get_attestation(xc_interface *handle, coco_attestation_report_t *cmd
         return -1;
     memcpy(arg, cmd, sizeof(coco_attestation_report_t));
 
-    rc = xencall2(handle->xcall, __HYPERVISOR_coco_op, XEN_COCO_attestation_report,
+    rc = xencall2(handle->xcall, __HYPERVISOR_coco_op, XEN_COCO_domain_attestation_report,
         HYPERCALL_BUFFER_AS_ARG(arg));
 
     if (!rc) {
@@ -1579,7 +1579,7 @@ int xc_coco_update_secret(xc_interface *handle, coco_domain_secret_t *cmd)
         return -1;
     memcpy(arg, cmd, sizeof(coco_domain_secret_t));
 
-    rc = xencall2(handle->xcall, __HYPERVISOR_coco_op, XEN_COCO_update_secrets,
+    rc = xencall2(handle->xcall, __HYPERVISOR_coco_op, XEN_COCO_domain_update_secrets,
         HYPERCALL_BUFFER_AS_ARG(arg));
 
     if (!rc) {

@@ -13,16 +13,17 @@ extern __read_mostly struct coco_platform_status platform_status;
 
 struct coco_domain_ops {
     int (*prepare_initial_mem)(struct domain *d, gfn_t gfn, size_t page_count);
+
     /* HVM domain hooks */
     int (*domain_initialise)(struct domain *d);
     int (*domain_memory_finished)(struct domain *d);
     int (*domain_vcpu_initialise)(struct domain *d);
     int (*domain_creation_finished)(struct domain *d);
     void (*domain_destroy)(struct domain *d);
-    
+
     /* Returns false if the general handler needs to be used. */
     bool (*show_execution_state)(struct vcpu *v);
-    
+
     int (*domain_update_secret)(struct domain *d, coco_domain_secret_t* cmd);
     int (*domain_attestation_report)(struct domain *d,
         struct coco_attestation_report *report);
@@ -34,12 +35,13 @@ struct coco_domain_ops {
 
 struct coco_ops {
     const char *name;
+
     int (*init)(void);
     int (*get_platform_status)(coco_platform_status_t *status);
     int (*get_platform_certs)(coco_platform_certs_t *certs);
     int (*get_certificate_signing_request)(coco_certificate_t *certs);
     int (*import_certificates)(coco_platform_import_certs_t *certs);
-    int (*regen_platform_cert)(coco_certificate_name_t cert);
+    int (*regen_platform_cert)(coco_certificate_name_t *cert);
     int (*update_platform)(coco_update_t *update);
     struct coco_domain_ops *(*get_domain_ops)(struct domain *d,
         const struct xen_domctl_createdomain *config);

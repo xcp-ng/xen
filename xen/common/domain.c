@@ -758,7 +758,7 @@ static int sanitise_domain_config(struct xen_domctl_createdomain *config)
             dprintk(XENLOG_INFO, "COCO is not available\n");
             return -EINVAL;
         }
-
+    
         if ( !hvm )
         {
             dprintk(XENLOG_INFO, "COCO requested for non-HVM guest\n");
@@ -1312,7 +1312,7 @@ int domain_kill(struct domain *d)
             unmap_guest_area(v, &v->runstate_guest_area);
         }
         d->is_dying = DOMDYING_dead;
-        /* Mem event cleanup has to go here because the rings
+        /* Mem event cleanup has to go here because the rings 
          * have to be put before we call put_domain. */
         vm_event_cleanup(d);
         domain_changed_state(d);
@@ -1337,7 +1337,7 @@ void __domain_crash(struct domain *d)
     {
         printk("Domain %d (vcpu#%d) crashed on cpu#%d:\n",
                d->domain_id, current->vcpu_id, smp_processor_id());
-
+        
         if ( !coco_show_execution_state(current) )
             show_execution_state(guest_cpu_user_regs());
     }
@@ -2348,7 +2348,7 @@ long common_vcpu_fast_op(struct cpu_user_regs *regs, int cmd, struct vcpu *v)
     switch ( cmd )
     {
     case VCPUOP_initialise:
-        rc = arch_initialise_vcpu(v, (XEN_GUEST_HANDLE(void)) {
+        rc = arch_initialise_vcpu(v, (XEN_GUEST_HANDLE(void)) { 
             (void *)fastabi_value_n(regs, 2) });
         break;
 

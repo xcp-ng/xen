@@ -20,11 +20,11 @@ int libxl_coco_domain_attestation(libxl_ctx *ctx, uint32_t domid, int file, bool
         void *data = NULL;
 
         r = libxl_read_file_contents(ctx, mmonce, &data, &datalen);
-
         if (datalen != 16) {
             fprintf(stderr, "Error: invalid mmonce length\n");
             return ERROR_INVAL;
         }
+        
         memcpy(&report.sev.mnonce, data, 16);
         free(data);
     } else {
@@ -42,18 +42,14 @@ int libxl_coco_domain_attestation(libxl_ctx *ctx, uint32_t domid, int file, bool
 
             report.sev.mnonce[i] = (hi << 4) | lo;
         }
-
     }
 
     report.domid = domid;
-    report.len = 0;
 
     rc = xc_coco_get_attestation(ctx->xch, &report);
-
     if (!rc) {
-        size_t written = write(file, &report.sev, report.len);
-        // the union used does not matter, we use the pointer
-        if (written != report.len) {
+        size_t written = write(file, &report.sev.rsp, sizeof(report.sev.rsp));
+        if (written != sizeof(report.sev.rsp)) {
             perror("write");
             close(file);
             return -1;
@@ -66,39 +62,40 @@ int libxl_coco_domain_attestation(libxl_ctx *ctx, uint32_t domid, int file, bool
 
 
 int libxl_coco_platform_certs(libxl_ctx *ctx, char* path) {
-    int rc;
     coco_platform_certs_t certs;
+    int rc;
     
     rc = xc_coco_get_platform_certs(ctx->xch, &certs);
+    if (rc) {
+        return rc;
+    }
     
-    if (!rc) {
-        int file = open(path, O_WRONLY | O_CREAT, 0644);
-        if (!file) {
-            perror("open:");
-            return -1;
-        }
+    int fd = open(path, O_WRONLY | O_CREAT, 0644);
+    if (!fd) {
+        perror("open:");
+        return -1;
+    }
         
-        size_t written = write(file, &certs.sev, sizeof(certs.sev));
-        if (written != sizeof(certs.sev)) {
-            perror("write:");
-            close(file);
-            return -1;
-        }
+    size_t written = write(fd, &certs.sev, sizeof(certs.sev));
+    if (written != sizeof(certs.sev)) {
+        perror("write:");
+        close(fd);
+        return -1;
+    }
         
-        printf("Platform Version: %d.%d.%d\n", 
-            certs.status.version_major, 
-            certs.status.version_minor, 
-            certs.status.version_build);
+    printf("Platform Version: %d.%d.%d\n", 
+        certs.status.version_major, 
+        certs.status.version_minor, 
+        certs.status.version_build);
             
-        printf("Platform owned %s\n", certs.status.flags & COCO_STATUS_FEATURES_PLATFORM_OWNED ? "True" : "False");
+    printf("Platform owned %s\n", certs.status.flags & COCO_STATUS_FEATURES_PLATFORM_OWNED ? "True" : "False");
             
-        for (size_t cpu_n = 0; cpu_n < certs.cpu_number; cpu_n++) {
-            printf("CPU ID %lu: ", cpu_n);
-            for (size_t i = 0; i < 64; i++) {
-                printf("%02X", certs.sev.hwid[i + cpu_n * 64]);
-            }
-            printf("\n");
+    for (size_t cpu_n = 0; cpu_n < certs.cpu_number; cpu_n++) {
+        printf("CPU ID %lu: ", cpu_n);
+        for (size_t i = 0; i < 64; i++) {
+            printf("%02X", certs.sev.hwid[i + cpu_n * 64]);
         }
+        printf("\n");
     }
         
     return rc;
@@ -109,61 +106,73 @@ int libxl_coco_csr(libxl_ctx *ctx, char* path) {
     coco_certificate_t cert;
     
     rc = xc_coco_get_csr(ctx->xch, &cert);
-    
-    if (!rc) {
-        int file = open(path, O_WRONLY | O_CREAT, 0644);
-        if (!file) {
-            perror("open:");
-            return -1;
-        }
-        
-        size_t written = write(file, &cert.sev, sizeof(cert.sev));
-        if (written != sizeof(cert.sev)) {
-            perror("write:");
-            close(file);
-            return -1;
-        }
+    if (rc) {
+        return rc;
     }
+    
+    int file = open(path, O_WRONLY | O_CREAT, 0644);
+    if (!file) {
+        perror("open:");
+        return -1;
+    }
+        
+    size_t written = write(file, &cert.sev, sizeof(cert.sev));
+    if (written != sizeof(cert.sev)) {
+        perror("write:");
+        close(file);
+        return -1;
+    }
+    
     return rc;
 }
 
 int libxl_coco_update(libxl_ctx *ctx, char* path) {
-    int rc = 0;
+    DECLARE_HYPERCALL_BUFFER(void, buf);
     coco_update_t update;
     struct stat st;
+    int rc = 0;
+    
     if (stat(path, &st) != 0) {
-         perror("can't stat firmware");
+         perror("can't stat firmware:");
         return -1;
     }
-    DECLARE_HYPERCALL_BUFFER(void, buf);
     update.sev.size = st.st_size;
+    
     buf = xc_hypercall_buffer_alloc(ctx->xch, buf, update.sev.size);
     
     int fd = open(path, O_RDONLY);
-    update.sev.size = read(fd, buf,update.sev.size);
-    if (update.sev.size == -1 ) {
-        perror("could not open firmware file");
+    if (fd == -1 ) {
+        perror("could not read firmware file:");
         return -1;
     }
+    
+    update.sev.size = read(fd, buf,update.sev.size);
+    if (update.sev.size == -1 ) {
+        perror("could not read firmware file:");
+        return -1;
+    }
+    
     set_xen_guest_handle(update.sev.data, buf);
     
     rc = xc_coco_update(ctx->xch, &update);
     
     xc_hypercall_buffer_free(ctx->xch, buf);
-    
+    close(fd);
     return rc;
 }
 
 int libxl_coco_regen_certificate(libxl_ctx *ctx, char* crt) {
+    COCO_CERTIFICATE_NAME_ARRAY_DEF()
     coco_certificate_name_t cert = 0;
     size_t i = 0;
-    COCO_CERTIFICATE_NAME_ARRAY_DEF()
+    
     for (; i < sizeof(certs_name) / 8; i++) {
         if (strcmp(crt, certs_name[i]) == 0) {
             cert = i;
             break;
         }
     }
+    
     if (i == (sizeof(certs_name) / 8)) {
         printf("Invalid certificate name, not in :\n");
         for (i = 0; i < sizeof(certs_name) / 8; i++) {
@@ -186,56 +195,57 @@ int libxl_coco_import_certificate(libxl_ctx *ctx, char *pek, char *crt) {
         fprintf(stderr, "Error: invalid certificate length\n");
         return ERROR_INVAL;
     }
+    
     memcpy(&import.sev.oca, data, sizeof(import.sev.oca));
     free(data);
     
     rc = libxl_read_file_contents(ctx, pek, &data, &datalen);
-
     if (datalen != sizeof(import.sev.pek)) {
         fprintf(stderr, "Error: invalid pek certificate length\n");
         return ERROR_INVAL;
     }
+    
     memcpy(&import.sev.pek, data, sizeof(import.sev.pek));
     free(data);
-    
     
     return xc_coco_import_certificate(ctx->xch, &import);
 }
 
 int libxl_coco_update_secrets(libxl_ctx *ctx, char *secret_file, char *header_file, uint64_t gpa, uint32_t domid) {
-    coco_domain_secret_t cmd;
     DECLARE_HYPERCALL_BUFFER(void, buf);
-    int rc, fd = 0;
+    coco_domain_secret_t cmd;
+    struct stat st;
+    void *data = NULL;
+    int rc, datalen = 0;
 
-    puts(secret_file);
-    puts(header_file);
-    
     cmd.domid = domid;
     cmd.sev.gpa = gpa;
     
-    struct stat st;
     if (stat(secret_file, &st) != 0) {
          perror("could not stat secret payload");
         return -1;
     }
     cmd.sev.secret_len = st.st_size;
     
-    if (header_file) {
-        fd = open(header_file, O_RDONLY);
-        rc = read(fd, &cmd.sev.header,sizeof(cmd.sev.header));
-        if (rc != sizeof(cmd.sev.header)) {
-            perror("could not open header file");
-            return -1;
-        }
-    }
-
-    buf = xc_hypercall_buffer_alloc(ctx->xch, buf, cmd.sev.secret_len);
-    fd = open(secret_file, O_RDONLY);
-    rc = read(fd, buf,cmd.sev.secret_len);
-    if (rc != cmd.sev.secret_len) {
-        perror("could not open secret payload file");
+    rc = libxl_read_file_contents(ctx, header_file, &data, &datalen);
+    if (rc || datalen != sizeof(cmd.sev.header)) {
+        perror("could not open header file");
         return -1;
     }
+    
+    memcpy(&cmd.sev.header, data, sizeof(cmd.sev.header));
+    free(data);
+    
+    buf = xc_hypercall_buffer_alloc(ctx->xch, buf, cmd.sev.secret_len);
+    
+    rc = libxl_read_file_contents(ctx, secret_file, &data, &datalen);
+    if (rc || datalen !=  cmd.sev.secret_len) {
+        perror("could not open header file");
+        return -1;
+    }
+    
+    memcpy(buf, data, cmd.sev.secret_len);
+    free(data);
 
     set_xen_guest_handle(cmd.sev.secret, buf);
     

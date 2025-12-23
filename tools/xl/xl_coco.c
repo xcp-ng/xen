@@ -58,11 +58,11 @@ static const struct cmd_spec coco_cmd_table[] = {
 };
 
 static int main_coco_update_secrets(int argc, char **argv) {
+    uint64_t gpa = 0;
+    uint32_t domid = 0;
     char *secret = NULL;
     char *header = NULL;
-    uint64_t gpa = 0;
     int opt, rc = 0;
-    uint32_t domid = 0;
     
     SWITCH_FOREACH_OPT(opt, "", NULL, "coco update", 4) {
         /* No options */
@@ -79,8 +79,8 @@ static int main_coco_update_secrets(int argc, char **argv) {
 }
 
 static int main_coco_update_firmware(int argc, char **argv) {
-    int opt, rc;
     char *path = NULL;
+    int opt, rc;
     
     SWITCH_FOREACH_OPT(opt, "", NULL, "coco update", 1) {
         /* No options */
@@ -94,8 +94,9 @@ static int main_coco_update_firmware(int argc, char **argv) {
 }
 
 static int main_coco_certificate_signing_request(int argc, char **argv) {
-    int opt, rc;
     char *path = "to_sign.bin";
+    int opt, rc;
+    
     static struct option opts[] = {
         {"file", 1, 0, 'f'},
         COMMON_LONG_OPTS
@@ -113,9 +114,9 @@ static int main_coco_certificate_signing_request(int argc, char **argv) {
 }
 
 static int main_coco_certificate_import(int argc, char **argv) {
-    int opt, rc;
     char *crt = "crt.bin";
     char *pek = "pek.bin";
+    int opt, rc;
     
     static struct option opts[] = {
         {"crt", 1, 0, 'c'},
@@ -135,15 +136,8 @@ static int main_coco_certificate_import(int argc, char **argv) {
     rc = libxl_coco_import_certificate(ctx, pek, crt);
     
     return rc;
-    /*  platform get status
-        -> if init && owned
-            -> ERR : ask do a pek gen
-        -> if init && !owned
-            -> Perform cert import
-        -> else
-            -> Guest running / init error
-    */
 }
+
 static int main_coco_regen_certificate(int argc, char **argv) {
     int opt, rc;
     
@@ -157,13 +151,12 @@ static int main_coco_regen_certificate(int argc, char **argv) {
 }
 
 static int main_coco_attestation(int argc, char **argv) {
-    int rc;
-    int dst_file = 1;
-    char * mmonce = NULL;
     uint32_t domid;
+    char * mmonce = NULL;
     bool is_mmonce_file = false;
+    int dst_file = 1;
+    int opt, rc;
 
-    int opt;
     static struct option opts[] = {
         {"file", 1, 0, 'f'},
         {"print", 0, 0, 'p'},
@@ -206,8 +199,9 @@ static int main_coco_attestation(int argc, char **argv) {
 }
 
 static int main_coco_get_platform_certs(int argc, char **argv) {
-    int opt, rc;
     char *path = "pdh.bin";
+    int opt, rc;
+    
     static struct option opts[] = {
         {"file", 1, 0, 'f'},
         COMMON_LONG_OPTS
@@ -249,9 +243,9 @@ static const struct cmd_spec *coco_cmdtable_lookup(const char *s)
 }
 
 int main_coco(int argc, char **argv) {
-    int opt, rc;
-    char *cmd;
     const struct cmd_spec *cspec;
+    char *cmd;
+    int opt, rc;
 
     SWITCH_FOREACH_OPT(opt, "", NULL, "coco", 1) {
         /* No options */

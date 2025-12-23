@@ -84,35 +84,44 @@ int coco_prepare_initial_memory(struct domain *d, gfn_t gfn, size_t page_count)
     return 0;
 }
 
-long coco_op_prepare_initial_mem(struct coco_prepare_initial_mem arg)
+long coco_op_prepare_initial_mem(XEN_GUEST_HANDLE_PARAM(void) arg)
 {
+    struct coco_prepare_initial_mem prepare_initial_mem;
+    struct domain *d;
     long rc = 0;
-    struct domain *d = get_domain_by_id(arg.domid);
 
-    if ( !d )
-        return -ENOENT;
+    if ( copy_from_guest(&prepare_initial_mem, arg, 1) )
+        return -EFAULT;
     
-    if ( !is_coco_domain(d) )
+    d = get_domain_by_id(prepare_initial_mem.domid);
+    if (!d)
+        return -ENOENT;
+    if (!is_coco_domain(d))
     {
         rc = -EOPNOTSUPP;
         goto out;
     }
 
-    rc = coco_prepare_initial_memory(d, _gfn(arg.gfn), arg.count);
+    rc = coco_prepare_initial_memory(d, _gfn(prepare_initial_mem.gfn), prepare_initial_mem.count);
 
 out:
     put_domain(d);
     return rc;
 }
-long coco_op_finish_initial_mem(domid_t domid)
-{
-    long rc = 0;
-    struct domain *d = get_domain_by_id(domid);
 
-    if ( !d )
-        return -ENOENT;
+long coco_op_finish_initial_mem(XEN_GUEST_HANDLE_PARAM(void) arg)
+{
+    struct domain *d;
+    domid_t domid;
+    long rc = 0;
     
-    if ( !is_coco_domain(d) )
+    if ( copy_from_guest(&domid, arg, 1) )
+        return -EFAULT;
+
+    d = get_domain_by_id(domid);
+    if (!d)
+        return -ENOENT;
+    if (!is_coco_domain(d))
     {
         rc = -EOPNOTSUPP;
         goto out;
@@ -128,32 +137,39 @@ out:
     return rc;
 }
 
-static long coco_op_get_attestation_report(coco_attestation_report_t *report) {
+static long coco_op_get_attestation_report(XEN_GUEST_HANDLE_PARAM(void) arg) {
+    coco_attestation_report_t report;
     struct domain *d;
     int rc;
 
-    d = get_domain_by_id(report->domid);
-
+    if ( copy_from_guest(&report, arg, 1) )
+        return -EFAULT;
+    
+    d = get_domain_by_id(report.domid);
     if (!d)
         return -ENOENT;
-
     if (!is_coco_domain(d))
         return -EOPNOTSUPP;
-
     if (!d->coco_ops || !d->coco_ops->domain_attestation_report)
         return -EOPNOTSUPP;
 
-    rc = d->coco_ops->domain_attestation_report(d, report);
+    rc = d->coco_ops->domain_attestation_report(d, &report);
 
+    if (!rc && copy_to_guest(arg, &report, 1))
+        return -EFAULT;
+    
     return rc;
 }
 
-static long coco_op_update_secret(coco_domain_secret_t *cmd) {
+static long coco_op_update_secret(XEN_GUEST_HANDLE_PARAM(void) arg) {
+    coco_domain_secret_t cmd;
     struct domain *d;
     int rc;
+            
+    if ( copy_from_guest(&cmd, arg, 1) )
+        return -EFAULT;
 
-    d = get_domain_by_id(cmd->domid);
-
+    d = get_domain_by_id(cmd.domid);
     if (!d)
         return -ENOENT;
     if (!is_coco_domain(d))
@@ -161,41 +177,87 @@ static long coco_op_update_secret(coco_domain_secret_t *cmd) {
     if (!d->coco_ops || !d->coco_ops->domain_update_secret)
         return -EOPNOTSUPP;
 
-    rc = d->coco_ops->domain_update_secret(d, cmd);
+    rc = d->coco_ops->domain_update_secret(d, &cmd);
 
     return rc;
 }
 
-static long coco_op_certs(coco_platform_certs_t *certs) {
-    if (coco_ops && coco_ops->get_platform_certs) {
-        return coco_ops->get_platform_certs(certs);
+static long coco_op_certs(XEN_GUEST_HANDLE_PARAM(void) arg) {
+    coco_platform_certs_t *certs = xmalloc(coco_platform_certs_t);
+    int rc = 0;
+
+    if (!certs){
+        printk(XENLOG_ERR"%s: could not malloc\n", __func__);
+        return -ENOSPC;
     }
-    return -EOPNOTSUPP;
-}
-static long coco_op_csr(coco_certificate_t *cert) {
-    if (coco_ops && coco_ops->get_certificate_signing_request) {
-        return coco_ops->get_certificate_signing_request(cert);
+    
+    if ( copy_from_guest(certs, arg, 1) )
+        return -EFAULT;
+    
+    if (!coco_ops || !coco_ops->get_platform_certs) {
+        return -EOPNOTSUPP;
     }
-    return -EOPNOTSUPP;
-}
-static long coco_op_regen_platform_cert(coco_certificate_name_t cert) {
-    if (coco_ops && coco_ops->regen_platform_cert) {
-        return coco_ops->regen_platform_cert(cert);
-    }
-    return -EOPNOTSUPP;
+    
+    rc = coco_ops->get_platform_certs(certs);
+    
+    if (!rc && copy_to_guest(arg, certs, 1))
+        return -EFAULT;
+    
+    xfree(certs);
+    return rc;
 }
 
-static long coco_op_import_certificate(coco_platform_import_certs_t *cert) {
-    if (coco_ops && coco_ops->import_certificates) {
-        return coco_ops->import_certificates(cert);
-    }
-    return -EOPNOTSUPP;
+static long coco_op_csr(XEN_GUEST_HANDLE_PARAM(void) arg) {
+    coco_certificate_t cert;
+    int rc;
+
+    if ( copy_from_guest(&cert, arg, 1) )
+        return -EFAULT;
+            
+    if (!coco_ops || !coco_ops->get_certificate_signing_request)
+        return -EOPNOTSUPP;
+    
+    rc = coco_ops->get_certificate_signing_request(&cert);
+    
+    if (!rc && copy_to_guest(arg, &cert, 1))
+        return -EFAULT;
+
+    return rc;
 }
-static long coco_op_update(coco_update_t *update) {
-    if (coco_ops && coco_ops->update_platform) {
-        return coco_ops->update_platform(update);
-    }
-    return -EOPNOTSUPP;
+
+static long coco_op_regen_platform_cert(XEN_GUEST_HANDLE_PARAM(void) arg) {
+    coco_certificate_name_t cert;
+
+    if ( copy_from_guest(&cert, arg, 1) )
+        return -EFAULT;
+    
+    if (!coco_ops || !coco_ops->regen_platform_cert)
+        return -EOPNOTSUPP;
+    
+    return coco_ops->regen_platform_cert(&cert);
+}
+
+static long coco_op_import_certificate(XEN_GUEST_HANDLE_PARAM(void) arg) {
+    coco_platform_import_certs_t cert;
+
+    if ( copy_from_guest(&cert, arg, 1) )
+        return -EFAULT;
+    
+    if (!coco_ops || !coco_ops->import_certificates)
+        return -EOPNOTSUPP;
+    
+    return coco_ops->import_certificates(&cert);
+}
+
+static long coco_op_update(XEN_GUEST_HANDLE_PARAM(void) arg) {
+    coco_update_t update;
+    
+    if ( copy_from_guest(&update, arg, 1) )
+        return -EFAULT;
+    if (!coco_ops || !coco_ops->update_platform)
+        return -EOPNOTSUPP;
+
+    return coco_ops->update_platform(&update);
 }
 
 long do_coco_op(unsigned int cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
@@ -212,113 +274,24 @@ long do_coco_op(unsigned int cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
 
             return 0;
         }
-        case XEN_COCO_prepare_initial_mem:
-        {
-            struct coco_prepare_initial_mem prepare_initial_mem;
-
-            if ( copy_from_guest(&prepare_initial_mem, arg, 1) )
-                return -EFAULT;
-
-            return coco_op_prepare_initial_mem(prepare_initial_mem);
-        }
-        case XEN_COCO_finish_initial_mem:
-        {
-            domid_t domid;
-            
-            if ( copy_from_guest(&domid, arg, 1) )
-                return -EFAULT;
-            
-            return coco_op_finish_initial_mem(domid);
-        }
-        case XEN_COCO_attestation_report:
-        {
-            coco_attestation_report_t report;
-            int rc = 0;
-
-            if ( copy_from_guest(&report, arg, 1) )
-                return -EFAULT;
-
-            rc = coco_op_get_attestation_report(&report);
-            if (rc)
-                return rc;
-
-            if (copy_to_guest(arg, &report, 1))
-                return -EFAULT;
-
-            return 0;
-        }
-        case XEN_COCO_platform_certs:
-        {
-            coco_platform_certs_t *certs = xmalloc(coco_platform_certs_t);
-            int rc = 0;
-
-            if ( copy_from_guest(certs, arg, 1) )
-                return -EFAULT;
-            
-            if (!certs){
-                printk(XENLOG_ERR"%s: could not malloc\n", __func__);
-                return -ENOSPC;
-            }
-
-            rc = coco_op_certs(certs);
-
-            if (copy_to_guest(arg, certs, 1))
-                return -EFAULT;
-
-            xfree(certs);
-            return rc;
-        }
-        case XEN_COCO_platform_csr:
-        {
-            coco_certificate_t cert;
-            int rc = 0;
-
-            if ( copy_from_guest(&cert, arg, 1) )
-                return -EFAULT;
-            
-            rc = coco_op_csr(&cert);
-
-            if (copy_to_guest(arg, &cert, 1))
-                return -EFAULT;
-
-            return rc;
-        }
-        case XEN_COCO_platform_regen_cert:
-        {
-            coco_certificate_name_t cert;
-
-            if ( copy_from_guest(&cert, arg, 1) )
-                return -EFAULT;
-            return coco_op_regen_platform_cert(cert);
-        }
-        case XEN_COCO_platform_cert_import:
-        {
-            coco_platform_import_certs_t cert;
-
-            if ( copy_from_guest(&cert, arg, 1) )
-                return -EFAULT;
-            return coco_op_import_certificate(&cert);
-        }
+        case XEN_COCO_domain_prepare_initial_mem:
+            return coco_op_prepare_initial_mem(arg);
+        case XEN_COCO_domain_finish_initial_mem:
+            return coco_op_finish_initial_mem(arg);
+        case XEN_COCO_domain_attestation_report:
+            return coco_op_get_attestation_report(arg);
+        case XEN_COCO_platform_get_certificates:
+            return coco_op_certs(arg);
+        case XEN_COCO_platform_get_certificate_signing_request:
+            return coco_op_csr(arg);
+        case XEN_COCO_platform_regenerate_certificate:
+            return coco_op_regen_platform_cert(arg);
+        case XEN_COCO_platform_import_certificate:
+            return coco_op_import_certificate(arg);
         case XEN_COCO_platform_update:
-        {
-            coco_update_t update;
-            int rc;
-            
-            if ( copy_from_guest(&update, arg, 1) )
-                return -EFAULT;
-
-            rc = coco_op_update(&update);
-            
-            return rc;
-        }
-        case XEN_COCO_update_secrets:
-        {
-            coco_domain_secret_t cmd;
-            
-            if ( copy_from_guest(&cmd, arg, 1) )
-                return -EFAULT;
-            return coco_op_update_secret(&cmd);
-        }
+            return coco_op_update(arg);
+        case XEN_COCO_domain_update_secrets:
+            return coco_op_update_secret(arg);
         
         default:
             return -ENOSYS;

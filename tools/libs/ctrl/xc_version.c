@@ -217,7 +217,7 @@ int xc_coco_get_platform_certs(xc_interface *handle, coco_platform_certs_t *cmd)
         return -1;
     memcpy(arg, cmd, sizeof(coco_platform_certs_t));
 
-    rc = xencall2(handle->xcall, __HYPERVISOR_coco_op, XEN_COCO_platform_certs,
+    rc = xencall2(handle->xcall, __HYPERVISOR_coco_op, XEN_COCO_platform_get_certificates,
         HYPERCALL_BUFFER_AS_ARG(arg));
 
     if (!rc) {
@@ -237,7 +237,7 @@ int xc_coco_get_csr(xc_interface *handle, coco_certificate_t *cmd)
         return -1;
     memcpy(arg, cmd, sizeof(coco_certificate_t));
 
-    rc = xencall2(handle->xcall, __HYPERVISOR_coco_op, XEN_COCO_platform_csr,
+    rc = xencall2(handle->xcall, __HYPERVISOR_coco_op, XEN_COCO_platform_get_certificate_signing_request,
         HYPERCALL_BUFFER_AS_ARG(arg));
 
     if (!rc) {
@@ -277,7 +277,7 @@ int xc_coco_regen_certificate(xc_interface *handle, coco_certificate_name_t cert
         return -1;
     *arg = cert;
 
-    rc = xencall2(handle->xcall, __HYPERVISOR_coco_op, XEN_COCO_platform_regen_cert,
+    rc = xencall2(handle->xcall, __HYPERVISOR_coco_op, XEN_COCO_platform_regenerate_certificate,
         HYPERCALL_BUFFER_AS_ARG(arg));
 
     xc_hypercall_buffer_free(handle, arg);
@@ -294,7 +294,7 @@ int xc_coco_import_certificate(xc_interface *handle, coco_platform_import_certs_
         return -1;
     memcpy(arg, cmd, sizeof(coco_platform_import_certs_t));
 
-    rc = xencall2(handle->xcall, __HYPERVISOR_coco_op, XEN_COCO_platform_cert_import,
+    rc = xencall2(handle->xcall, __HYPERVISOR_coco_op, XEN_COCO_platform_import_certificate,
         HYPERCALL_BUFFER_AS_ARG(arg));
 
     if (!rc) {

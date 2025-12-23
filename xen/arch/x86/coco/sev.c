@@ -42,19 +42,19 @@ static int sev_domain_initialise(struct domain *d)
         printk(XENLOG_ERR "sev: Reserved bits set in policy\n");
         return -EINVAL;
     }
-
+    
     if ( sev_policy.es && !cpu_has_sev_es )
     {
         printk(XENLOG_ERR "sev: SEV-ES is not supported\n");
         return -EINVAL;
     }
-
+    
     if ( !(d->arch.emulation_flags & XEN_X86_EMU_FORCE_X2APIC) )
     {
         printk(XENLOG_ERR "sev: Guest must have forced x2apic\n");
         return -EINVAL;
     }
-
+    
     sd_ls.handle = 0; /* generate new one */
     sd_ls.policy = sev_policy;
     if (d->arch.hvm.svm.sev.owner_crt && d->arch.hvm.svm.sev.session) {
@@ -96,10 +96,10 @@ static int sev_domain_initialise(struct domain *d)
 
 static int sev_domain_prepare_initial_mem(struct domain *d, gfn_t gfn, size_t count)
 {
-    struct page_info *page;
-    int rc = 0;
-    unsigned int psp_ret = 0;
     struct sev_data_launch_update_data sd_lud;
+    struct page_info *page;
+    unsigned int psp_ret = 0;
+    int rc = 0;
 
     mfn_t mfn = INVALID_MFN, mfn_base = INVALID_MFN;
     size_t segment_size = 0;
@@ -129,7 +129,7 @@ static int sev_domain_prepare_initial_mem(struct domain *d, gfn_t gfn, size_t co
                 printk(XENLOG_DEBUG
                        "asp: LAUNCH_UPDATE_DATA d%hu: base=%"PRI_xen_pfn", size=%zx\n",
                        d->domain_id, mfn_x(mfn_base), segment_size);
-
+                
                 sd_lud.reserved = 0;
                 sd_lud.handle = d->arch.hvm.svm.sev.asp_handle;
                 sd_lud.address = mfn_x(mfn_base) << PAGE_SHIFT;
@@ -147,7 +147,7 @@ static int sev_domain_prepare_initial_mem(struct domain *d, gfn_t gfn, size_t co
                 mfn_base = mfn;
                 segment_size = 0;
             }
-        }
+        }  
 
         gfn = gfn_add(gfn, 1);
         segment_size++;
@@ -236,8 +236,8 @@ static int sev_domain_creation_finished(struct domain *d)
 
 static void sev_domain_destroy(struct domain *d)
 {
-    struct sev_data_deactivate sd_da;
     struct sev_data_decommission sd_de;
+    struct sev_data_deactivate sd_da;
     unsigned int psp_ret;
     long rc = 0;
     struct vcpu *v;
@@ -324,15 +324,13 @@ static int sev_attestation_report(struct domain *d,
 
     report.handle = d->arch.hvm.svm.sev.asp_handle;
     report.len = sizeof(struct sev_attestation_report_response);
-    args->len = sizeof(struct sev_attestation_report_response);
     report.reserved = 0;
     report.address = (uint64_t) virt_to_maddr(&args->sev);
     for (size_t i =0; i < 16; i++) { // or memcpy ?
         report.mnonce[i] = args->sev.mnonce[i];
     }
 
-    printk(XENLOG_ERR
-           "asp: ATTESTATION_REPORT d%d: size=%u\n", d->domain_id, args->len);
+    printk(XENLOG_ERR"asp: ATTESTATION_REPORT d%d:\n", d->domain_id);
 
     rc = sev_do_cmd(SEV_CMD_ATTESTATION_REPORT, (void *)(&report),
         &psp_ret, true);
@@ -348,13 +346,13 @@ static int sev_attestation_report(struct domain *d,
 
 static int sev_domain_update_secret(struct domain *d,
     coco_domain_secret_t *args) {
-    struct page_info *page;
     struct sev_data_launch_secret cmd;
+    struct page_info *page;
     unsigned int psp_ret = 0;
+    void *data = _xmalloc(args->sev.secret_len, __alignof__(args->sev.secret));
     gfn_t gfn;
     mfn_t mfn = INVALID_MFN;
     int rc = 0;
-    void *data = _xmalloc(args->sev.secret_len, __alignof__(args->sev.secret));
     
     if ( copy_from_guest(data, args->sev.secret, args->sev.secret_len))
         return -EFAULT;
@@ -417,8 +415,9 @@ static int sev_es_asid_alloc(struct domain *d, struct hvm_asid *asid)
 
 static int sev_es_domain_vcpu_initialise(struct domain *d)
 {
-    struct vcpu *v;
     struct sev_data_launch_update_vmsa sd_luv = {};
+    struct vcpu *v;
+    
     sd_luv.handle = d->arch.hvm.svm.sev.asp_handle;
     sd_luv.reserved = 0;
 
@@ -543,11 +542,11 @@ static int sev_get_platform_status(struct coco_platform_status *status)
 }
 
 static int sev_get_platform_certs(struct coco_platform_certs *certs) {
-    int rc;
-    unsigned int psp_ret = 0;
     struct sev_data_pdh_cert_export pdh_cert_export;
     struct sev_user_data_status status;
     struct sev_data_get_id get_id;
+    unsigned int psp_ret = 0;
+    int rc;
 
 
     rc = sev_do_cmd(SEV_CMD_PLATFORM_STATUS, (void *)(&status), &psp_ret, true);
@@ -556,6 +555,7 @@ static int sev_get_platform_certs(struct coco_platform_certs *certs) {
         printk(XENLOG_ERR "asp: failed to PLATFORM_STATUS: rc %u psp_ret %u\n", rc, psp_ret);
         return rc;
     }
+    
     certs->status = platform_status; // flags
     certs->status.version_major = status.api_major;
     certs->status.version_minor = status.api_minor;
@@ -595,8 +595,8 @@ static int sev_get_platform_certs(struct coco_platform_certs *certs) {
 }
 
 static int sev_get_csr(coco_certificate_t *cert) {
-    struct sev_data_pek_csr arg;
     struct sev_certificate *c = &(cert->sev);
+    struct sev_data_pek_csr arg;
     unsigned int psp_ret = 0;
     int rc = 0;
 
@@ -613,13 +613,16 @@ static int sev_get_csr(coco_certificate_t *cert) {
     return 0;
 }
 
-static int sev_regen_certificate(enum coco_certificate_name cert) {
-    int rc;
-    unsigned int psp_ret;
-
+static int sev_regen_certificate(enum coco_certificate_name *cert) {
     COCO_CERTIFICATE_NAME_ARRAY_DEF()
+    unsigned int psp_ret;
+    int rc;
 
-    switch (cert) {
+    if (!cert) {
+        return -EINVAL;
+    }
+
+    switch (*cert) {
         case sev_pek: {
             rc = sev_do_cmd(SEV_CMD_PEK_GEN, NULL, &psp_ret, true);
             break;
@@ -633,7 +636,7 @@ static int sev_regen_certificate(enum coco_certificate_name cert) {
         return -EINVAL;
     }
     if (rc || psp_ret) {
-        printk(XENLOG_ERR "sev: regen certificate %d failed: rc %d psp %x \n", cert, rc, psp_ret);
+        printk(XENLOG_ERR "sev: regen certificate %d failed: rc %d psp %x \n", *cert, rc, psp_ret);
         switch (psp_ret) {
             case  SEV_RET_INVALID_PLATFORM_STATE:
             printk(XENLOG_ERR "asp: the platform is not in the right state,"
@@ -641,15 +644,16 @@ static int sev_regen_certificate(enum coco_certificate_name cert) {
             break;
         }
     } else {
-        printk(XENLOG_ERR "sev: %s certificate regenerate\n", certs_name[cert]);
+        printk(XENLOG_ERR "sev: %s certificate regenerate\n", certs_name[*cert]);
     }
     return rc;
 }
 
 static int sev_import_certificate(coco_platform_import_certs_t *certs) {
-    int rc;
-    unsigned int psp_ret = 0;
     struct sev_data_pek_cert_import arg;
+    unsigned int psp_ret = 0;
+    int rc;
+    
     arg.oca_cert_address = virt_to_maddr(&(certs->sev.oca));
     arg.oca_cert_len = sizeof(certs->sev.oca);
     arg.pek_cert_address = virt_to_maddr(&(certs->sev.pek));
@@ -669,8 +673,9 @@ static int sev_import_certificate(coco_platform_import_certs_t *certs) {
 }
 
 static int sev_platform_update(coco_update_t *update) {
-    int rc;
     unsigned int psp_ret = 0;
+    int rc;
+    
     void *firmware = _xmalloc(update->sev.size, __alignof__(update->sev.size));
     if ( copy_from_guest(firmware, update->sev.data, update->sev.size) )
         return -EFAULT;

@@ -688,6 +688,7 @@ int libxl__domain_make(libxl__gc *gc, libxl_domain_config *d_config,
             } else {
                 local_domid = info->domid; /* May not be valid */
             }
+
             ret = xc_domain_create(ctx->xch, &local_domid, &create);
             if (ret < 0) {
                 /*

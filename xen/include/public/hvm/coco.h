@@ -4,26 +4,27 @@
 
 #include "../xen.h"
 
+/* TODO : Enum ? */
 #define XEN_COCO_platform_status 0
-#define XEN_COCO_prepare_initial_mem 1
-#define XEN_COCO_attestation_report 2
-#define XEN_COCO_platform_certs 3
-#define XEN_COCO_platform_csr 4
-#define XEN_COCO_platform_regen_cert 5
-#define XEN_COCO_platform_cert_import 6
+#define XEN_COCO_domain_prepare_initial_mem 1
+#define XEN_COCO_domain_attestation_report 2
+#define XEN_COCO_platform_get_certificates 3
+#define XEN_COCO_platform_get_certificate_signing_request 4
+#define XEN_COCO_platform_regenerate_certificate 5
+#define XEN_COCO_platform_import_certificate 6
 #define XEN_COCO_platform_update 7
-#define XEN_COCO_finish_initial_mem 8
-#define XEN_COCO_update_secrets 9
+#define XEN_COCO_domain_finish_initial_mem 8
+#define XEN_COCO_domain_update_secrets 9
 
 /**
  * XEN_COCO_platform_status: Get the status of confidential computing platform.
- *
+ * 
  * Query informations regarding the current confidential computing platform.
  *
  * Confidential computing is supposed working as long as COCO_STATUS_FLAG_SUPPORTED bit
  * is set, and additionally security-supported only if COCO_STATUS_FLAG_UNSAFE bit
  * is cleared.
- *
+ * 
  * If COCO_PLATFORM_FLAG_UNSAFE is set but COCO_PLATFORM_FLAG_SUPPORTED is not,
  * then confidential computing is explicitly present but intentionally disabled
  * or forbidden by policy.
@@ -42,8 +43,9 @@ struct coco_platform_status {
 
 #define COCO_STATUS_FLAG_supported (1 << 0) /* Confidential computing is supported and usable */
 #define COCO_STATUS_FLAG_unsafe    (1 << 1) /* Confidential computing is unsafe (e.g debug mode) */
-#define COCO_STATUS_FEATURES_PLATFORM_OWNED (1 << 31) /* Confidential computing is supported and usable */
+#define COCO_STATUS_FEATURES_PLATFORM_OWNED (1 << 31) /* The owner added their certificate to the platform */
     uint32_t flags;    /* OUT */
+    uint32_t features; /* OUT */
 
     uint32_t version_major; /* OUT */
     uint32_t version_minor; /* OUT */
@@ -54,7 +56,7 @@ DEFINE_XEN_GUEST_HANDLE(coco_platform_status_t);
 
 
 /**
- * XEN_COCO_prepare_initial_mem: Prepare early memory pages of a guest
+ * XEN_COCO_domain_prepare_initial_mem: Prepare early memory pages of a guest
  *
  * During guest construction, the confidential computing platform may require memory
  * to be prepared (e.g., encrypted) before the guest is started.
@@ -71,6 +73,9 @@ struct coco_prepare_initial_mem {
 typedef struct coco_prepare_initial_mem coco_prepare_initial_mem_t;
 DEFINE_XEN_GUEST_HANDLE(coco_prepare_initial_mem_t);
 
+/**
+ * XEN_COCO_domain_attestation_report : Request an attestation report for a guest
+ */
 struct sev_attestation_report_response {
 	uint8_t mnonce[16];
 	uint8_t launch_digest[32];
@@ -81,13 +86,8 @@ struct sev_attestation_report_response {
 	uint8_t sig[144];
 }  __attribute__((packed));
 
-/**
- * len is the size used by the attestation, it can be used to determine the attestation type
- * the union is used to make sure the struct is big enough to handle all attestation
- */
 struct coco_attestation_report {
     domid_t domid;          /* IN */
-    uint32_t len;           /* OUT */
     union {
         struct {
             uint8_t mnonce[16];     /* IN */
@@ -134,6 +134,9 @@ struct sev_certificate_fullchain {
     struct sev_certificate cek; 
 } __attribute__((packed));
 
+/**
+ * XEN_COCO_platform_get_certificates : export the platform certificate for the guest owner
+ */
 struct coco_platform_certs {
     uint8_t cpu_number;          /* OUT */
     struct coco_platform_status status;          /* OUT */
@@ -155,6 +158,9 @@ struct coco_certificate {
 typedef struct coco_certificate coco_certificate_t;
 DEFINE_XEN_GUEST_HANDLE(coco_certificate_t);
 
+/**
+ * XEN_COCO_platform_update : provide the updated firmware to update the platform
+ */
 struct coco_update {
     union {
         struct {
@@ -166,6 +172,9 @@ struct coco_update {
 typedef struct coco_update coco_update_t;
 DEFINE_XEN_GUEST_HANDLE(coco_update_t);
 
+/** 
+ * XEN_COCO_platform_import_certificate : provide the platform with the owner certificate 
+ */
 struct coco_platform_import_certs {
     union {
         struct {
@@ -174,7 +183,6 @@ struct coco_platform_import_certs {
         } sev;
     };
 };
-
 typedef struct coco_platform_import_certs coco_platform_import_certs_t;
 DEFINE_XEN_GUEST_HANDLE(coco_platform_import_certs_t);
 
@@ -185,6 +193,9 @@ struct sev_launch_secret_packet_header {
 	uint8_t mac[32];
 } __attribute__((packed));
 
+/**
+ * XEN_COCO_domain_update_secrets : provide a domain the secret from the guest owner
+ */
 struct coco_domain_secret {
     domid_t domid;
     union {
@@ -196,7 +207,6 @@ struct coco_domain_secret {
         } sev;
     };
 };
-
 typedef struct coco_domain_secret coco_domain_secret_t;
 DEFINE_XEN_GUEST_HANDLE(coco_domain_secret_t);
 

@@ -2,7 +2,6 @@
 #include "libxl_arch.h"
 #include <xen/arch-x86/cpuid.h>
 #include <xen/arch-x86/hvm/start_info.h>
-#include <xen/arch-x86/xen.h>
 
 int libxl__arch_domain_prepare_config(libxl__gc *gc,
                                       libxl_domain_config *d_config,
@@ -43,7 +42,7 @@ int libxl__arch_domain_prepare_config(libxl__gc *gc,
         DECLARE_HYPERCALL_BUFFER(sev_start_parameters_t, buf);
         buf = xc_hypercall_buffer_alloc(gc->owner->xch, buf, sizeof(*buf));
         int rc, fd;
-
+        /* Maybe libxl_read_file_content() ?*/
         fd = open(d_config->b_info.arch_x86.sev_session_file, O_RDONLY);
         if (fd == -1) {
             perror("sev_session_file invalid");
