@@ -15,6 +15,7 @@
 #define XEN_COCO_platform_update 7
 #define XEN_COCO_domain_finish_initial_mem 8
 #define XEN_COCO_domain_update_secrets 9
+#define XEN_COCO_domain_set_secrets_area 10
 
 /**
  * XEN_COCO_platform_status: Get the status of confidential computing platform.
@@ -209,6 +210,14 @@ struct coco_domain_secret {
 };
 typedef struct coco_domain_secret coco_domain_secret_t;
 DEFINE_XEN_GUEST_HANDLE(coco_domain_secret_t);
+
+struct coco_domain_secret_area {
+    domid_t domid;
+    uint64_t gpa;
+    uint64_t size;
+};
+typedef struct coco_domain_secret_area coco_domain_secret_area_t;
+DEFINE_XEN_GUEST_HANDLE(coco_domain_secret_area_t);
 
 enum coco_certificate_name {
     sev_pek = 0, 

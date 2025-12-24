@@ -236,6 +236,11 @@ int xc_dom_boot_image(struct xc_dom_image *dom)
             if ( (rc = xg_dom_coco_encrypt_seg(dom->xch, dom, seg, "acpi module")) != 0 )
                 return rc;
         }
+        for (int mod = 0; mod < dom->num_modules; mod++) {
+            if (strcmp(dom->modules[mod].cmdline, "COCO_SECRETS") == 0 &&
+                (rc = xg_dom_coco_set_secret_area(dom->xch, dom, dom->modules[mod].seg)) != 0 )
+                return rc;
+        }
     }
 
     /* let the vm run */

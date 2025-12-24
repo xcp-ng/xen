@@ -352,26 +352,33 @@ static int sev_domain_update_secret(struct domain *d,
     void *data = _xmalloc(args->sev.secret_len, __alignof__(args->sev.secret));
     gfn_t gfn;
     mfn_t mfn = INVALID_MFN;
+    uint64_t gpa;
     int rc = 0;
     
     if ( copy_from_guest(data, args->sev.secret, args->sev.secret_len))
         return -EFAULT;
-    
+
     if (unlikely(d->arch.hvm.svm.sev.status != SEV_GUEST_LSECRET)) {
         printk(XENLOG_ERR "sev: Trying to get an attestation for a guest in wrong state\n");
     }
     
-    if (args->sev.secret_len > PAGE_SIZE - (args->sev.gpa & 0xFFF)) {
+    
+    if (args->sev.gpa && args->sev.secret_len > PAGE_SIZE - (args->sev.gpa & 0xFFF)) {
+        gpa = args->sev.gpa;
+    } else if (args->sev.secret_len < d->arch.hvm.svm.sev.secret_area.size) {
+        gpa = d->arch.hvm.svm.sev.secret_area.gpa;
+    } else {
         return -ENOSPC;
     }
+
     //TODO : max pages or tot pages ?
-    if (args->sev.gpa + args->sev.secret_len > d->max_pages << 12) {
+    if (gpa + args->sev.secret_len > d->max_pages << 12) {
         return -ENOSPC;
     }
     
     flush_all(FLUSH_CACHE_WRITEBACK);
         
-    gfn = gaddr_to_gfn(args->sev.gpa);
+    gfn = gaddr_to_gfn(gpa);
     put_gfn(d, gfn);
     page = get_page_from_gfn(d, gfn_x(gfn), NULL, P2M_ALLOC);
     if ( unlikely(!page) )
@@ -381,9 +388,9 @@ static int sev_domain_update_secret(struct domain *d,
     if (!mfn_valid(mfn)) {
         return -EFAULT;
     }
-    printk(XENLOG_DEBUG"asp: SEV_CMD_LAUNCH_UPDATE_SECRET d%hu: gpa=%p base=%"PRI_xen_pfn", size=%zx\n",d->domain_id, (void *) args->sev.gpa,  mfn_to_maddr(mfn) + (args->sev.gpa & 0xFFF), args->sev.secret_len);
+    printk(XENLOG_DEBUG"asp: SEV_CMD_LAUNCH_UPDATE_SECRET d%hu: gpa=%p base=%"PRI_xen_pfn", size=%zx\n",d->domain_id, (void *) gpa,  mfn_to_maddr(mfn) + (gpa & 0xFFF), args->sev.secret_len);
     
-    cmd.guest_address = mfn_to_maddr(mfn) + (args->sev.gpa & 0xFFF);
+    cmd.guest_address = mfn_to_maddr(mfn) + (gpa & 0xFFF);
     cmd.guest_len = args->sev.secret_len;
     
     cmd.handle = d->arch.hvm.svm.sev.asp_handle;
@@ -692,6 +699,16 @@ static int sev_platform_update(coco_update_t *update) {
     return rc;
 }
 
+static int sev_domain_set_secret_area(struct domain *d, coco_domain_secret_area_t *secret_area) {
+    /* Optional check, should be before the SECRET state*/
+    if (unlikely(d->arch.hvm.svm.sev.status != SEV_GUEST_LUPDATE)) {
+        printk(XENLOG_ERR "sev: Trying to update a guest in wrong state\n");
+    }
+    
+    d->arch.hvm.svm.sev.secret_area = *secret_area;
+    return 0;
+}
+
 static struct coco_domain_ops sev_domain_ops = {
     .prepare_initial_mem = sev_domain_prepare_initial_mem,
     .domain_initialise = sev_domain_initialise,
@@ -700,7 +717,8 @@ static struct coco_domain_ops sev_domain_ops = {
     .domain_attestation_report = sev_attestation_report,
     .domain_destroy = sev_domain_destroy,
     .asid_alloc = sev_asid_alloc,
-    .domain_update_secret = sev_domain_update_secret
+    .domain_update_secret = sev_domain_update_secret,
+    .domain_set_secret_area = sev_domain_set_secret_area
 };
 
 static struct coco_domain_ops sev_es_domain_ops = {
@@ -713,7 +731,8 @@ static struct coco_domain_ops sev_es_domain_ops = {
     .domain_attestation_report = sev_attestation_report,
     .asid_alloc = sev_es_asid_alloc,
     .show_execution_state = sev_vmsa_dump,
-    .domain_update_secret = sev_domain_update_secret
+    .domain_update_secret = sev_domain_update_secret,
+    .domain_set_secret_area = sev_domain_set_secret_area
 };
 
 static struct coco_domain_ops *sev_get_domain_ops(struct domain *d,

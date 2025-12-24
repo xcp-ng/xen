@@ -39,6 +39,7 @@ struct sev_state {
     unsigned long flags;
     struct sev_certificate *owner_crt;
     struct sev_session *session;
+    coco_domain_secret_area_t secret_area;
 };
                 
 struct svm_domain {

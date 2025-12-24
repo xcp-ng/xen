@@ -260,6 +260,23 @@ static long coco_op_update(XEN_GUEST_HANDLE_PARAM(void) arg) {
     return coco_ops->update_platform(&update);
 }
 
+static long coco_op_set_secrets_area(XEN_GUEST_HANDLE_PARAM(void) arg) {
+    coco_domain_secret_area_t secret_area;
+    struct domain *d;
+    
+    if ( copy_from_guest(&secret_area, arg, 1) )
+        return -EFAULT;
+    d = get_domain_by_id(secret_area.domid);
+    if (!d)
+        return -ENOENT;
+    if (!is_coco_domain(d))
+        return -EOPNOTSUPP;
+    if (!d->coco_ops || !d->coco_ops->domain_set_secret_area)
+        return -EOPNOTSUPP;
+
+    return d->coco_ops->domain_set_secret_area(d, &secret_area);
+}
+
 long do_coco_op(unsigned int cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
 {
     if ( !is_hardware_domain(current->domain) )
@@ -292,6 +309,8 @@ long do_coco_op(unsigned int cmd, XEN_GUEST_HANDLE_PARAM(void) arg)
             return coco_op_update(arg);
         case XEN_COCO_domain_update_secrets:
             return coco_op_update_secret(arg);
+        case XEN_COCO_domain_set_secrets_area:
+            return coco_op_set_secrets_area(arg);
         
         default:
             return -ENOSYS;

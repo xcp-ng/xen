@@ -25,6 +25,7 @@ struct coco_domain_ops {
     bool (*show_execution_state)(struct vcpu *v);
 
     int (*domain_update_secret)(struct domain *d, coco_domain_secret_t* cmd);
+    int (*domain_set_secret_area)(struct domain *d, coco_domain_secret_area_t* cmd);
     int (*domain_attestation_report)(struct domain *d,
         struct coco_attestation_report *report);
 #ifdef CONFIG_X86

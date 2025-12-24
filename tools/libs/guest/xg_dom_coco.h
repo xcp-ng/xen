@@ -26,6 +26,9 @@
 int xg_dom_coco_encrypt_seg(xc_interface *xch, struct xc_dom_image *dom,
                             struct xc_dom_seg seg, const char *name);
 
+int xg_dom_coco_set_secret_area(xc_interface *xch, struct xc_dom_image *dom,
+                            struct xc_dom_seg seg);
+
 int xg_dom_coco_finish_encrypt(xc_interface *xch, struct xc_dom_image *dom);                            
 
 #endif /* XC_DOM_COCO_H */
