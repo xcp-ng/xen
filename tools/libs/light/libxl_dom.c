@@ -1069,6 +1069,14 @@ static int libxl__domain_firmware(libxl__gc *gc,
             dom->acpi_modules[0].length = (uint32_t)datalen;
         }
     }
+    
+    if (dom->coco) {
+        void *secrets = calloc(1, 0x1000);
+        rc = xc_dom_module_mem(dom, secrets, 0x1000, "COCO_SECRETS");
+        if (rc) {
+            /* TODO */
+        }
+    }
 
     return 0;
 out:

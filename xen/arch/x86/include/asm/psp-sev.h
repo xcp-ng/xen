@@ -68,6 +68,19 @@ enum sev_cmd {
     SEV_CMD_MAX,
 };
 
+/** 
+ * Sev platform guest status
+ */
+enum sev_guest_status {
+    SEV_GUEST_UNINIT = 0,
+    SEV_GUEST_LUPDATE,
+    SEV_GUEST_LSECRET,
+    SEV_GUEST_RUNNING,
+    SEV_GUEST_SUPDATE,
+    SEV_GUEST_RUPDATE,
+    SEV_GUEST_SENT
+};
+
 /**
  * struct sev_data_init - INIT command parameters
  *
@@ -675,5 +688,7 @@ struct sev_user_data_get_id2 {
 } __packed;
 
 extern int sev_do_cmd(int cmd, void *data, unsigned int *psp_ret, bool poll);
+
+extern int sp_update_firmware(void *firmware, int len, unsigned int *psp_ret);
 
 #endif  /* __PSP_SEV_H__ */

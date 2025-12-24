@@ -1525,9 +1525,83 @@ int xc_coco_prepare_initial_mem(xc_interface *handle, coco_prepare_initial_mem_t
         return -1;
     memcpy(arg, cmd, sizeof(coco_prepare_initial_mem_t));
 
-    rc = xencall2(handle->xcall, __HYPERVISOR_coco_op, XEN_COCO_prepare_initial_mem,
+    rc = xencall2(handle->xcall, __HYPERVISOR_coco_op, XEN_COCO_domain_prepare_initial_mem,
                   HYPERCALL_BUFFER_AS_ARG(arg));
 
+    xc_hypercall_buffer_free(handle, arg);
+    return rc;
+}
+
+int xc_coco_domain_set_secret_area(xc_interface *handle, coco_domain_secret_area_t *cmd)
+{
+    DECLARE_HYPERCALL_BUFFER(coco_domain_secret_area_t, arg);
+    int rc;
+
+    arg = xc_hypercall_buffer_alloc(handle, arg, sizeof(*arg));
+    if ( arg == NULL )
+        return -1;
+    memcpy(arg, cmd, sizeof(coco_domain_secret_area_t));
+
+    rc = xencall2(handle->xcall, __HYPERVISOR_coco_op, XEN_COCO_domain_set_secrets_area,
+                  HYPERCALL_BUFFER_AS_ARG(arg));
+
+    xc_hypercall_buffer_free(handle, arg);
+    return rc;
+}
+
+int xc_coco_finish_initial_mem(xc_interface *handle, domid_t domid)
+{
+    DECLARE_HYPERCALL_BUFFER(domid_t, arg);
+    int rc;
+
+    arg = xc_hypercall_buffer_alloc(handle, arg, sizeof(*arg));
+    if ( arg == NULL )
+        return -1;
+    *arg = domid;
+
+    rc = xencall2(handle->xcall, __HYPERVISOR_coco_op, XEN_COCO_domain_finish_initial_mem,
+                  HYPERCALL_BUFFER_AS_ARG(arg));
+
+    xc_hypercall_buffer_free(handle, arg);
+    return rc;
+}
+
+int xc_coco_get_attestation(xc_interface *handle, coco_attestation_report_t *cmd)
+{
+    DECLARE_HYPERCALL_BUFFER(coco_attestation_report_t, arg);
+    int rc;
+
+    arg = xc_hypercall_buffer_alloc(handle, arg, sizeof(*arg));
+    if ( arg == NULL )
+        return -1;
+    memcpy(arg, cmd, sizeof(coco_attestation_report_t));
+
+    rc = xencall2(handle->xcall, __HYPERVISOR_coco_op, XEN_COCO_domain_attestation_report,
+        HYPERCALL_BUFFER_AS_ARG(arg));
+
+    if (!rc) {
+        memcpy(cmd, arg, sizeof(coco_attestation_report_t));
+    }
+    xc_hypercall_buffer_free(handle, arg);
+    return rc;
+}
+
+int xc_coco_update_secret(xc_interface *handle, coco_domain_secret_t *cmd)
+{
+    DECLARE_HYPERCALL_BUFFER(coco_domain_secret_t, arg);
+    int rc;
+
+    arg = xc_hypercall_buffer_alloc(handle, arg, sizeof(*arg));
+    if ( arg == NULL )
+        return -1;
+    memcpy(arg, cmd, sizeof(coco_domain_secret_t));
+
+    rc = xencall2(handle->xcall, __HYPERVISOR_coco_op, XEN_COCO_domain_update_secrets,
+        HYPERCALL_BUFFER_AS_ARG(arg));
+
+    if (!rc) {
+        memcpy(cmd, arg, sizeof(coco_domain_secret_t));
+    }
     xc_hypercall_buffer_free(handle, arg);
     return rc;
 }

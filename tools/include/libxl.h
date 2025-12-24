@@ -3025,6 +3025,42 @@ static inline int libxl_qemu_monitor_command_0x041200(libxl_ctx *ctx,
  */
 int libxl_clear_domid_history(libxl_ctx *ctx);
 
+/*
+ * Used to retrieve an attestation for a coco domain
+ */
+int libxl_coco_domain_attestation(libxl_ctx *ctx, uint32_t domid, int file, bool is_mmonce_file, char *mmonce);
+
+/*
+ * Used to retrieve platform public keys and relevant information (identification, certificates);
+ */
+int libxl_coco_platform_certs(libxl_ctx *ctx, char *path);
+
+/*
+ * Retrieve a certificate signing request from the platform for the platform owner
+ */
+int libxl_coco_csr(libxl_ctx *ctx, char* path);
+
+/*
+ * Provide the platform the updated firmware
+ */
+int libxl_coco_update(libxl_ctx *ctx, char* path);
+
+/*
+ * Regenerate the platform specified certificate
+ */
+int libxl_coco_regen_certificate(libxl_ctx *ctx, char* cert);
+
+/*
+ * Import the platform owner certificate to the platform
+ */
+int libxl_coco_import_certificate(libxl_ctx *ctx, char* pek, char *crt);
+
+/*
+ * Provide a domain with secrets from the guest owner
+ */
+int libxl_coco_update_secrets(libxl_ctx *ctx, char *secret, char *header, uint64_t gpa, uint32_t domid);
+
+
 #endif /* LIBXL_H */
 
 /*

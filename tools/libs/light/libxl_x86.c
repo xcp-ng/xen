@@ -36,6 +36,39 @@ int libxl__arch_domain_prepare_config(libxl__gc *gc,
         config->arch.coco.sev.flags |= XEN_X86_SEV_POLICY_VALID;
         config->arch.coco.sev.policy = d_config->b_info.arch_x86.sev_policy;
     }
+    
+    if ( d_config->b_info.arch_x86.sev_session_file && d_config->b_info.arch_x86.sev_cert_file )
+    {
+        DECLARE_HYPERCALL_BUFFER(sev_start_parameters_t, buf);
+        buf = xc_hypercall_buffer_alloc(gc->owner->xch, buf, sizeof(*buf));
+        int rc, fd;
+        /* Maybe libxl_read_file_content() ?*/
+        fd = open(d_config->b_info.arch_x86.sev_session_file, O_RDONLY);
+        if (fd == -1) {
+            perror("sev_session_file invalid");
+            exit(1);
+        }
+        rc = read(fd, &buf->session, sizeof(buf->session));
+        if (rc != sizeof(buf->session)) {
+            perror("sev_session_file invalid");
+            exit(1);
+        }
+        
+        fd = open(d_config->b_info.arch_x86.sev_cert_file, O_RDONLY);
+        if (fd == -1) {
+            perror("sev_session_file invalid");
+            exit(1);
+        }
+        rc = read(fd, &buf->crt, sizeof(buf->crt));
+        if (rc != sizeof(struct sev_certificate)) {
+            perror("sev_session_file invalid");
+            exit(1);
+        }
+        
+        set_xen_guest_handle(config->arch.coco.sev.sp, buf);
+    } else {
+        config->arch.coco.sev.sp.p = 0;
+    }
 
     if (libxl_defbool_val(d_config->b_info.trap_unmapped_accesses)) {
             LOG(ERROR, "trap_unmapped_accesses is not supported on x86\n");

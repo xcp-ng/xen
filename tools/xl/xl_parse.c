@@ -1753,6 +1753,8 @@ void parse_config_data(const char *config_source,
     if (!xlu_cfg_get_long(config, "max_event_channels", &l, 0))
         b_info->event_channels = l;
 
+    xlu_cfg_replace_string (config, "sev_cert_file", &b_info->arch_x86.sev_cert_file, 0);
+    xlu_cfg_replace_string (config, "sev_session_file", &b_info->arch_x86.sev_session_file, 0);
     xlu_cfg_replace_string (config, "kernel", &b_info->kernel, 0);
     xlu_cfg_replace_string (config, "ramdisk", &b_info->ramdisk, 0);
     xlu_cfg_replace_string (config, "device_tree", &b_info->device_tree, 0);

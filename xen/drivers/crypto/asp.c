@@ -278,7 +278,7 @@ int _sev_do_cmd(struct amd_sp_dev *sp, int cmd, void *data, unsigned int *psp_re
         if ( rc && psp_ret )
             *psp_ret = SEV_CMDRESP_STS(cmdresp);
 
-        if ( data && (!rc) )
+        if ( data )
             memcpy(data, sp->cmd_buff, buf_len);
     }
     else
@@ -335,7 +335,7 @@ static int _sev_do_cmd_sync(struct amd_sp_dev *sp, int cmd, void *data, unsigned
     if ( rc &&  psp_ret )
         *psp_ret = SEV_CMDRESP_STS(cmdresp);
 
-    if ( data && (!rc) )
+    if ( data ) //copy on error too, to allow to know space how much the psp needs
         memcpy(data, sp->cmd_buff, buf_len);
 
     return rc;
@@ -456,13 +456,6 @@ static int __init sp_get_api_version(struct amd_sp_dev *sp)
     return 0;
 }
 
-static int __init sp_update_firmware(struct amd_sp_dev *sp)
-{
-    /*
-     * FIXME: nothing to do for now
-     */
-    return 0;
-}
 
 static int __init sp_alloc_special_regions(struct amd_sp_dev *sp)
 {
@@ -500,6 +493,37 @@ static int __init sp_do_init(struct amd_sp_dev *sp)
     return 0;
 }
 
+int sp_update_firmware(void *firmware, int len, unsigned int *psp_ret)
+{
+    struct sev_data_download_firmware argupdate;
+    struct sev_data_init arginit;
+    int rc = 0;
+    argupdate.address = virt_to_maddr(firmware);
+    argupdate.len = len;
+    
+    rc = sev_do_cmd(SEV_CMD_DOWNLOAD_FIRMWARE, &argupdate, psp_ret, true);
+    if (rc || *psp_ret) {
+        printk(XENLOG_ERR "asp: SEV_CMD_DOWNLOAD_FIRMWARE: rc %d psp %x \n", rc, *psp_ret);
+        printk(XENLOG_ERR "asp: SEV_CMD_DOWNLOAD_FIRMWARE: %d %x %x\n", len, ((uint8_t*)firmware)[0], ((uint8_t*)firmware)[len-1]);
+        return rc;
+    } 
+    printk(XENLOG_ERR "asp: SEV_CMD_DOWNLOAD_FIRMWARE: updated sucessfully\n");
+    
+    if ( amd_sp_master->es_tmr_region )
+    {
+        arginit.flags = SEV_INIT_FLAGS_SEV_ES;
+        arginit.tmr_address = page_to_maddr(amd_sp_master->es_tmr_region);
+        arginit.tmr_len = SEV_ES_TMR_SIZE;
+    }
+    rc = _sev_do_cmd_sync(amd_sp_master, SEV_CMD_INIT, &arginit, psp_ret);
+    if (rc || *psp_ret) {
+        printk(XENLOG_ERR "asp: SEV_CMD_INIT: rc %d psp %x \n", rc, *psp_ret);
+    }
+    
+    printk(XENLOG_ERR "asp: SEV_CMD_INIT: init sucessful\n");
+    return 0;
+}
+
 static int __init sp_df_flush(struct amd_sp_dev *sp)
 {
     unsigned int err;
@@ -529,14 +553,6 @@ static int __init sp_dev_init(struct amd_sp_dev *sp)
     if ( rc )
     {
         dprintk(XENLOG_ERR, "asp-%pp: can't get API version %d\n",
-		&sp->pdev->sbdf, rc);
-        return rc;
-    }
-
-    rc = sp_update_firmware(sp);
-    if ( rc )
-    {
-        dprintk(XENLOG_ERR, "asp-%pp: can't update firmware %d\n",
 		&sp->pdev->sbdf, rc);
         return rc;
     }
