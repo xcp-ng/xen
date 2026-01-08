@@ -32,7 +32,8 @@ struct coco_platform_status {
     uint32_t platform_flags; /* OUT */
 
 #define COCO_STATUS_FLAG_supported (1 << 0) /* Confidential computing is supported and usable */
-#define COCO_STATUS_FLAG_unsafe    (1 << 1) /* Confidential computing is unsafe (e.g debug mode) */
+#define COCO_STATUS_FLAG_unsafe    (1 << 1) /* Confidential computing is using a unsafe */
+                                            /* configuration (e.g weak or debug mode) */
     uint32_t flags;    /* OUT */
     uint32_t features; /* OUT */
 
