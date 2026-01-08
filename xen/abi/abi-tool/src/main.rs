@@ -2,6 +2,7 @@ use std::io::{Read, stdin};
 
 pub mod abi;
 pub mod c_lang;
+pub mod rs_lang;
 pub mod spec;
 
 fn main() {

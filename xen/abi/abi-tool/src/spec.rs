@@ -4,12 +4,14 @@ use bimap::BiBTreeMap;
 use indexmap::IndexMap; /* use indexmap to keep consistent ordering */
 use serde::Deserialize;
 
-fn default_ctype() -> String {
-    "uint64_t".into()
-}
-
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Hash)]
-pub struct CType(#[serde(default = "default_ctype")] pub String);
+pub struct CType(#[serde(default)] pub String);
+
+impl Default for CType {
+    fn default() -> Self {
+        Self("uint64_t".into())
+    }
+}
 
 #[derive(Clone, Debug, Default, Deserialize)]
 pub struct CAnnotations {
@@ -19,6 +21,10 @@ pub struct CAnnotations {
     pub mapping: HashMap<String, String>,
     #[serde(default)]
     pub params: HashMap<String, CType>,
+}
+
+pub struct RustAnnotations {
+
 }
 
 #[derive(Debug, Deserialize)]
