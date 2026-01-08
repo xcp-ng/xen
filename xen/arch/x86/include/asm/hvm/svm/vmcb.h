@@ -45,7 +45,7 @@ struct sev_vcpu {
 
     /*
      * Track if vCPU is in NMI, only used for SEV-ES.
-     * This is used to implement GHCB 4.4 Non-Maskable Interrupts.
+     * This is used to implement GHCB Non-Maskable Interrupts.
      */
     bool in_nmi;
 };

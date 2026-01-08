@@ -2,12 +2,12 @@
 #ifndef X86_HVM_SVM_SEV_ES_H
 #define X86_HVM_SVM_SEV_ES_H
 
-#include <asm/hvm/svm/sev.h>
-#include <asm/nospec.h>
-#include <asm/cpufeature.h>
-
 #include <xen/config.h>
 #include <xen/sched.h>
+
+#include <asm/cpufeature.h>
+#include <asm/hvm/svm/sev.h>
+#include <asm/nospec.h>
 
 #ifdef CONFIG_COCO_AMD_SEV
 int sev_es_build_vmsa(struct vcpu *v);

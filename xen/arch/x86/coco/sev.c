@@ -14,7 +14,6 @@
 #include <asm/p2m.h>
 #include <asm/psp-sev.h>
 #include <asm/hvm/asid.h>
-#include <asm/hvm/svm/sev.h>
 #include <asm/hvm/svm/sev_es.h>
 #include <asm/msr.h>
 
@@ -35,7 +34,7 @@ static int sev_domain_initialise(struct domain *d)
         return -EINVAL;
     }
 
-    if ( sev_policy.es /* && !cpu_has_sev_es */ )
+    if ( sev_policy.es && !cpu_has_sev_es )
     {
         printk(XENLOG_ERR "sev: SEV-ES is not supported\n");
         return -ENOSYS;
@@ -380,12 +379,11 @@ static struct coco_domain_ops *sev_get_domain_ops(struct domain *d,
         *sev_policy = (union sev_guest_policy){
             .no_key_sharing = true,
             .no_debug = true,
-            .no_send = true, /* To change when SEV live migration is something */
-            .es = false,
-            // cpu_has_sev_es, /* Use SEV-ES if available */
+            .no_send = true, /* To review when SEV live migration is something */
+            .es = cpu_has_sev_es, /* Use SEV-ES if available */
         };
 
-    return &sev_domain_ops; /* sev_policy->es ? &sev_es_domain_ops : &sev_domain_ops; */
+    return sev_policy->es ? &sev_es_domain_ops : &sev_domain_ops;
 }
 
 struct coco_ops sev_coco_ops = {
