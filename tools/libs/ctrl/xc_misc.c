@@ -324,6 +324,33 @@ out:
     return ret;
 }
 
+int xc_numa_meminfo(xc_interface *xch, unsigned int *max_nodes,
+                    xen_sysctl_node_meminfo_t *meminfo)
+{
+    int ret;
+    struct xen_sysctl sysctl = {};
+    DECLARE_HYPERCALL_BOUNCE(meminfo, *max_nodes * sizeof(*meminfo),
+                             XC_HYPERCALL_BUFFER_BOUNCE_OUT);
+
+    if ( (ret = xc_hypercall_bounce_pre(xch, meminfo)) )
+        goto out;
+
+    sysctl.u.numa_meminfo.num_nodes = *max_nodes;
+    set_xen_guest_handle(sysctl.u.numa_meminfo.meminfo, meminfo);
+
+    sysctl.cmd = XEN_SYSCTL_numa_meminfo;
+
+    if ( (ret = do_sysctl(xch, &sysctl)) != 0 )
+        goto out;
+
+    *max_nodes = sysctl.u.numa_meminfo.num_nodes;
+
+out:
+    xc_hypercall_bounce_post(xch, meminfo);
+
+    return ret;
+}
+
 int xc_pcitopoinfo(xc_interface *xch, unsigned num_devs,
                    physdev_pci_device_t *devs,
                    uint32_t *nodes)
