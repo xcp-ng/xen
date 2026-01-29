@@ -86,17 +86,13 @@
 /* Page is not reference counted */
 #define _PGC_extra        PG_shift(7)
 #define PGC_extra         PG_mask(1, 7)
+/* Page needs to be scrubbed. */
+#define _PGC_need_scrub   PG_shift(8)
+#define PGC_need_scrub    PG_mask(1, 8)
 
 /* Count of references to this frame. */
-#define PGC_count_width   PG_shift(7)
+#define PGC_count_width   PG_shift(8)
 #define PGC_count_mask    ((1UL<<PGC_count_width)-1)
-
-/*
- * Page needs to be scrubbed. Since this bit can only be set on a page that is
- * free (i.e. in PGC_state_free) we can reuse PGC_allocated bit.
- */
-#define _PGC_need_scrub   _PGC_allocated
-#define PGC_need_scrub    PGC_allocated
 
 #ifndef CONFIG_BIGMEM
 /*
