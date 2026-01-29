@@ -357,6 +357,62 @@ long do_sysctl(XEN_GUEST_HANDLE_PARAM(xen_sysctl_t) u_sysctl)
     }
     break;
 
+    case XEN_SYSCTL_numa_meminfo:
+    {
+        unsigned int i, num_nodes;
+        struct xen_sysctl_numa_meminfo *mi = &op->u.numa_meminfo;
+
+        if ( op->u.numa_meminfo._rsvd )
+        {
+            ret = -EINVAL;
+            break;
+        }
+
+        num_nodes = last_node(node_online_map) + 1;
+
+        if ( !guest_handle_is_null(mi->meminfo) )
+        {
+            if ( num_nodes > mi->num_nodes )
+                num_nodes = mi->num_nodes;
+
+            for ( i = 0; i < num_nodes; ++i )
+            {
+                xen_sysctl_node_meminfo_t meminfo;
+
+                if ( node_online(i) )
+                {
+                    node_pages_t np = avail_node_heap_pages(i);
+
+                    meminfo.size = node_present_pages(i) << PAGE_SHIFT;
+                    meminfo.free = np.avail << PAGE_SHIFT;
+                    meminfo.claimed = np.claimed << PAGE_SHIFT;
+                }
+                else
+                    meminfo.size = meminfo.free = meminfo.claimed = -1;
+
+                if ( copy_to_guest_offset(mi->meminfo, i, &meminfo, 1) )
+                {
+                    ret = -EFAULT;
+                    break;
+                }
+            }
+        }
+        else
+            i = num_nodes;
+
+        if ( !ret && (mi->num_nodes != i) )
+        {
+            mi->num_nodes = i;
+            if ( __copy_field_to_guest(u_sysctl, op,
+                                       u.numa_meminfo.num_nodes) )
+            {
+                ret = -EFAULT;
+                break;
+            }
+        }
+    }
+    break;
+
     case XEN_SYSCTL_cputopoinfo:
     {
         unsigned int i, num_cpus;

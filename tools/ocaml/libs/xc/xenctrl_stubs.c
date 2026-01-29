@@ -945,6 +945,56 @@ CAMLprim value stub_numa_get_distances(value xch_val)
 	CAMLreturn(result);
 }
 
+CAMLprim value stub_numa_get_meminfo(value xch_val)
+{
+	static volatile unsigned nodes;
+
+	CAMLparam1(xch_val);
+	CAMLlocal2(result, info);
+
+	xc_interface *xch = xch_of_val(xch_val);
+	unsigned nr = nodes;
+	int ret;
+
+	/*
+	 * The number of nodes is fixed at boot.  Cache it on the first
+	 * request.  This is acceptably safe in concurrent circumstances; if
+	 * two requests race, both will update nodes with the same value.
+	 */
+	if (nr == 0) {
+		caml_enter_blocking_section();
+		ret = xc_numa_meminfo(xch, &nr, NULL);
+		caml_leave_blocking_section();
+
+		if (ret < 0)
+			failwith_xc(xch);
+
+		nodes = nr;
+	}
+
+	xen_sysctl_node_meminfo_t meminfo[nr];
+
+	caml_enter_blocking_section();
+	ret = xc_numa_meminfo(xch, &nr, meminfo);
+	caml_leave_blocking_section();
+
+	if (ret < 0)
+		failwith_xc(xch);
+
+	result = caml_alloc_tuple(nr);
+	for (unsigned i = 0; i < nr; ++i) {
+		info = caml_alloc_tuple(3);
+
+		Store_field(info, 0, caml_copy_int64(meminfo[i].size));
+		Store_field(info, 1, caml_copy_int64(meminfo[i].free));
+		Store_field(info, 2, caml_copy_int64(meminfo[i].claimed));
+
+		Store_field(result, i, info);
+	}
+
+	CAMLreturn(result);
+}
+
 CAMLprim value stub_xc_readconsolering(value xch_val)
 {
 	/* Safe to use outside of blocking sections because of Ocaml GC lock. */

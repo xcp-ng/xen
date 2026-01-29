@@ -1153,6 +1153,8 @@ int xc_get_ucode_revision(xc_interface *xch,
                           struct xenpf_ucode_revision *ucode_rev);
 int xc_numainfo(xc_interface *xch, unsigned *max_nodes,
                 xc_meminfo_t *meminfo, uint32_t *distance);
+int xc_numa_meminfo(xc_interface *xch, unsigned int *max_nodes,
+                    xen_sysctl_node_meminfo_t *meminfo);
 int xc_pcitopoinfo(xc_interface *xch, unsigned num_devs,
                    physdev_pci_device_t *devs, uint32_t *nodes);
 

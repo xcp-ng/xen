@@ -983,6 +983,7 @@ static int cf_check flask_sysctl(const struct xen_sysctl *op)
     case XEN_SYSCTL_physinfo:
     case XEN_SYSCTL_cputopoinfo:
     case XEN_SYSCTL_numainfo:
+    case XEN_SYSCTL_numa_meminfo:
     case XEN_SYSCTL_pcitopoinfo:
     case XEN_SYSCTL_get_cpu_policy:
         return domain_has_xen(current->domain, XEN__PHYSINFO);
