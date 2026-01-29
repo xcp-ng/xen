@@ -705,6 +705,17 @@ struct xen_sysctl_numainfo {
     XEN_GUEST_HANDLE_64(uint32) distance;
 };
 
+struct xen_sysctl_node_meminfo {
+    uint64_t size, free, claimed;
+};
+typedef struct xen_sysctl_node_meminfo xen_sysctl_node_meminfo_t;
+DEFINE_XEN_GUEST_HANDLE(xen_sysctl_node_meminfo_t);
+struct xen_sysctl_numa_meminfo {
+    uint32_t num_nodes;
+    uint32_t _rsvd;
+    XEN_GUEST_HANDLE_64(xen_sysctl_node_meminfo_t) meminfo;
+};
+
 /* XEN_SYSCTL_cpupool_op */
 #define XEN_SYSCTL_CPUPOOL_OP_CREATE                1  /* C */
 #define XEN_SYSCTL_CPUPOOL_OP_DESTROY               2  /* D */
@@ -1262,6 +1273,7 @@ struct xen_sysctl {
 #define XEN_SYSCTL_lockprof_op                   15
 #define XEN_SYSCTL_cputopoinfo                   16
 #define XEN_SYSCTL_numainfo                      17
+#define XEN_SYSCTL_numa_meminfo                1117
 #define XEN_SYSCTL_cpupool_op                    18
 #define XEN_SYSCTL_scheduler_op                  19
 #define XEN_SYSCTL_coverage_op                   20
@@ -1283,6 +1295,7 @@ struct xen_sysctl {
         struct xen_sysctl_cputopoinfo       cputopoinfo;
         struct xen_sysctl_pcitopoinfo       pcitopoinfo;
         struct xen_sysctl_numainfo          numainfo;
+        struct xen_sysctl_numa_meminfo      numa_meminfo;
         struct xen_sysctl_sched_id          sched_id;
         struct xen_sysctl_perfc_op          perfc_op;
         struct xen_sysctl_getdomaininfolist getdomaininfolist;
