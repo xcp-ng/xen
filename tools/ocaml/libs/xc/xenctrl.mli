@@ -272,6 +272,9 @@ type evtchn_status = { vcpu: int; status: evtchn_stat }
 external evtchn_status: handle -> domid -> int -> evtchn_status option =
   "stub_xc_evtchn_status"
 
+external numa_get_distances : handle -> int array array
+  = "stub_numa_get_distances"
+
 external readconsolering : handle -> string = "stub_xc_readconsolering"
 external send_debug_keys : handle -> string -> unit = "stub_xc_send_debug_keys"
 external physinfo : handle -> physinfo = "stub_xc_physinfo"
