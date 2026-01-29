@@ -859,6 +859,62 @@ CAMLprim value stub_xc_evtchn_status(value xch_val, value domid, value port)
 	CAMLreturn(result);
 }
 
+CAMLprim value stub_numa_get_distances(value xch_val)
+{
+	static volatile unsigned nodes;
+
+	CAMLparam1(xch_val);
+	CAMLlocal2(result, row);
+
+	xc_interface *xch = xch_of_val(xch_val);
+	uint32_t *distances;
+	unsigned nr = nodes;
+	int ret;
+
+	/*
+	 * The number of nodes is fixed at boot.  Cache it on the first
+	 * request.  This is acceptably safe in concurrent circumstances; if
+	 * two requests race, both will update nodes with the same value.
+	 */
+	if (nr == 0) {
+		caml_enter_blocking_section();
+		ret = xc_numainfo(xch, &nr, NULL, NULL);
+		caml_leave_blocking_section();
+
+		if (ret < 0)
+			failwith_xc(xch);
+
+		nodes = nr;
+	}
+
+	distances = malloc(nr * nr * sizeof(*distances));
+	if (!distances)
+		caml_raise_out_of_memory();
+
+	caml_enter_blocking_section();
+	ret = xc_numainfo(xch, &nr, NULL, distances);
+	caml_leave_blocking_section();
+
+	if (ret < 0) {
+		free(distances);
+		failwith_xc(xch);
+	}
+
+	result = caml_alloc_tuple(nr);
+	for (unsigned i = 0; i < nr; ++i) {
+		row = caml_alloc_tuple(nr);
+
+		for (unsigned j = 0; j < nr; ++j)
+			Store_field(row, j, Val_int(distances[i * nr + j]));
+
+		Store_field(result, i, row);
+	}
+
+	free(distances);
+
+	CAMLreturn(result);
+}
+
 CAMLprim value stub_xc_readconsolering(value xch_val)
 {
 	/* Safe to use outside of blocking sections because of Ocaml GC lock. */
