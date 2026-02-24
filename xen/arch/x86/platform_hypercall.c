@@ -91,9 +91,26 @@ static bool msr_read_allowed(unsigned int msr)
         return cpu_has_srbds_ctrl;
 
     case MSR_IA32_THERM_STATUS:
+        return host_cpu_policy.basic.acpi;
+
+    /*
+     * This MSR is present on most Intel Core-family CPUs since Nehalem but is not an
+     * architectural MSR. No CPUID bit enumerates this MSR.
+     *
+     * This MSR exposes "temperature target" that is needed to compute the CPU
+     * temperature. The "temperature target" is a model specific value, and this MSR is
+     * the only known method of getting the one used for the CPU. On some CPU models with
+     * Intel SST-PP, the "temperature target" can vary over time.
+     *
+     * We assume all Intel CPUs with DTS may support this MSR; but reads can fail in case
+     * the platform doesn't actually support this MSR.
+     */
     case MSR_TEMPERATURE_TARGET:
+        return boot_cpu_data.x86_vendor == X86_VENDOR_INTEL &&
+               host_cpu_policy.basic.digital_temp_sensor;
+
     case MSR_PACKAGE_THERM_STATUS:
-        return host_cpu_policy.basic.digital_temp_sensor;
+        return host_cpu_policy.basic.pkg_therm_mgmt;
     }
 
     if ( ppin_msr && msr == ppin_msr )
