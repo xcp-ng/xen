@@ -158,7 +158,7 @@ struct cpu_policy
                         :1,
                         :1,
                         :1,
-                        :1,
+                        pkg_therm_mgmt:1,
                         hwp:1,
                         hwp_interrupt:1,
                         hwp_activity_window:1,
