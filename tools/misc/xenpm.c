@@ -86,7 +86,7 @@ static void parse_cpuid(const char *arg, int *cpuid)
         if ( strcasecmp(arg, "all") )
         {
             fprintf(stderr, "Invalid CPU identifier: '%s'\n", arg);
-            exit(EINVAL);
+            exit(EXIT_FAILURE);
         }
         *cpuid = -1;
     }
@@ -98,7 +98,7 @@ static void parse_cpuid_and_int(int argc, char *argv[],
     if ( argc == 0 )
     {
          fprintf(stderr, "Missing %s\n", what);
-         exit(EINVAL);
+         exit(EXIT_FAILURE);
     }
 
     if ( argc > 1 )
@@ -107,7 +107,7 @@ static void parse_cpuid_and_int(int argc, char *argv[],
     if ( sscanf(argv[argc > 1], "%d", val) != 1 )
     {
         fprintf(stderr, "Invalid %s '%s'\n", what, argv[argc > 1]);
-        exit(EINVAL);
+        exit(EXIT_FAILURE);
     }
 }
 
@@ -609,7 +609,7 @@ static void signal_int_handler(int signo)
 out:
     free(cputopo);
     xc_interface_close(xc_handle);
-    exit(0);
+    exit(EXIT_SUCCESS);
 }
 
 void start_gather_func(int argc, char *argv[])
@@ -993,7 +993,7 @@ void scaling_governor_func(int argc, char *argv[])
     else
     {
         fprintf(stderr, "Missing argument(s)\n");
-        exit(EINVAL);
+        exit(EXIT_FAILURE);
     }
 
     if ( cpuid < 0 )
@@ -1054,7 +1054,7 @@ void cpu_topology_func(int argc, char *argv[])
 out:
     free(cputopo);
     if ( rc )
-        exit(rc);
+        exit(EXIT_FAILURE);
 }
 
 void set_sched_smt_func(int argc, char *argv[])
@@ -1063,7 +1063,7 @@ void set_sched_smt_func(int argc, char *argv[])
 
     if ( argc != 1 ) {
         fprintf(stderr, "Missing or invalid argument(s)\n");
-        exit(EINVAL);
+        exit(EXIT_FAILURE);
     }
 
     if ( !strcasecmp(argv[0], "disable") )
@@ -1073,7 +1073,7 @@ void set_sched_smt_func(int argc, char *argv[])
     else
     {
         fprintf(stderr, "Invalid argument: %s\n", argv[0]);
-        exit(EINVAL);
+        exit(EXIT_FAILURE);
     }
 
     if ( !xc_set_sched_opt_smt(xc_handle, value) )
@@ -1093,12 +1093,12 @@ void set_vcpu_migration_delay_func(int argc, char *argv[])
 
     if ( argc != 1 || (value = atoi(argv[0])) < 0 ) {
         fprintf(stderr, "Missing or invalid argument(s)\n");
-        exit(EINVAL);
+        exit(EXIT_FAILURE);
     }
 
     if ( xc_sched_credit_params_get(xc_handle, 0, &sparam) < 0 ) {
         fprintf(stderr, "getting Credit scheduler parameters failed\n");
-        exit(EINVAL);
+        exit(EXIT_FAILURE);
     }
     sparam.vcpu_migr_delay_us = value;
 
@@ -1143,7 +1143,7 @@ void set_max_cstate_func(int argc, char *argv[])
            : (subval = XEN_SYSCTL_CX_UNLIMITED, strcmp(argv[1], "unlimited")))) )
     {
         fprintf(stderr, "Missing, excess, or invalid argument(s)\n");
-        exit(EINVAL);
+        exit(EXIT_FAILURE);
     }
 
     snprintf(buf, ARRAY_SIZE(buf), "C%d", value);
@@ -1258,7 +1258,7 @@ int main(int argc, char *argv[])
     if ( !xc_handle )
     {
         fprintf(stderr, "failed to get the handler\n");
-        return EIO;
+        return EXIT_FAILURE;
     }
 
     ret = xc_physinfo(xc_handle, &physinfo);
@@ -1268,7 +1268,7 @@ int main(int argc, char *argv[])
         fprintf(stderr, "failed to get processor information (%d - %s)\n",
                 ret, strerror(ret));
         xc_interface_close(xc_handle);
-        return ret;
+        return EXIT_FAILURE;
     }
     max_cpu_nr = physinfo.max_cpu_id + 1;
 
@@ -1283,7 +1283,8 @@ int main(int argc, char *argv[])
         for ( i = 0; i < nr_matches; i++ )
             fprintf(stderr, " %s", main_options[matches_main_options[i]].name);
         fprintf(stderr, "\n");
-        ret = EINVAL;
+        xc_interface_close(xc_handle);
+        return EXIT_FAILURE;
     }
     else if ( nr_matches == 1 )
         /* dispatch to the corresponding function handler */
@@ -1291,10 +1292,11 @@ int main(int argc, char *argv[])
     else
     {
         show_help();
-        ret = EINVAL;
+        xc_interface_close(xc_handle);
+        return EXIT_FAILURE;
     }
 
     xc_interface_close(xc_handle);
-    return ret;
+    return EXIT_SUCCESS;
 }
 
