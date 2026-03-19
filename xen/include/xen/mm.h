@@ -130,8 +130,21 @@ void get_outstanding_claims(uint64_t *free_pages, uint64_t *outstanding_pages);
 
 /* Domain suballocator. These functions are *not* interrupt-safe.*/
 void init_domheap_pages(paddr_t ps, paddr_t pe);
-struct page_info *alloc_domheap_pages(
-    struct domain *d, unsigned int order, unsigned int memflags);
+
+/*
+ * Direct callers of alloc_domheap_pages_flags() must sanitize the contents
+ * of the count_info field to ensure no unexpected flags are leaked.
+ */
+struct page_info *alloc_domheap_pages_flags(
+    struct domain *d, unsigned int order, unsigned int memflags,
+    bool clear_scrub);
+
+static inline struct page_info *alloc_domheap_pages(
+    struct domain *d, unsigned int order, unsigned int memflags)
+{
+    return alloc_domheap_pages_flags(d, order, memflags, true);
+}
+
 void free_domheap_pages(struct page_info *pg, unsigned int order);
 unsigned long avail_domheap_pages_region(
     unsigned int node, unsigned int min_width, unsigned int max_width);

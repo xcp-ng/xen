@@ -923,7 +923,7 @@ static struct page_info *get_free_buddy(unsigned int zone_lo,
 static struct page_info *alloc_heap_pages(
     unsigned int zone_lo, unsigned int zone_hi,
     unsigned int order, unsigned int memflags,
-    struct domain *d)
+    struct domain *d, bool clear_scrub)
 {
     nodeid_t node;
     unsigned int i, buddy_order, zone, first_dirty;
@@ -1040,10 +1040,13 @@ static struct page_info *alloc_heap_pages(
     {
         for ( i = 0; i < (1U << order); i++ )
         {
-            if ( test_and_clear_bit(_PGC_need_scrub, &pg[i].count_info) )
+            if ( test_bit(_PGC_need_scrub, &pg[i].count_info) )
             {
                 if ( !(memflags & MEMF_no_scrub) )
                     scrub_one_page(&pg[i]);
+
+                if ( !(memflags & MEMF_no_scrub) || clear_scrub )
+                    __clear_bit(_PGC_need_scrub, &pg[i].count_info);
 
                 dirty_cnt++;
             }
@@ -2221,7 +2224,7 @@ void *alloc_xenheap_pages(unsigned int order, unsigned int memflags)
     ASSERT_ALLOC_CONTEXT();
 
     pg = alloc_heap_pages(MEMZONE_XEN, MEMZONE_XEN,
-                          order, memflags | MEMF_no_scrub, NULL);
+                          order, memflags | MEMF_no_scrub, NULL, true);
     if ( unlikely(pg == NULL) )
         return NULL;
 
@@ -2344,7 +2347,8 @@ int assign_pages(
 
         for ( i = 0; i < nr; i++ )
         {
-            ASSERT(!(pg[i].count_info & ~(PGC_extra | PGC_static)));
+            ASSERT(!(pg[i].count_info &
+                     ~(PGC_extra | PGC_static | PGC_need_scrub)));
             if ( pg[i].count_info & PGC_extra )
                 extra_pages++;
         }
@@ -2421,8 +2425,9 @@ int assign_page(struct page_info *pg, unsigned int order, struct domain *d,
     return assign_pages(pg, 1U << order, d, memflags);
 }
 
-struct page_info *alloc_domheap_pages(
-    struct domain *d, unsigned int order, unsigned int memflags)
+struct page_info *alloc_domheap_pages_flags(
+    struct domain *d, unsigned int order, unsigned int memflags,
+    bool clear_scrub)
 {
     struct page_info *pg = NULL;
     unsigned int bits = memflags >> _MEMF_bits, zone_hi = NR_ZONES - 1;
@@ -2442,12 +2447,13 @@ struct page_info *alloc_domheap_pages(
     if ( !dma_bitsize )
         memflags &= ~MEMF_no_dma;
     else if ( (dma_zone = bits_to_zone(dma_bitsize)) < zone_hi )
-        pg = alloc_heap_pages(dma_zone + 1, zone_hi, order, memflags, d);
+        pg = alloc_heap_pages(dma_zone + 1, zone_hi, order, memflags, d,
+                              clear_scrub);
 
     if ( (pg == NULL) &&
          ((memflags & MEMF_no_dma) ||
           ((pg = alloc_heap_pages(MEMZONE_XEN + 1, zone_hi, order,
-                                  memflags, d)) == NULL)) )
+                                  memflags, d, clear_scrub)) == NULL)) )
          return NULL;
 
     if ( d && !(memflags & MEMF_no_owner) )
@@ -2458,8 +2464,9 @@ struct page_info *alloc_domheap_pages(
 
             for ( i = 0; i < (1ul << order); i++ )
             {
-                ASSERT(!pg[i].count_info);
-                pg[i].count_info = PGC_extra;
+                ASSERT(!(pg[i].count_info & ~(clear_scrub ? 0
+                                                          : PGC_need_scrub)));
+                pg[i].count_info |= PGC_extra;
             }
         }
         if ( assign_page(pg, order, d, memflags) )

@@ -350,7 +350,8 @@ static void populate_physmap(struct memop_args *a)
                                               &scrub_start);
 
                 if ( !page )
-                    page = alloc_domheap_pages(d, a->extent_order, memflags);
+                    page = alloc_domheap_pages_flags(d, a->extent_order,
+                                                     memflags, false);
 
                 if ( unlikely(!page) )
                 {
