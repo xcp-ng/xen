@@ -715,6 +715,10 @@ int hvm_domain_initialise(struct domain *d,
     if ( rc )
         goto fail2;
 
+    rc = hvm_asid_alloc(&d->arch.hvm.asid);
+    if ( rc )
+        goto fail2;
+
     rc = alternative_call(hvm_funcs.domain_initialise, d);
     if ( rc != 0 )
         goto fail2;
@@ -795,7 +799,7 @@ void hvm_domain_destroy(struct domain *d)
         list_del(&ioport->list);
         xfree(ioport);
     }
-
+    hvm_asid_free(&d->arch.hvm.asid);
     destroy_vpci_mmcfg(d);
 }
 
@@ -1613,7 +1617,7 @@ int hvm_vcpu_initialise(struct vcpu *v)
     int rc;
     struct domain *d = v->domain;
 
-    hvm_asid_flush_vcpu(v);
+    v->arch.needs_tlb_flush = true;
 
     spin_lock_init(&v->arch.hvm.tm_lock);
     INIT_LIST_HEAD(&v->arch.hvm.tm_list);
@@ -4085,6 +4089,11 @@ static void hvm_s3_resume(struct domain *d)
     }
 }
 
+int hvm_flush_tlb(const unsigned long *vcpu_bitmap)
+{
+    return current->domain->arch.paging.flush_tlb(vcpu_bitmap);
+}
+
 static int hvmop_flush_tlb_all(void)
 {
     if ( !is_hvm_domain(current->domain) )
@@ -5461,4 +5470,3 @@ int hvm_copy_context_and_params(struct domain *dst, struct domain *src)
  * indent-tabs-mode: nil
  * End:
  */
-

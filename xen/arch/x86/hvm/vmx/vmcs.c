@@ -20,6 +20,7 @@
 #include <asm/current.h>
 #include <asm/flushtlb.h>
 #include <asm/hvm/hvm.h>
+#include <asm/hvm/asid.h>
 #include <asm/hvm/io.h>
 #include <asm/hvm/nestedhvm.h>
 #include <asm/hvm/vmx/vmcs.h>
@@ -777,8 +778,6 @@ static int _vmx_cpu_up(bool bsp)
         : vmxon_fail, vmxon_fault );
 
     this_cpu(vmxon) = 1;
-
-    hvm_asid_init(cpu_has_vmx_vpid ? (1u << VMCS_VPID_WIDTH) : 0);
 
     if ( cpu_has_vmx_ept )
         ept_sync_all();
@@ -1903,7 +1902,7 @@ void cf_check vmx_do_resume(void)
          */
         v->arch.hvm.vmx.hostenv_migrated = 1;
 
-        hvm_asid_flush_vcpu(v);
+        v->arch.needs_tlb_flush = true;
     }
 
     debug_state = v->domain->debugger_attached
@@ -2116,7 +2115,6 @@ void vmcs_dump_vcpu(struct vcpu *v)
          (SECONDARY_EXEC_ENABLE_VPID | SECONDARY_EXEC_ENABLE_VM_FUNCTIONS) )
         printk("Virtual processor ID = 0x%04x VMfunc controls = %016lx\n",
                vmr16(VIRTUAL_PROCESSOR_ID), vmr(VM_FUNCTION_CONTROL));
-
     vmx_vmcs_exit(v);
 }
 

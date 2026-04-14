@@ -81,12 +81,6 @@ const char *const fetch_type_names[] = {
 
 static pagetable_t cf_check sh_update_cr3(struct vcpu *v, bool noflush);
 
-/* Helper to perform a local TLB flush. */
-static void sh_flush_local(const struct domain *d)
-{
-    flush_local(guest_flush_tlb_flags(d));
-}
-
 #if GUEST_PAGING_LEVELS >= 4 && defined(CONFIG_PV32)
 #define ASSERT_VALID_L2(t) \
     ASSERT((t) == SH_type_l2_shadow || (t) == SH_type_l2h_shadow)
@@ -2945,7 +2939,8 @@ static bool cf_check sh_invlpg(struct vcpu *v, unsigned long linear)
     if ( mfn_to_page(sl1mfn)->u.sh.type
          == SH_type_fl1_shadow )
     {
-        sh_flush_local(v->domain);
+        flush_tlb_local();
+        v->arch.needs_tlb_flush = true;
         return false;
     }
 
@@ -3160,7 +3155,8 @@ sh_update_linear_entries(struct vcpu *v)
      * linear pagetable to read a top-level shadow page table entry. But,
      * without this change, it would fetch the wrong value due to a stale TLB.
      */
-    sh_flush_local(d);
+    flush_tlb_local();
+    v->arch.needs_tlb_flush = true;
 }
 
 static pagetable_t cf_check sh_update_cr3(struct vcpu *v, bool noflush)

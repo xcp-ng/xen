@@ -27,6 +27,7 @@
 #include <asm/p2m.h>
 #include <asm/domain.h>
 #include <xen/numa.h>
+#include <asm/hvm/asid.h>
 #include <asm/hvm/nestedhvm.h>
 #include <public/sched.h>
 
@@ -750,18 +751,16 @@ static bool cf_check flush_tlb(const unsigned long *vcpu_bitmap)
         if ( !flush_vcpu(v, vcpu_bitmap) )
             continue;
 
-        hvm_asid_flush_vcpu(v);
-
         cpu = read_atomic(&v->dirty_cpu);
         if ( cpu != this_cpu && is_vcpu_dirty_cpu(cpu) && v->is_running )
             __cpumask_set_cpu(cpu, mask);
     }
 
+    guest_flush_tlb_mask(d, mask);
+
     /*
      * Trigger a vmexit on all pCPUs with dirty vCPU state in order to force an
-     * ASID/VPID change and hence accomplish a guest TLB flush. Note that vCPUs
-     * not currently running will already be flushed when scheduled because of
-     * the ASID tickle done in the loop above.
+     * ASID/VPID flush and hence accomplish a guest TLB flush.
      */
     on_selected_cpus(mask, NULL, NULL, 0);
 

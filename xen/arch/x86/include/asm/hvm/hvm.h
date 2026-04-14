@@ -274,6 +274,8 @@ int hvm_domain_initialise(struct domain *d,
 void hvm_domain_relinquish_resources(struct domain *d);
 void hvm_domain_destroy(struct domain *d);
 
+int hvm_flush_tlb(const unsigned long *vcpu_bitmap);
+
 int hvm_vcpu_initialise(struct vcpu *v);
 void hvm_vcpu_destroy(struct vcpu *v);
 void hvm_vcpu_down(struct vcpu *v);
@@ -495,17 +497,6 @@ static inline void hvm_cpuid_policy_changed(struct vcpu *v)
 static inline void hvm_set_tsc_offset(struct vcpu *v, uint64_t offset)
 {
     alternative_vcall(hvm_funcs.set_tsc_offset, v, offset);
-}
-
-/*
- * Called to ensure than all guest-specific mappings in a tagged TLB are 
- * flushed; does *not* flush Xen's TLB entries, and on processors without a 
- * tagged TLB it will be a noop.
- */
-static inline void hvm_flush_guest_tlbs(void)
-{
-    if ( hvm_enabled )
-        hvm_asid_flush_core();
 }
 
 static inline unsigned int
@@ -900,8 +891,6 @@ static inline int hvm_cpu_up(void)
 }
 
 static inline void hvm_cpu_down(void) {}
-
-static inline void hvm_flush_guest_tlbs(void) {}
 
 static inline void hvm_invlpg(const struct vcpu *v, unsigned long linear)
 {

@@ -208,7 +208,7 @@ to appropriate auditing by Xen.  Argo is disabled by default.
 > Default: `true`
 
 Permit Xen to use Address Space Identifiers.  This is an optimisation which
-tags the TLB entries with an ID per vcpu.  This allows for guest TLB flushes
+tags the TLB entries with an ID per domain.  This allows for guest TLB flushes
 to be performed without the overhead of a complete TLB flush.
 
 ### async-show-all (x86)

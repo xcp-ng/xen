@@ -27,6 +27,7 @@
 #include <asm/hvm/nestedhvm.h>
 #include <asm/hvm/support.h>
 #include <asm/hvm/svm.h>
+#include <asm/hvm/asid.h>
 #include <asm/i387.h>
 #include <asm/idt.h>
 #include <asm/iocap.h>
@@ -137,14 +138,17 @@ static void cf_check svm_update_guest_cr(
         if ( !nestedhvm_enabled(v->domain) )
         {
             if ( !(flags & HVM_UPDATE_GUEST_CR3_NOFLUSH) )
-                hvm_asid_flush_vcpu(v);
+                v->arch.needs_tlb_flush = true;
         }
         else if ( nestedhvm_vmswitch_in_progress(v) )
             ; /* CR3 switches during VMRUN/VMEXIT do not flush the TLB. */
         else if ( !(flags & HVM_UPDATE_GUEST_CR3_NOFLUSH) )
-            hvm_asid_flush_vcpu_asid(
-                nestedhvm_vcpu_in_guestmode(v)
-                ? &vcpu_nestedhvm(v).nv_n2asid : &v->arch.hvm.n1asid);
+        {
+            if (nestedhvm_vcpu_in_guestmode(v))
+                vcpu_nestedhvm(v).nv_flushp2m = true;
+            else
+                v->arch.needs_tlb_flush = true;
+        }
         break;
     case 4:
         value = HVM_CR4_HOST_MASK;
@@ -952,8 +956,7 @@ static void noreturn cf_check svm_do_resume(void)
         v->arch.hvm.svm.launch_core = smp_processor_id();
         hvm_migrate_timers(v);
         hvm_migrate_pirqs(v);
-        /* Migrating to another ASID domain.  Request a new ASID. */
-        hvm_asid_flush_vcpu(v);
+        v->arch.needs_tlb_flush = true;
     }
 
     if ( !vcpu_guestmode && !vlapic_hw_disabled(vlapic) )
@@ -980,12 +983,13 @@ void asmlinkage svm_vmenter_helper(void)
 
     ASSERT(hvmemul_cache_disabled(curr));
 
-    svm_asid_handle_vmrun();
-
     TRACE_TIME(TRC_HVM_VMENTRY |
                (nestedhvm_vcpu_in_guestmode(curr) ? TRC_HVM_NESTEDFLAG : 0));
 
     svm_sync_vmcb(curr, vmcb_needs_vmsave);
+
+    if ( test_and_clear_bool(curr->arch.needs_tlb_flush) )
+        svm_vcpu_set_tlb_control(curr);
 
     vmcb->rax = regs->rax;
     vmcb->rip = regs->rip;
@@ -1106,6 +1110,8 @@ static int cf_check svm_vcpu_initialise(struct vcpu *v)
                 v->vcpu_id, rc);
         return rc;
     }
+
+    svm_vcpu_assign_asid(v);
 
     return 0;
 }
@@ -1531,9 +1537,6 @@ static int _svm_cpu_up(bool bsp)
 
     /* check for erratum 383 */
     svm_init_erratum_383(c);
-
-    /* Initialize core's ASID handling. */
-    svm_asid_init(c);
 
     /* Initialize OSVW bits to be used by guests */
     svm_host_osvw_init();
@@ -2289,7 +2292,7 @@ static void svm_invlpga_intercept(
 {
     svm_invlpga(linear,
                 (asid == 0)
-                ? v->arch.hvm.n1asid.asid
+                ? v->domain->arch.hvm.asid.asid
                 : vcpu_nestedhvm(v).nv_n2asid.asid);
 }
 
@@ -2311,8 +2314,8 @@ static bool cf_check is_invlpg(
 
 static void cf_check svm_invlpg(struct vcpu *v, unsigned long linear)
 {
-    /* Safe fallback. Take a new ASID. */
-    hvm_asid_flush_vcpu(v);
+    /* Schedule a tlb flush on the VCPU. */
+    v->arch.needs_tlb_flush = true;
 }
 
 static bool cf_check svm_get_pending_event(
@@ -2482,6 +2485,8 @@ const struct hvm_function_table * __init start_svm(void)
     svm_function_table.caps.hap_superpage_2mb = true;
     svm_function_table.caps.hap_superpage_1gb = cpu_has_page1gb;
 
+    svm_asid_init();
+
     return &svm_function_table;
 }
 
@@ -2538,6 +2543,8 @@ void asmlinkage svm_vmexit_handler(void)
                    ((intr.fields.tpr & 0x0F) << 4) |
                    (vlapic_get_reg(vlapic, APIC_TASKPRI) & 0x0F));
     }
+
+    svm_vcpu_clear_tlb_control(v);
 
     exit_reason = vmcb->exitcode;
 

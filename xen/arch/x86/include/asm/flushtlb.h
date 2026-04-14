@@ -125,12 +125,6 @@ void switch_cr3_cr4(struct vcpu *v, unsigned long cr3, unsigned long cr4);
 #define FLUSH_VCPU_STATE 0x1000
  /* Flush the per-cpu root page table */
 #define FLUSH_ROOT_PGTBL 0x2000
-#if CONFIG_HVM
- /* Flush all HVM guests linear TLB (using ASID/VPID) */
-#define FLUSH_HVM_ASID_CORE 0x4000
-#else
-#define FLUSH_HVM_ASID_CORE 0
-#endif
 #if defined(CONFIG_PV) || defined(CONFIG_SHADOW_PAGING)
 /*
  * Adding this to the flags passed to flush_area_mask will prevent using the
@@ -190,7 +184,6 @@ void flush_area_mask(const cpumask_t *mask, const void *va,
 
 static inline void flush_page_to_ram(unsigned long mfn, bool sync_icache) {}
 
-unsigned int guest_flush_tlb_flags(const struct domain *d);
 void guest_flush_tlb_mask(const struct domain *d, const cpumask_t *mask);
 
 #endif /* __FLUSHTLB_H__ */
