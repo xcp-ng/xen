@@ -1409,16 +1409,24 @@ static void __update_vcpu_system_time(struct vcpu *v, int force)
     else
     {
         if ( is_hvm_domain(d) && hvm_tsc_scaling_supported )
-        {
             tsc_stamp            = hvm_scale_tsc(d, t->stamp.local_tsc);
-            _u.tsc_to_system_mul = d->arch.vtsc_to_ns.mul_frac;
-            _u.tsc_shift         = d->arch.vtsc_to_ns.shift;
+        else
+            tsc_stamp            = t->stamp.local_tsc;
+
+        /*
+         * HVM guests using the native TSC ratio should use the same per-CPU
+         * scaling factors as Xen.  This ensures time keeping is always in sync
+         * between Xen and the guest.
+         */
+        if ( tsc_stamp == t->stamp.local_tsc )
+        {
+            _u.tsc_to_system_mul = t->tsc_scale.mul_frac;
+            _u.tsc_shift         = t->tsc_scale.shift;
         }
         else
         {
-            tsc_stamp            = t->stamp.local_tsc;
-            _u.tsc_to_system_mul = t->tsc_scale.mul_frac;
-            _u.tsc_shift         = t->tsc_scale.shift;
+            _u.tsc_to_system_mul = d->arch.vtsc_to_ns.mul_frac;
+            _u.tsc_shift         = d->arch.vtsc_to_ns.shift;
         }
     }
 
