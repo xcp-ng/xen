@@ -484,10 +484,11 @@ static heap_by_zone_and_order_t *_heap[MAX_NUMNODES];
 static unsigned long node_need_scrub[MAX_NUMNODES];
 
 static unsigned long *avail[MAX_NUMNODES];
-static long total_avail_pages;
+static unsigned long total_avail_pages;
 
 static DEFINE_SPINLOCK(heap_lock);
-static long outstanding_claims; /* total outstanding claims by all domains */
+/* Total outstanding claims by all domains */
+static unsigned long outstanding_claims;
 
 static unsigned long avail_heap_pages(
     unsigned int zone_lo, unsigned int zone_hi, unsigned int node)
@@ -1047,8 +1048,8 @@ static struct page_info *alloc_heap_pages(
 
     ASSERT(avail[node][zone] >= request);
     avail[node][zone] -= request;
+    ASSERT(total_avail_pages >= request);
     total_avail_pages -= request;
-    ASSERT(total_avail_pages >= 0);
 
     if ( d && d->outstanding_pages && !(memflags & MEMF_no_refcount) )
     {
@@ -1246,8 +1247,8 @@ static int reserve_offlined_page(struct page_info *head)
             continue;
 
         avail[node][zone]--;
+        ASSERT(total_avail_pages > 0);
         total_avail_pages--;
-        ASSERT(total_avail_pages >= 0);
 
         page_list_add_tail(cur_head,
                            test_bit(_PGC_broken, &cur_head->count_info) ?
