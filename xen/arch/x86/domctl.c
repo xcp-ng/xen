@@ -554,7 +554,7 @@ long arch_do_domctl(
         if ( !is_hvm_domain(d) )
             break;
 
-        ret = xsm_bind_pt_irq(XSM_HOOK, d, bind);
+        ret = xsm_bind_pt_irq(XSM_DM_PRIV, d, bind);
         if ( ret )
             break;
 
@@ -592,7 +592,7 @@ long arch_do_domctl(
         if ( !is_hvm_domain(d) )
             break;
 
-        ret = xsm_unbind_pt_irq(XSM_HOOK, d, bind);
+        ret = xsm_unbind_pt_irq(XSM_DM_PRIV, d, bind);
         if ( ret )
             break;
 

@@ -107,7 +107,7 @@ long arch_do_domctl(struct xen_domctl *domctl, struct domain *d,
         if ( rc )
             return rc;
 
-        rc = xsm_bind_pt_irq(XSM_HOOK, d, bind);
+        rc = xsm_bind_pt_irq(XSM_DM_PRIV, d, bind);
         if ( rc )
             return rc;
 
@@ -143,7 +143,7 @@ long arch_do_domctl(struct xen_domctl *domctl, struct domain *d,
         if ( irq != virq )
             return -EINVAL;
 
-        rc = xsm_unbind_pt_irq(XSM_HOOK, d, bind);
+        rc = xsm_unbind_pt_irq(XSM_DM_PRIV, d, bind);
         if ( rc )
             return rc;
 
