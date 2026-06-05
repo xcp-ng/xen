@@ -319,6 +319,25 @@ long do_domctl(XEN_GUEST_HANDLE_PARAM(xen_domctl_t) u_domctl)
             return -ESRCH;
     }
 
+    /* Handle sub-ops not requiring the domctl lock. */
+    switch ( op->cmd )
+    {
+    case XEN_DOMCTL_getdomaininfo:
+        ret = xsm_getdomaininfo(XSM_XS_PRIV, d);
+        if ( ret )
+            goto domctl_out_unlock_domonly;
+
+        getdomaininfo(d, &op->u.getdomaininfo);
+
+        op->domain = op->u.getdomaininfo.domain;
+        copyback = 1;
+        goto domctl_out_unlock_domonly;
+
+    default:
+        /* Everything else handled further down. */
+        break;
+    }
+
     ret = xsm_domctl(XSM_OTHER, d, op->cmd,
                      /* SSIDRef only applicable for cmd == createdomain */
                      op->u.createdomain.ssidref);
@@ -533,17 +552,6 @@ long do_domctl(XEN_GUEST_HANDLE_PARAM(xen_domctl_t) u_domctl)
 
     case XEN_DOMCTL_scheduler_op:
         ret = sched_adjust(d, &op->u.scheduler_op);
-        copyback = 1;
-        break;
-
-    case XEN_DOMCTL_getdomaininfo:
-        ret = xsm_getdomaininfo(XSM_XS_PRIV, d);
-        if ( ret )
-            break;
-
-        getdomaininfo(d, &op->u.getdomaininfo);
-
-        op->domain = op->u.getdomaininfo.domain;
         copyback = 1;
         break;
 
