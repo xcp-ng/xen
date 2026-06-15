@@ -199,7 +199,8 @@ void machine_kexec(struct kexec_image *image)
 
     kexec_reloc(page_to_maddr(image->control_code_page),
                 page_to_maddr(image->aux_page),
-                image->head, image->entry_maddr, reloc_flags);
+                image->head, image->entry_maddr, reloc_flags,
+                image->entry_arg);
 }
 
 int machine_kexec_get(xen_kexec_range_t *range)

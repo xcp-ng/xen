@@ -33,6 +33,7 @@ FUNC(kexec_reloc, PAGE_SIZE)
         /* %rdx - indirection page maddr */
         /* %rcx - entry maddr (%rbp) */
         /* %r8 - flags */
+        /* %r9 - entry arg */
 
         movq    %rcx, %rbp
 
@@ -88,6 +89,8 @@ FUNC(kexec_reloc, PAGE_SIZE)
 
         movq    %rdx, %rdi
         call    relocate_pages
+
+        movq    %r9, %rsi /* entry arg */
 
         /* Need to switch to 32-bit mode? */
         testq   $KEXEC_RELOC_FLAG_COMPAT, %r8
