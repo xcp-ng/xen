@@ -19,6 +19,7 @@
 #include <xen/mm.h>
 #include <xen/spinlock.h>
 
+#include <asm/kexec.h>
 #include <asm/page.h>
 
 /*
@@ -105,29 +106,6 @@ static int do_kimage_alloc(struct kexec_image **rimage, paddr_t entry,
     INIT_PAGE_LIST_HEAD(&image->unusable_pages);
 
     /*
-     * Verify we have good destination addresses.  The caller is
-     * responsible for making certain we don't attempt to load the new
-     * image into invalid or reserved areas of RAM.  This just
-     * verifies it is an address we can use.
-     *
-     * Since the kernel does everything in page size chunks ensure the
-     * destination addresses are page aligned.  Too many special cases
-     * crop of when we don't do this.  The most insidious is getting
-     * overlapping destination addresses simply because addresses are
-     * changed to page size granularity.
-     */
-    result = -EADDRNOTAVAIL;
-    for ( i = 0; i < nr_segments; i++ )
-    {
-        paddr_t mstart, mend;
-
-        mstart = image->segments[i].dest_maddr;
-        mend   = mstart + image->segments[i].dest_size;
-        if ( (mstart & ~PAGE_MASK) || (mend & ~PAGE_MASK) )
-            goto out;
-    }
-
-    /*
      * Verify our destination addresses do not overlap.  If we allowed
      * overlapping destination addresses through very weird things can
      * happen with no easy explanation as one segment stops on
@@ -212,9 +190,10 @@ static int kimage_normal_alloc(struct kexec_image **rimage, paddr_t entry,
                            KEXEC_TYPE_DEFAULT);
 }
 
-static int kimage_crash_alloc(struct kexec_image **rimage, paddr_t entry,
-                              unsigned long nr_segments,
-                              struct kimage_segment *segments)
+static int do_kimage_crash_alloc(struct kexec_image **rimage, paddr_t entry,
+                                 unsigned long nr_segments,
+                                 struct kimage_segment *segments,
+                                 uint8_t type)
 {
     unsigned long i;
 
@@ -248,8 +227,28 @@ static int kimage_crash_alloc(struct kexec_image **rimage, paddr_t entry,
     }
 
     /* Allocate and initialize a controlling structure. */
-    return do_kimage_alloc(rimage, entry, nr_segments, segments,
-                           KEXEC_TYPE_CRASH);
+    return do_kimage_alloc(rimage, entry, nr_segments, segments, type);
+}
+
+static int kimage_crash_alloc(struct kexec_image **rimage, paddr_t entry,
+                              unsigned long nr_segments,
+                              struct kimage_segment *segments)
+{
+    /* Verify we have a valid entry point */
+    if ( (entry < kexec_crash_area.start)
+         || (entry > kexec_crash_area.start + kexec_crash_area.size))
+        return -EADDRNOTAVAIL;
+
+    return do_kimage_crash_alloc(rimage, entry, nr_segments, segments,
+                                 KEXEC_TYPE_CRASH);
+}
+
+static int kimage_crash_alloc_efi(struct kexec_image **rimage, paddr_t entry,
+                                  unsigned long nr_segments,
+                                  struct kimage_segment *segments)
+{
+    return do_kimage_crash_alloc(rimage, entry, nr_segments, segments,
+                                 KEXEC_TYPE_CRASH_EFI);
 }
 
 static int kimage_is_destination_range(struct kexec_image *image,
@@ -421,6 +420,7 @@ struct page_info *kimage_alloc_control_page(struct kexec_image *image,
         pages = kimage_alloc_normal_control_page(image, memflags);
         break;
     case KEXEC_TYPE_CRASH:
+    case KEXEC_TYPE_CRASH_EFI:
         pages = kimage_alloc_crash_control_page(image);
         break;
     }
@@ -780,6 +780,7 @@ static int kimage_load_segment(struct kexec_image *image,
             result = kimage_load_normal_segment(image, segment);
             break;
         case KEXEC_TYPE_CRASH:
+        case KEXEC_TYPE_CRASH_EFI:
             result = kimage_load_crash_segment(image, segment);
             break;
         }
@@ -829,6 +830,10 @@ int kimage_alloc(struct kexec_image **rimage, uint8_t type, uint16_t arch,
         break;
     case KEXEC_TYPE_CRASH:
         result = kimage_crash_alloc(rimage, entry_maddr, nr_segments, segment);
+        break;
+    case KEXEC_TYPE_CRASH_EFI:
+        result = kimage_crash_alloc_efi(rimage, entry_maddr,
+                                        nr_segments, segment);
         break;
     default:
         result = -EINVAL;
@@ -1036,6 +1041,20 @@ int kimage_build_ind(struct kexec_image *image, mfn_t ind_mfn,
 done:
     unmap_domain_page(page);
     return ret;
+}
+
+int kimage_efi_setup(struct kexec_image *image, uint64_t parameters)
+{
+    int64_t rip;
+
+    rip = kimage_find_kernel_entry_maddr(image);
+    if ( rip < 0 )
+        return -EINVAL;
+
+    image->entry_arg = parameters;
+    image->entry_maddr = rip;
+
+    return 0;
 }
 
 /*

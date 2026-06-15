@@ -48,6 +48,7 @@ struct kexec_image {
     paddr_t next_crash_page;
 
     uint8_t digest[SHA2_256_DIGEST_SIZE];
+    uint64_t entry_arg;
 };
 
 int kimage_alloc(struct kexec_image **rimage, uint8_t type, uint16_t arch,
@@ -66,6 +67,7 @@ int kimage_build_ind(struct kexec_image *image, mfn_t ind_mfn,
 bool kimage_verify_digest(const struct kexec_image *image);
 void kimage_calc_digest(const struct kexec_image *image,
                         uint8_t digest[SHA2_256_DIGEST_SIZE]);
+int kimage_efi_setup(struct kexec_image *image, uint64_t parameters);
 
 #endif /* __ASSEMBLY__ */
 

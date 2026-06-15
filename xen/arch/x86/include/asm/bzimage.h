@@ -47,4 +47,9 @@ struct __packed bzimage_header {
         uint32_t        payload_length;
     };
 
+static inline size_t kernel_alignment_offset(void)
+{
+    return offsetof(struct bzimage_header, kernel_alignment);
+}
+
 #endif /* __X86_BZIMAGE_H__ */

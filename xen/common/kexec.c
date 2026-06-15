@@ -760,6 +760,7 @@ static int kexec_load_get_bits(int type, int *base, int *bit)
         *bit = KEXEC_FLAG_DEFAULT_POS;
         break;
     case KEXEC_TYPE_CRASH:
+    case KEXEC_TYPE_CRASH_EFI:
         *base = KEXEC_IMAGE_CRASH_BASE;
         *bit = KEXEC_FLAG_CRASH_POS;
         break;
@@ -859,6 +860,7 @@ static int kexec_exec(XEN_GUEST_HANDLE_PARAM(void) uarg)
         break;
 
     case KEXEC_TYPE_CRASH:
+    case KEXEC_TYPE_CRASH_EFI:
         kexec_crash(CRASHREASON_KEXECCMD); /* Does not return */
         break;
     }
@@ -959,6 +961,13 @@ static int kexec_load(XEN_GUEST_HANDLE_PARAM(void) uarg)
         goto error;
 
     kimage_calc_digest(kimage, kimage->digest);
+
+    if ( load.type == KEXEC_TYPE_CRASH_EFI )
+    {
+        ret = kimage_efi_setup(kimage, load.parameters);
+        if ( ret < 0 )
+            goto error;
+    }
 
     ret = kexec_load_slot(kimage);
     if ( ret < 0 )
