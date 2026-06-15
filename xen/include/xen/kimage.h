@@ -23,6 +23,7 @@ struct kimage_segment {
     uint64_t buf_size;
     uint64_t dest_maddr;
     uint64_t dest_size;
+    unsigned int dest_offset;
 };
 
 struct kexec_image {

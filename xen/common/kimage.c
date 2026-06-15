@@ -724,12 +724,14 @@ static int kimage_load_crash_segment(struct kexec_image *image,
      */
     paddr_t dest;
     unsigned long sbytes, dbytes;
+    unsigned int dest_offset;
     int ret = 0;
     unsigned long src_offset = 0;
 
     sbytes = segment->buf_size;
     dbytes = segment->dest_size;
     dest = segment->dest_maddr;
+    dest_offset = segment->dest_offset;
 
     while ( dbytes )
     {
@@ -739,24 +741,26 @@ static int kimage_load_crash_segment(struct kexec_image *image,
 
         dest_mfn = dest >> PAGE_SHIFT;
 
-        dchunk = PAGE_SIZE;
+        dchunk = PAGE_SIZE - dest_offset;
         schunk = min(dchunk, sbytes);
 
         dest_va = map_domain_page(_mfn(dest_mfn));
-        if ( !dest_va )
-            return -EINVAL;
 
-        ret = copy_from_guest_offset(dest_va, segment->h, src_offset, schunk);
-        memset(dest_va + schunk, 0, dchunk - schunk);
+        if ( dest_offset )
+            memset(dest_va, 0, dest_offset);
+        ret = copy_from_guest_offset(dest_va + dest_offset, segment->h,
+                                     src_offset, schunk);
+        memset(dest_va + dest_offset + schunk, 0, dchunk - schunk);
 
         unmap_domain_page(dest_va);
         if ( ret )
             return -EFAULT;
 
-        dbytes -= dchunk;
+        dbytes -= dchunk + dest_offset;
         sbytes -= schunk;
-        dest += dchunk;
+        dest += dchunk + dest_offset;
         src_offset += schunk;
+        dest_offset = 0;
     }
 
     return 0;
@@ -797,6 +801,26 @@ int kimage_alloc(struct kexec_image **rimage, uint8_t type, uint16_t arch,
                  uint32_t nr_segments, struct kimage_segment *segment)
 {
     int result;
+    unsigned int i;
+
+    for ( i = 0; i < nr_segments; i++ )
+    {
+        paddr_t mend;
+
+        /*
+         * Stash the destination offset-in-page for use when copying the
+         * buffer later.
+         */
+        segment[i].dest_offset = PAGE_OFFSET(segment[i].dest_maddr);
+
+        /*
+         * Align down the start address to page size and align up the end
+         * address to page size.
+         */
+        mend = segment[i].dest_maddr + segment[i].dest_size;
+        segment[i].dest_maddr &= PAGE_MASK;
+        segment[i].dest_size = ROUNDUP(mend, PAGE_SIZE) - segment[i].dest_maddr;
+    }
 
     switch( type )
     {
@@ -823,9 +847,11 @@ static void kimage_calc_one_digest(struct sha2_256_state *ctx,
 {
     paddr_t dest;
     unsigned long sbytes;
+    unsigned int dest_offset;
 
     sbytes = segment->buf_size;
     dest = segment->dest_maddr;
+    dest_offset = segment->dest_offset;
 
     while ( sbytes )
     {
@@ -835,15 +861,16 @@ static void kimage_calc_one_digest(struct sha2_256_state *ctx,
 
         dest_mfn = dest >> PAGE_SHIFT;
 
-        dchunk = PAGE_SIZE;
+        dchunk = PAGE_SIZE - dest_offset;
         schunk = min(dchunk, sbytes);
 
         dest_va = map_domain_page(_mfn(dest_mfn));
-        sha2_256_update(ctx, dest_va, schunk);
+        sha2_256_update(ctx, dest_va + dest_offset, schunk);
         unmap_domain_page(dest_va);
 
         sbytes -= schunk;
-        dest += dchunk;
+        dest += dchunk + dest_offset;
+        dest_offset = 0;
     }
 }
 
