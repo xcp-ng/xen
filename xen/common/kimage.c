@@ -817,6 +817,79 @@ int kimage_alloc(struct kexec_image **rimage, uint8_t type, uint16_t arch,
     return result;
 }
 
+static void kimage_calc_one_digest(struct sha2_256_state *ctx,
+                                   xen_kexec_segment_t *segment)
+{
+    paddr_t dest;
+    unsigned long sbytes;
+
+    sbytes = segment->buf_size;
+    dest = segment->dest_maddr;
+
+    while ( sbytes )
+    {
+        unsigned long dest_mfn;
+        void *dest_va;
+        size_t schunk, dchunk;
+
+        dest_mfn = dest >> PAGE_SHIFT;
+
+        dchunk = PAGE_SIZE;
+        schunk = min(dchunk, sbytes);
+
+        dest_va = map_domain_page(_mfn(dest_mfn));
+        sha2_256_update(ctx, dest_va, schunk);
+        unmap_domain_page(dest_va);
+
+        sbytes -= schunk;
+        dest += dchunk;
+    }
+}
+
+void kimage_calc_digest(const struct kexec_image *image,
+                        uint8_t digest[SHA2_256_DIGEST_SIZE])
+{
+    struct sha2_256_state ctx;
+    unsigned int s;
+
+    if ( image->type == KEXEC_TYPE_DEFAULT )
+    {
+        /* TODO implement digest calculation for normal kexec */
+        return;
+    }
+
+    sha2_256_init(&ctx);
+
+    for ( s = 0; s < image->nr_segments; s++ )
+        kimage_calc_one_digest(&ctx, &image->segments[s]);
+
+    sha2_256_final(&ctx, digest);
+}
+
+bool kimage_verify_digest(const struct kexec_image *image)
+{
+    uint8_t digest[SHA2_256_DIGEST_SIZE];
+
+    if ( image->type == KEXEC_TYPE_DEFAULT )
+    {
+        /* TODO implement digest check for normal kexec */
+        return true;
+    }
+
+    kimage_calc_digest(image, digest);
+
+    if ( memcmp(digest, image->digest, sizeof(digest)) != 0 )
+    {
+        printk(XENLOG_WARNING "kexec digest mismatch:\n"
+               "  expected %" STR(SHA2_256_DIGEST_SIZE) "phN\n"
+               "       got %" STR(SHA2_256_DIGEST_SIZE) "phN\n",
+               image->digest, digest);
+        return false;
+    }
+
+    return true;
+}
+
 int kimage_load_segments(struct kexec_image *image)
 {
     int s;

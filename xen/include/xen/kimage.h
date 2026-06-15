@@ -11,6 +11,7 @@
 
 #include <xen/list.h>
 #include <xen/mm.h>
+#include <xen/sha2.h>
 #include <public/kexec.h>
 
 #define KEXEC_SEGMENT_MAX 16
@@ -37,6 +38,8 @@ struct kexec_image {
 
     /* Address of next control page to allocate for crash kernels. */
     paddr_t next_crash_page;
+
+    uint8_t digest[SHA2_256_DIGEST_SIZE];
 };
 
 int kimage_alloc(struct kexec_image **rimage, uint8_t type, uint16_t arch,
@@ -52,6 +55,9 @@ mfn_t kimage_entry_mfn(kimage_entry_t *entry, bool compat);
 unsigned long kimage_entry_ind(kimage_entry_t *entry, bool compat);
 int kimage_build_ind(struct kexec_image *image, mfn_t ind_mfn,
                      bool compat);
+bool kimage_verify_digest(const struct kexec_image *image);
+void kimage_calc_digest(const struct kexec_image *image,
+                        uint8_t digest[SHA2_256_DIGEST_SIZE]);
 
 #endif /* __ASSEMBLY__ */
 

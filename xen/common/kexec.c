@@ -389,6 +389,12 @@ void kexec_crash(enum crash_reason reason)
     if ( !test_bit(KEXEC_IMAGE_CRASH_BASE + pos, &kexec_flags) )
         return;
 
+    if ( !kimage_verify_digest(kexec_image[KEXEC_IMAGE_CRASH_BASE + pos]) )
+    {
+        printk(XENLOG_ERR "kexec digest failed, aborting kexec crash transfer\n");
+        return;
+    }
+
     kexecing = true;
 
     if ( kexec_common_shutdown() != 0 )
@@ -942,6 +948,8 @@ static int kexec_load(XEN_GUEST_HANDLE_PARAM(void) uarg)
     ret = kimage_load_segments(kimage);
     if ( ret < 0 )
         goto error;
+
+    kimage_calc_digest(kimage, kimage->digest);
 
     ret = kexec_load_slot(kimage);
     if ( ret < 0 )
