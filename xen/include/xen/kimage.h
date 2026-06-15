@@ -18,12 +18,19 @@
 
 typedef paddr_t kimage_entry_t;
 
+struct kimage_segment {
+    XEN_GUEST_HANDLE(const_void) h;
+    uint64_t buf_size;
+    uint64_t dest_maddr;
+    uint64_t dest_size;
+};
+
 struct kexec_image {
     uint8_t type;
     uint16_t arch;
     uint64_t entry_maddr;
     uint32_t nr_segments;
-    xen_kexec_segment_t *segments;
+    struct kimage_segment *segments;
 
     kimage_entry_t head;
     struct page_info *entry_page;
@@ -44,7 +51,7 @@ struct kexec_image {
 
 int kimage_alloc(struct kexec_image **rimage, uint8_t type, uint16_t arch,
                  uint64_t entry_maddr,
-                 uint32_t nr_segments, xen_kexec_segment_t *segment);
+                 uint32_t nr_segments, struct kimage_segment *segment);
 void kimage_free(struct kexec_image *image);
 int kimage_load_segments(struct kexec_image *image);
 struct page_info *kimage_alloc_control_page(struct kexec_image *image,

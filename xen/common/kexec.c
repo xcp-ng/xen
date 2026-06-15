@@ -920,9 +920,10 @@ static int kexec_load_slot(struct kexec_image *kimage)
 static int kexec_load(XEN_GUEST_HANDLE_PARAM(void) uarg)
 {
     xen_kexec_load_t load;
-    xen_kexec_segment_t *segments;
+    struct kimage_segment *segments;
     struct kexec_image *kimage = NULL;
     int ret;
+    unsigned int i;
 
     if ( copy_from_guest(&load, uarg, 1) )
         return -EFAULT;
@@ -930,14 +931,22 @@ static int kexec_load(XEN_GUEST_HANDLE_PARAM(void) uarg)
     if ( load.nr_segments >= KEXEC_SEGMENT_MAX )
         return -EINVAL;
 
-    segments = xmalloc_array(xen_kexec_segment_t, load.nr_segments);
+    segments = xmalloc_array(struct kimage_segment, load.nr_segments);
     if ( segments == NULL )
         return -ENOMEM;
 
-    if ( copy_from_guest(segments, load.segments.h, load.nr_segments) )
+    for ( i = 0; i < load.nr_segments; i++ )
     {
-        ret = -EFAULT;
-        goto error;
+        xen_kexec_segment_t tmp_seg = {};
+        if ( copy_from_guest_offset(&tmp_seg, load.segments.h, i, 1) )
+        {
+            ret = -EFAULT;
+            goto error;
+        }
+        segments[i].h = tmp_seg.buf.h;
+        segments[i].buf_size = tmp_seg.buf_size;
+        segments[i].dest_maddr = tmp_seg.dest_maddr;
+        segments[i].dest_size = tmp_seg.dest_size;
     }
 
     ret = kimage_alloc(&kimage, load.type, load.arch, load.entry_maddr,

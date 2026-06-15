@@ -81,7 +81,7 @@ static struct page_info *kimage_alloc_zeroed_page(unsigned memflags)
 
 static int do_kimage_alloc(struct kexec_image **rimage, paddr_t entry,
                            unsigned long nr_segments,
-                           xen_kexec_segment_t *segments, uint8_t type)
+                           struct kimage_segment *segments, uint8_t type)
 {
     struct kexec_image *image;
     unsigned long i;
@@ -206,7 +206,7 @@ out:
 
 static int kimage_normal_alloc(struct kexec_image **rimage, paddr_t entry,
                                unsigned long nr_segments,
-                               xen_kexec_segment_t *segments)
+                               struct kimage_segment *segments)
 {
     return do_kimage_alloc(rimage, entry, nr_segments, segments,
                            KEXEC_TYPE_DEFAULT);
@@ -214,7 +214,7 @@ static int kimage_normal_alloc(struct kexec_image **rimage, paddr_t entry,
 
 static int kimage_crash_alloc(struct kexec_image **rimage, paddr_t entry,
                               unsigned long nr_segments,
-                              xen_kexec_segment_t *segments)
+                              struct kimage_segment *segments)
 {
     unsigned long i;
 
@@ -236,7 +236,7 @@ static int kimage_crash_alloc(struct kexec_image **rimage, paddr_t entry,
     {
         paddr_t mstart, mend;
 
-        if ( guest_handle_is_null(segments[i].buf.h) )
+        if ( guest_handle_is_null(segments[i].h) )
             continue;
 
         mstart = segments[i].dest_maddr;
@@ -663,7 +663,7 @@ found:
 }
 
 static int kimage_load_normal_segment(struct kexec_image *image,
-                                      xen_kexec_segment_t *segment)
+                                      struct kimage_segment *segment)
 {
     unsigned long to_copy;
     unsigned long src_offset;
@@ -697,7 +697,7 @@ static int kimage_load_normal_segment(struct kexec_image *image,
             return ret;
 
         dest_va = __map_domain_page(page);
-        ret = copy_from_guest_offset(dest_va, segment->buf.h, src_offset, size);
+        ret = copy_from_guest_offset(dest_va, segment->h, src_offset, size);
         unmap_domain_page(dest_va);
         if ( ret )
             return -EFAULT;
@@ -716,7 +716,7 @@ static int kimage_load_normal_segment(struct kexec_image *image,
 }
 
 static int kimage_load_crash_segment(struct kexec_image *image,
-                                     xen_kexec_segment_t *segment)
+                                     struct kimage_segment *segment)
 {
     /*
      * For crash dumps kernels we simply copy the data from user space
@@ -746,7 +746,7 @@ static int kimage_load_crash_segment(struct kexec_image *image,
         if ( !dest_va )
             return -EINVAL;
 
-        ret = copy_from_guest_offset(dest_va, segment->buf.h, src_offset, schunk);
+        ret = copy_from_guest_offset(dest_va, segment->h, src_offset, schunk);
         memset(dest_va + schunk, 0, dchunk - schunk);
 
         unmap_domain_page(dest_va);
@@ -762,12 +762,13 @@ static int kimage_load_crash_segment(struct kexec_image *image,
     return 0;
 }
 
-static int kimage_load_segment(struct kexec_image *image, xen_kexec_segment_t *segment)
+static int kimage_load_segment(struct kexec_image *image,
+                               struct kimage_segment *segment)
 {
     int result = -ENOMEM;
     paddr_t addr;
 
-    if ( !guest_handle_is_null(segment->buf.h) )
+    if ( !guest_handle_is_null(segment->h) )
     {
         switch ( image->type )
         {
@@ -793,7 +794,7 @@ static int kimage_load_segment(struct kexec_image *image, xen_kexec_segment_t *s
 
 int kimage_alloc(struct kexec_image **rimage, uint8_t type, uint16_t arch,
                  uint64_t entry_maddr,
-                 uint32_t nr_segments, xen_kexec_segment_t *segment)
+                 uint32_t nr_segments, struct kimage_segment *segment)
 {
     int result;
 
@@ -818,7 +819,7 @@ int kimage_alloc(struct kexec_image **rimage, uint8_t type, uint16_t arch,
 }
 
 static void kimage_calc_one_digest(struct sha2_256_state *ctx,
-                                   xen_kexec_segment_t *segment)
+                                   struct kimage_segment *segment)
 {
     paddr_t dest;
     unsigned long sbytes;
