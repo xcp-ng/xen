@@ -24,6 +24,7 @@
 #include <xen/err.h>
 #include <xen/init.h>
 
+#include <asm/intel-family.h>
 #include <asm/msr.h>
 #include <asm/system.h>
 
@@ -222,6 +223,45 @@ static int microcode_sanity_check(const struct microcode_patch *patch)
     return 0;
 }
 
+static bool microcode_safe_to_load(const struct microcode_patch *mc)
+{
+    const struct cpu_signature *cpu_sig = &this_cpu(cpu_sig);
+
+    /*
+     * Treat pre-production as always safe - anyone using pre-production
+     * microcode knows what they are doing, and can keep any resulting pieces.
+     */
+    if ( (int)cpu_sig->rev < 0 || mc->rev < 0 )
+        return true;
+
+    /*
+     * GNR98 states that Granite Rapids systems hang when loading new ucode on
+     * sufficiently old firmware.  GNR101 retroactively states that one ucode
+     * had an incorrect minimum revision field, in light of discovering GNR98.
+     *
+     * Both are incomplete statements of the problem.
+     *
+     * At the time of writing (August 2026), the believed safe sequence is:
+     *   previous -> [0x01000380...0x010003f3] -> 0x01000405 -> any later
+     *
+     * Disallow known-unsafe loads while permitting believed-safe loads.  For
+     * GNR, this allows multi-hop loading to get up to the latest.
+     */
+    if ( boot_cpu_data.x86 == 0x6 &&
+         boot_cpu_data.x86_model == INTEL_FAM6_GRANITERAPIDS_X &&
+         boot_cpu_data.x86_mask == 1 && (cpu_sig->pf & 0x95) &&
+         ((cpu_sig->rev < 0x01000380 && mc->rev >= 0x01000405) ||
+          (cpu_sig->rev < 0x01000405 && mc->rev >  0x01000405)) )
+    {
+        printk_once(XENLOG_WARNING "microcode: Granite Rapids erratum GNR98 detected.  Skipping ucode 0x%08x\n"
+                    XENLOG_WARNING "microcode: Firmware update recommended\n",
+                    mc->rev);
+        return false;
+    }
+
+    return true;
+}
+
 /*
  * Production microcode has a positive revision.  Pre-production microcode has
  * a negative revision.
@@ -362,6 +402,7 @@ static struct microcode_patch *cf_check cpu_request_microcode(
          * one with higher revision.
          */
         if ( (microcode_update_match(mc) != MIS_UCODE) &&
+             microcode_safe_to_load(mc) &&
              (!saved || compare_revisions(saved->rev, mc->rev) == NEW_UCODE) )
             saved = mc;
 
