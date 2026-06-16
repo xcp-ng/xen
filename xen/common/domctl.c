@@ -366,7 +366,8 @@ long do_domctl(XEN_GUEST_HANDLE_PARAM(xen_domctl_t) u_domctl)
     default:
         d = rcu_lock_domain_by_id(op->domain);
         if ( !d )
-            return -ESRCH;
+            return is_control_domain(current->domain) ? -ESRCH : -EPERM;
+        break;
     }
 
     /* Handle sub-ops not requiring the domctl lock. */
