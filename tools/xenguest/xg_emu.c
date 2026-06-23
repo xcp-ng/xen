@@ -16,6 +16,7 @@ static int stream_fd = -1;
 
 static int arg_store_port = -1;
 static int arg_console_port = -1;
+static int arg_mem_pnode = -1;
 
 /* timeout in seconds */
 #define COMMAND_TIMEOUT (60 * 2)
@@ -195,6 +196,8 @@ static void do_cmd_restore(emp_call_args *args)
 
     emp_send_return(args->cli, NULL);
 
+    opt_mem_pnode = (arg_mem_pnode >= 0) ? (unsigned int)arg_mem_pnode
+                                         : XC_NUMA_NO_NODE;
     stub_xc_domain_restore(stream_fd, arg_store_port, arg_console_port, !pv_mode,
                            &store_mfn, &console_mfn);
 
@@ -230,6 +233,7 @@ struct arg_list
 const static struct arg_list setable_args[] = {
     {"store_port",   int_type,  .a_int = &arg_store_port},
     {"console_port", int_type,  .a_int = &arg_console_port},
+    {"mem_pnode",    int_type,  .a_int = &arg_mem_pnode},
     {"pv",           bool_type, .a_bool = &pv_mode},
     {"vgpu",         bool_type, .a_bool = &opt_vgpu},
     {}
