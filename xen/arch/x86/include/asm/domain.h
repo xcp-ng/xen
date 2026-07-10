@@ -345,6 +345,10 @@ struct arch_domain
         struct hvm_domain hvm;
     };
 
+    /* Mapping of the latest vCPU that ran on a specific CPU, thus hold
+     * the current domain TLB state (-1 if the vCPU hasn't ran yet) */
+    int *latest_vcpu;
+
     struct paging_domain paging;
     struct p2m_domain *p2m;
     /* To enforce lock ordering in the pod code wrt the
@@ -647,8 +651,10 @@ struct arch_vcpu
                                         /* former, if any */
     bool old_guest_table_partial;       /* Are we dropping a type ref, or just
                                          * finishing up a partial de-validation? */
+    bool needs_tlb_flush;               /* VCPU needs its TLB flushed before waking? */
 
     unsigned long cr3;                  /* (MA) value to install in HW CR3 */
+    unsigned int latest_cpu;            /* Latest pCPU that ran this VCPU. */
 
     /*
      * The save area for Processor Extended States and the bitmask of the

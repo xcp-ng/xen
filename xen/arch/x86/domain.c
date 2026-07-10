@@ -38,6 +38,7 @@
 #include <xen/smp.h>
 #include <xen/softirq.h>
 #include <xen/wait.h>
+#include <xen/xvmalloc.h>
 
 #include <asm/amd.h>
 #include <asm/cpu-policy.h>
@@ -874,6 +875,13 @@ int arch_domain_create(struct domain *d,
 
     spec_ctrl_init_domain(d);
 
+    rc = -ENOMEM;
+    d->arch.latest_vcpu = xvmalloc_array(int, nr_cpu_ids);
+    if ( !d->arch.latest_vcpu )
+        goto fail;
+    for (unsigned int i = 0; i < nr_cpu_ids; i++)
+        d->arch.latest_vcpu[i] = -1;
+
     if ( (rc = paging_domain_init(d)) != 0 )
         goto fail;
     paging_initialised = true;
@@ -964,6 +972,7 @@ void arch_domain_destroy(struct domain *d)
 
     xfree(d->arch.e820);
     XFREE(d->arch.cpu_policy);
+    XFREE(d->arch.latest_vcpu);
 
     free_domain_pirqs(d);
     if ( !is_idle_domain(d) )
@@ -2181,6 +2190,23 @@ void context_switch(struct vcpu *prev, struct vcpu *next)
         /* Remote CPU calls __sync_local_execstate() from flush IPI handler. */
         flush_mask(cpumask_of(dirty_cpu), FLUSH_VCPU_STATE);
         ASSERT(!vcpu_cpu_dirty(next));
+    }
+
+    /**
+     * Check if we were the latest vCPU of this domain that ran on this pCPU.
+     * Flush the TLB if it is not, as the TLB entries are the ones from the previous
+     * vCPU. If we weren't the latest pCPU, always perform a TLB flush as we may be
+     * out of sync.
+     */
+    if ( nextd->arch.latest_vcpu )
+    {
+        if ( !asid_enabled ||
+             nextd->arch.latest_vcpu[cpu] != next->vcpu_id ||
+             next->arch.latest_cpu != cpu )
+            next->arch.needs_tlb_flush = true;
+
+        nextd->arch.latest_vcpu[cpu] = next->vcpu_id;
+        next->arch.latest_cpu = cpu;
     }
 
     _update_runstate_area(prev);
