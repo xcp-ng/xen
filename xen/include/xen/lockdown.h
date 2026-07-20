@@ -19,6 +19,11 @@ void lockdown_init(const char *cmdline);
  * If we update the hypercall ABI in a way that is not compatible with
  * the kernel filtering code "nn" should be increased.
  */
-#define PRIVCMD_FILTERING_ABI_VERSION 0x090001UL
+
+/* XCP-ng vendor ID */
+#define FILTER_VENDOR_XCPNG  (1UL << 31)
+
+#define PRIVCMD_FILTERING_ABI_VERSION \
+    (FILTER_VENDOR_XCPNG | _AC(0x90001, UL))
 
 #endif /* XEN__LOCKDOWN_H */
