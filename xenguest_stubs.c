@@ -264,7 +264,7 @@ static int get_vm_featureset(bool hvm)
     return rc;
 }
 
-int construct_cpuid_policy(const struct flags *f, bool hvm)
+static int construct_cpuid_policy(const struct flags *f, bool hvm)
 {
     int rc = -1;
 
@@ -302,6 +302,9 @@ int construct_cpuid_policy(const struct flags *f, bool hvm)
     if ( !f->nx )
         clear_bit(X86_FEATURE_NX, featureset);
 
+    if ( !f->pae )
+        clear_bit(X86_FEATURE_PAE, featureset);
+
     /*
      * Optionally advertise ITSC, given hardware support an a non-migratealbe
      * domain.
@@ -310,7 +313,7 @@ int construct_cpuid_policy(const struct flags *f, bool hvm)
         set_bit(X86_FEATURE_ITSC, featureset);
 
     rc = xc_cpuid_apply_policy(xch, domid, featureset, nr_features,
-                               f->pae, f->cores_per_socket);
+                               0, f->cores_per_socket);
 
  out:
     free(featureset);
@@ -665,6 +668,8 @@ static void hvm_init_info_table(struct hvm_info_table *va_hvm, struct flags *f)
 #define ACPI_INFO_PHYSICAL_ADDRESS 0xfc000000
 #define LAPIC_BASE_ADDRESS         0xfee00000
 
+#define ALIGN(p, a) (((p) + ((a) - 1)) & ~((a) - 1))
+
 struct xenguest_acpi_ctxt {
     struct acpi_ctxt c;
 
@@ -672,10 +677,10 @@ struct xenguest_acpi_ctxt {
     unsigned int page_shift;
 
     /* Memory allocator */
-    unsigned long alloc_base_paddr;
-    unsigned long alloc_base_vaddr;
-    unsigned long alloc_currp;
-    unsigned long alloc_end;
+    unsigned long guest_start;
+    unsigned long guest_curr;
+    unsigned long guest_end;
+    void *buf;
 };
 
 extern const unsigned char dsdt_pvh[];
@@ -687,8 +692,7 @@ static unsigned long virt_to_phys(struct acpi_ctxt *ctxt, void *v)
     struct xenguest_acpi_ctxt *xenguest_ctxt =
         CONTAINER_OF(ctxt, struct xenguest_acpi_ctxt, c);
 
-    return (((unsigned long)v - xenguest_ctxt->alloc_base_vaddr) +
-            xenguest_ctxt->alloc_base_paddr);
+    return xenguest_ctxt->guest_start + (v - xenguest_ctxt->buf);
 }
 
 static void *mem_alloc(struct acpi_ctxt *ctxt,
@@ -702,20 +706,16 @@ static void *mem_alloc(struct acpi_ctxt *ctxt,
     if ( align < 16 )
         align = 16;
 
-    s = (xenguest_ctxt->alloc_currp + align) & ~((unsigned long)align - 1);
+    s = ALIGN(xenguest_ctxt->guest_curr, align);
     e = s + size - 1;
 
     /* TODO: Reallocate memory */
-    if ( (e < s) || (e >= xenguest_ctxt->alloc_end) )
+    if ( (e < s) || (e >= xenguest_ctxt->guest_end) )
         return NULL;
 
-    while ( xenguest_ctxt->alloc_currp >> xenguest_ctxt->page_shift !=
-            e >> xenguest_ctxt->page_shift )
-        xenguest_ctxt->alloc_currp += xenguest_ctxt->page_size;
+    xenguest_ctxt->guest_curr = e;
 
-    xenguest_ctxt->alloc_currp = e;
-
-    return (void *)s;
+    return xenguest_ctxt->buf + (s - xenguest_ctxt->guest_start);
 }
 
 static void acpi_mem_free(struct acpi_ctxt *ctxt,
@@ -768,12 +768,9 @@ int xenguest_dom_load_acpi(struct xc_dom_image *dom,
     struct acpi_config config = {0};
     struct xenguest_acpi_ctxt xenguest_ctxt;
     int rc = 0, acpi_pages_num;
-    void *acpi_pages;
-    unsigned long page_mask;
 
     xenguest_ctxt.page_size = XC_DOM_PAGE_SIZE(dom);
     xenguest_ctxt.page_shift =  XC_DOM_PAGE_SHIFT(dom);
-    page_mask = (1UL << xenguest_ctxt.page_shift) - 1;
 
     xenguest_ctxt.c.mem_ops.alloc = mem_alloc;
     xenguest_ctxt.c.mem_ops.v2p = virt_to_phys;
@@ -786,25 +783,22 @@ int xenguest_dom_load_acpi(struct xc_dom_image *dom,
         goto out;
     }
 
-    config.rsdp = (unsigned long)xc_dom_malloc(dom, xenguest_ctxt.page_size);
-    config.infop = (unsigned long)xc_dom_malloc(dom, xenguest_ctxt.page_size);
+    config.rsdp = (unsigned long)malloc(xenguest_ctxt.page_size);
+    config.infop = (unsigned long)malloc(xenguest_ctxt.page_size);
     /* Pages to hold ACPI tables */
-    acpi_pages =  xc_dom_malloc(dom, (NUM_ACPI_PAGES + 1) *
-                                xenguest_ctxt.page_size);
+    xenguest_ctxt.buf = malloc(NUM_ACPI_PAGES * xenguest_ctxt.page_size);
 
-    if ( !config.rsdp || !config.infop || !acpi_pages )
+    if ( !config.rsdp || !config.infop || !xenguest_ctxt.buf )
         return -ENOMEM;
 
     /*
      * Set up allocator memory.
      * Start next to acpi_info page to avoid fracturing e820.
      */
-    xenguest_ctxt.alloc_base_paddr = ACPI_INFO_PHYSICAL_ADDRESS +
-        xenguest_ctxt.page_size;
-    xenguest_ctxt.alloc_base_vaddr = xenguest_ctxt.alloc_currp =
-        (unsigned long)acpi_pages;
-    xenguest_ctxt.alloc_end = (unsigned long)acpi_pages +
-        (NUM_ACPI_PAGES * xenguest_ctxt.page_size);
+    xenguest_ctxt.guest_start = xenguest_ctxt.guest_curr = xenguest_ctxt.guest_end =
+        ACPI_INFO_PHYSICAL_ADDRESS + xenguest_ctxt.page_size;
+
+    xenguest_ctxt.guest_end += NUM_ACPI_PAGES * xenguest_ctxt.page_size;
 
     /* Build the tables. */
     rc = acpi_build_tables(&xenguest_ctxt.c, &config);
@@ -815,10 +809,8 @@ int xenguest_dom_load_acpi(struct xc_dom_image *dom,
     }
 
     /* Calculate how many pages are needed for the tables. */
-    acpi_pages_num =
-        ((xenguest_ctxt.alloc_currp - (unsigned long)acpi_pages)
-         >> xenguest_ctxt.page_shift) +
-        ((xenguest_ctxt.alloc_currp & page_mask) ? 1 : 0);
+    acpi_pages_num = (ALIGN(xenguest_ctxt.guest_curr, xenguest_ctxt.page_size) -
+                      xenguest_ctxt.guest_start) >> xenguest_ctxt.page_shift;
 
     dom->acpi_modules[0].data = (void *)config.rsdp;
     dom->acpi_modules[0].length = 64;
@@ -828,7 +820,7 @@ int xenguest_dom_load_acpi(struct xc_dom_image *dom,
     dom->acpi_modules[1].length = 4096;
     dom->acpi_modules[1].guest_addr_out = ACPI_INFO_PHYSICAL_ADDRESS;
 
-    dom->acpi_modules[2].data = acpi_pages;
+    dom->acpi_modules[2].data = xenguest_ctxt.buf;
     dom->acpi_modules[2].length = acpi_pages_num  << xenguest_ctxt.page_shift;
     dom->acpi_modules[2].guest_addr_out = ACPI_INFO_PHYSICAL_ADDRESS +
         xenguest_ctxt.page_size;
@@ -839,7 +831,7 @@ out:
 
 static void hvm_set_viridian_features(struct flags *f)
 {
-    uint64_t feature_mask = HVMPV_base_freq;
+    uint64_t feature_mask = HVMPV_base_freq | HVMPV_cpu_hotplug;
 
     xg_info("viridian base\n");
 
@@ -903,7 +895,6 @@ static int hvm_build_set_params(int store_evtchn, unsigned long *store_mfn,
     }
 
     xc_get_hvm_param(xch, domid, HVM_PARAM_STORE_PFN, store_mfn);
-    xc_set_hvm_param(xch, domid, HVM_PARAM_PAE_ENABLED, f->pae);
 
     if (f->viridian)
         hvm_set_viridian_features(f);
@@ -1736,32 +1727,16 @@ int stub_xc_domain_restore(int fd, int store_evtchn, int console_evtchn,
 
     configure_vcpus(&f);
 
+    r = construct_cpuid_policy(&f, hvm);
+    if ( r )
+        failwith_oss_xc("construct_cpuid_policy");
+
     r = xc_domain_restore(xch, fd, domid,
                           store_evtchn, store_mfn, 0,
                           console_evtchn, console_mfn, 0,
                           XC_STREAM_PLAIN, NULL, -1);
     if ( r )
         failwith_oss_xc("xc_domain_restore");
-    /*
-     * The legacy -> migration v2 code in XenServer 6.5 didn't combine the
-     * out-of-band HVM_PARAM_PAE_ENABLED into the converted stream, and
-     * xenguest didn't set it, as the v2 restore code was expected to.
-     *
-     * This causes xc_cpuid_apply_policy() to hide the PAE bit from the domain
-     * cpuid policy, which went unnoticed (and without incident, despite being
-     * a guest-visible change) until Xen-4.5 became stricter with its checks
-     * for when a guest writes to %cr4.
-     *
-     * The correct value is still available out-of-band, so clobber the result
-     * from the stream, in case the stream is from XenServer 6.5 and is a VM
-     * which hasn't rebooted and has a bad HVM PARAM in the v2 stream.
-     */
-    if ( hvm )
-        xc_set_hvm_param(xch, domid, HVM_PARAM_PAE_ENABLED, f.pae);
-
-    r = construct_cpuid_policy(&f, hvm);
-    if ( r )
-        failwith_oss_xc("construct_cpuid_policy");
 
     free_flags(&f);
 
