@@ -66,6 +66,7 @@ void cleanup_legacy_conversion(void);
 
 extern char *xs_domain_path;
 extern char *pci_passthrough_sbdf_list;
+extern char *gvtg_sbdf;
 
 /* Calcluate the difference between two timevals, in microseconds. */
 static inline uint64_t tv_delta_us(const struct timeval *new,

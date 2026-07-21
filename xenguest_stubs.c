@@ -42,6 +42,7 @@ enum {
 
 char *xs_domain_path = NULL;
 char *pci_passthrough_sbdf_list = NULL;
+char *gvtg_sbdf = NULL;
 
 #define SYSFS_PCI_DEV "/sys/bus/pci/devices"
 #define PCI_SBDF      "%04x:%02x:%02x.%01x"
@@ -812,6 +813,50 @@ const char * parse_pci_sbdf(char *s, unsigned int *seg_p,
 
 #define MAX_RMRR_DEVICES 16
 #define ALLOW_MEMORY_RELOCATE 1
+static unsigned int nr_rdm_entries[MAX_RMRR_DEVICES] = {0};
+static unsigned int nr_rmrr_devs = 0;
+static struct xen_reserved_device_memory *xrdm[MAX_RMRR_DEVICES] = {0};
+static bool apply_mxgpu_workaround = false;
+
+static uint64_t
+inspect_device(char *s)
+{
+    unsigned int seg, bus, device, func;
+    uint64_t mmio_dev;
+    uint16_t vendor_id, device_id;
+
+    xg_info("Getting RMRRs for device '%s'\n",s);
+    if ( parse_pci_sbdf(s, &seg, &bus, &device, &func) )
+    {
+        if ( !get_rdm(seg, bus, (device << 3) + func,
+                &nr_rdm_entries[nr_rmrr_devs], &xrdm[nr_rmrr_devs]) )
+            nr_rmrr_devs++;
+    }
+    if ( nr_rmrr_devs == MAX_RMRR_DEVICES )
+    {
+        xg_err("Error: hit limit of %d RMRR devices for domain\n",
+                    MAX_RMRR_DEVICES);
+        exit(1);
+    }
+
+    xg_info("Getting total MMIO space occupied for device '%s'\n",s);
+    if ( get_mmio_dev(seg, bus, device, func, &mmio_dev) )
+    {
+        xg_err("Error: unable to get PCI MMIO info\n");
+        exit(1);
+    }
+
+    if ( !pci_get_id(seg, bus, device, func, "vendor", &vendor_id) &&
+         vendor_id == 0x1002 &&
+         !pci_get_id(seg, bus, device, func, "device", &device_id) &&
+         device_id == 0x692f )
+    {
+        xg_info("MxGPU device found. Applying MMIO hole workaround\n");
+        apply_mxgpu_workaround = true;
+    }
+
+    return mmio_dev;
+}
 
 int stub_xc_hvm_build_with_mem(uint64_t max_mem_mib, uint64_t max_start_mib,
                                const char *image)
@@ -822,12 +867,8 @@ int stub_xc_hvm_build_with_mem(uint64_t max_mem_mib, uint64_t max_start_mib,
     uint64_t mmio_total = 0;
     unsigned int i, j, nr = 0;
     struct e820entry *e820;
-    unsigned int nr_rdm_entries[MAX_RMRR_DEVICES] = {0};
-    unsigned int nr_rmrr_devs = 0;
-    struct xen_reserved_device_memory *xrdm[MAX_RMRR_DEVICES] = {0};
     unsigned long rmrr_overlapped_ram = 0;
     bool allow_memory_relocate = ALLOW_MEMORY_RELOCATE;
-    bool apply_mxgpu_workaround = false;
     char *s;
 
     if ( pci_passthrough_sbdf_list )
@@ -835,44 +876,12 @@ int stub_xc_hvm_build_with_mem(uint64_t max_mem_mib, uint64_t max_start_mib,
         s = strtok(pci_passthrough_sbdf_list,",");
         while ( s != NULL )
         {
-            unsigned int seg, bus, device, func;
-            uint64_t mmio_dev;
-            uint16_t vendor_id, device_id;
-
-            xg_info("Getting RMRRs for device '%s'\n",s);
-            if ( parse_pci_sbdf(s, &seg, &bus, &device, &func) )
-            {
-                if ( !get_rdm(seg, bus, (device << 3) + func,
-                        &nr_rdm_entries[nr_rmrr_devs], &xrdm[nr_rmrr_devs]) )
-                    nr_rmrr_devs++;
-            }
-            if ( nr_rmrr_devs == MAX_RMRR_DEVICES )
-            {
-                xg_err("Error: hit limit of %d RMRR devices for domain\n",
-                            MAX_RMRR_DEVICES);
-                exit(1);
-            }
-
-            xg_info("Getting total MMIO space occupied for device '%s'\n",s);
-            if ( get_mmio_dev(seg, bus, device, func, &mmio_dev) )
-            {
-                xg_err("Error: unable to get PCI MMIO info\n");
-                exit(1);
-            }
-            mmio_total += mmio_dev;
-
-            if ( !pci_get_id(seg, bus, device, func, "vendor", &vendor_id) &&
-                 vendor_id == 0x1002 &&
-                 !pci_get_id(seg, bus, device, func, "device", &device_id) &&
-                 device_id == 0x692f )
-            {
-                xg_info("MxGPU device found. Applying MMIO hole workaround\n");
-                apply_mxgpu_workaround = true;
-            }
-
+            mmio_total += inspect_device(s);
             s = strtok (NULL, ",");
         }
     }
+    if ( gvtg_sbdf )
+        mmio_total += inspect_device(gvtg_sbdf);
     e820 = malloc(sizeof(*e820) * E820MAX);
     if (!e820)
 	    return -ENOMEM;

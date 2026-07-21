@@ -62,6 +62,7 @@ enum xenguest_opts {
     XG_OPT_PCI_PASSTHROUGH, /* str */
     XG_OPT_FORCE, /* bool */
     XG_OPT_VGPU, /* bool */
+    XG_OPT_GVTG, /* str */
 };
 
 static int opt_mode = -1;
@@ -249,6 +250,7 @@ static void parse_options(int argc, char *const argv[])
         { "pci_passthrough", required_argument, NULL, XG_OPT_PCI_PASSTHROUGH, },
         { "force", no_argument, NULL, XG_OPT_FORCE, },
         { "vgpu", no_argument, NULL, XG_OPT_VGPU, },
+        { "gvtg", required_argument, NULL, XG_OPT_GVTG, },
         { NULL },
     };
 
@@ -383,6 +385,10 @@ static void parse_options(int argc, char *const argv[])
 
         case XG_OPT_VGPU:
             opt_vgpu = true;
+            break;
+
+        case XG_OPT_GVTG:
+            gvtg_sbdf = optarg;
             break;
 
         case XG_OPT_FAKE:
