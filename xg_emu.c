@@ -1,35 +1,31 @@
-#include <xenctrl.h>
-#include <xenguest.h>
-#include <xenstore.h>
-#include <libgen.h>
-#include <sys/stat.h>
 #include <semaphore.h>
 #include <time.h>
-#include <string.h>
+
 #include <libempserver.h>
 #include "xg_internal.h"
 #include INCLUDE_JSON_H
 
 static sem_t sem_stopped;
 static int live_stage = XGS_POLICY_CONTINUE_PRECOPY;
-static bool pv_mode = false;
+static bool pv_mode;
 
 static struct emu_client progress_cli = { .num = -1 };
-static int last_iter = 0;
-static uint64_t last_sent = 0;
+static int last_iter;
+static uint64_t last_sent;
 static int stream_fd = -1;
 
 static int arg_store_port = -1;
 static int arg_console_port = -1;
 
 /* timeout in seconds */
-#define COMMAND_TIMEOUT (60*2)
+#define COMMAND_TIMEOUT (60 * 2)
 
 /* Called for mid-iteration progress update */
 void send_emu_progress(unsigned long done, unsigned long total)
 {
+    static struct timespec lastprog;
+
     struct timespec curtime;
-    static struct timespec lastprog = { 0 };
 
     clock_gettime(CLOCK_MONOTONIC, &curtime);
 
@@ -97,8 +93,8 @@ int emu_suspend_callback(void *data)
     r = sem_wait(&sem_stopped);
     if ( live_stage == XGS_POLICY_ABORT )
     {
-       xg_info("Ignoring libxc suspend request due to abort");
-       return 0;
+        xg_info("Ignoring libxc suspend request due to abort");
+        return 0;
     }
 
     xg_info("suspend was received");
@@ -113,11 +109,12 @@ int xenguest_precopy_policy(struct precopy_stats stats, void *user)
 
     if ( stats.dirty_count >= 0 )
     {
-        struct emu_client *cli = (struct emu_client *) user;
+        struct emu_client *cli = user;
+
         last_sent = stats.total_written;
         last_iter = stats.iteration;
 
-        xg_info("Checking live policy.  %ld / %d for %d",
+        xg_info("Checking live policy.  %ld / %ld for %d",
                 stats.dirty_count, stats.total_written, stats.iteration);
         r = emp_send_event_migrate_progress(*cli, stats.total_written,
                                             stats.dirty_count,
@@ -125,11 +122,11 @@ int xenguest_precopy_policy(struct precopy_stats stats, void *user)
     }
 
     if ( stop_decision )
-         xg_info("passing down stop message");
+        xg_info("passing down stop message");
     else if ( stats.dirty_count == 0 )
     {
-         xg_info("No dirty pages, finishing migration");
-         stop_decision = XGS_POLICY_STOP_AND_COPY;
+        xg_info("No dirty pages, finishing migration");
+        stop_decision = XGS_POLICY_STOP_AND_COPY;
     }
 
     return stop_decision;
@@ -187,8 +184,8 @@ static void do_cmd_restore(emp_call_args *args)
     unsigned long store_mfn = 0, console_mfn = 0;
     char buf[64];
 
-    if ( domid == -1 || stream_fd == -1
-        || arg_store_port == -1 || arg_console_port == -1)
+    if ( domid == -1 || stream_fd == -1 || arg_store_port == -1 ||
+         arg_console_port == -1 )
     {
         xg_err("xenguest: missing command line options\n");
         emp_send_error(args->cli, "Missing options");
@@ -204,10 +201,10 @@ static void do_cmd_restore(emp_call_args *args)
     xg_info("Restore complete, send result");
     snprintf(buf, sizeof(buf), "%lu %lu", store_mfn, console_mfn);
 
-    if (progress_cli.num >= 0)
-       emp_send_event_migrate_completed_result(progress_cli, buf);
-    if (progress_cli.num != args->cli.num)
-       emp_send_event_migrate_completed_result(args->cli, buf);
+    if ( progress_cli.num >= 0 )
+        emp_send_event_migrate_completed_result(progress_cli, buf);
+    if ( progress_cli.num != args->cli.num )
+        emp_send_event_migrate_completed_result(args->cli, buf);
     xg_info("All done");
 }
 
@@ -224,9 +221,9 @@ struct arg_list
     enum arg_type atype;
     union
     {
-       int *a_int;
-       bool *a_bool;
-       char **a_str;
+        int *a_int;
+        bool *a_bool;
+        char **a_str;
     };
 };
 
@@ -235,7 +232,7 @@ const static struct arg_list setable_args[] = {
     {"console_port", int_type,  .a_int = &arg_console_port},
     {"pv",           bool_type, .a_bool = &pv_mode},
     {"vgpu",         bool_type, .a_bool = &opt_vgpu},
-    {NULL,           -1,        .a_int = NULL}
+    {}
 };
 
 void do_cmd_set_args(emp_call_args *args)
@@ -265,11 +262,11 @@ void do_cmd_set_args(emp_call_args *args)
         }
         val = json_object_get_string(iter.val);
 
-        for (i = 0; setable_args[i].name != NULL; i++)
+        for ( i = 0; setable_args[i].name != NULL; i++ )
         {
             if ( strcmp(setable_args[i].name, iter.key) == 0 )
             {
-                switch (setable_args[i].atype)
+                switch ( setable_args[i].atype )
                 {
                 case int_type:
                     ival = strtol(val, &str_end, 10);
@@ -287,9 +284,9 @@ void do_cmd_set_args(emp_call_args *args)
                     break;
 
                 case bool_type:
-                    if (strcmp(val, "true") == 0)
+                    if ( strcmp(val, "true") == 0 )
                         *(setable_args[i].a_int) = 1;
-                    else if (strcmp(val, "false") == 0)
+                    else if ( strcmp(val, "false") == 0 )
                         *(setable_args[i].a_int) = 0;
                     else
                     {
@@ -313,7 +310,7 @@ void do_cmd_set_args(emp_call_args *args)
         emp_send_return(args->cli, NULL);
 }
 
-struct command_actions actions[] = {
+/* const */ static struct command_actions actions[] = {
     {cmd_track_dirty,      &do_ignore, 0 },
     {cmd_migrate_abort,    &do_abort, 0 },
     {cmd_migrate_init,     &do_migrate_init, 0 },
@@ -356,7 +353,7 @@ void emp_do_listen(void)
         return;
     }
 
-    if (r > (int) sizeof(fname))
+    if ( r > (int)sizeof(fname) )
     {
         xg_err("Control path too long.");
         return;
@@ -394,21 +391,21 @@ void emp_do_listen(void)
 
         if ( rc == 0 && num_clients == 0 )
         {
-           struct timespec cur_time;
-           uint64_t timediff;
+            struct timespec cur_time;
+            uint64_t timediff;
 
-           clock_gettime(CLOCK_MONOTONIC, &cur_time);
-           timediff = ts_delta_us(&cur_time, &act_time);
+            clock_gettime(CLOCK_MONOTONIC, &cur_time);
+            timediff = ts_delta_us(&cur_time, &act_time);
 
-           if ( timediff > SEC(COMMAND_TIMEOUT) )
-           {
-               xg_err("Control timeout");
-               abort_all();
-               break;
-           }
+            if ( timediff > SEC(COMMAND_TIMEOUT) )
+            {
+                xg_err("Control timeout");
+                abort_all();
+                break;
+            }
         }
         else
-           clock_gettime(CLOCK_MONOTONIC, &act_time);
+            clock_gettime(CLOCK_MONOTONIC, &act_time);
 
         if ( rc < 0 && errno != EINTR )
             break;

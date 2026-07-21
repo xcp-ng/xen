@@ -2,7 +2,7 @@ XEN_ROOT=$(CURDIR)/../..
 include $(XEN_ROOT)/tools/Rules.mk
 
 CFLAGS += -Werror -Wshadow -Wno-unused-result
-CFLAGS += -I. -I$(XEN_ROOT)/tools/libxc -include $(XEN_ROOT)/tools/config.h -I$(XEN_ROOT)/tools
+CFLAGS += -I$(XEN_ROOT)/tools/libs/ctrl -include $(XEN_ROOT)/tools/config.h -I$(XEN_ROOT)/tools
 CFLAGS += $(CFLAGS_libxentoollog) $(CFLAGS_libxenctrl) $(CFLAGS_libguest) $(CFLAGS_libxenstore)
 CFLAGS += -D_GNU_SOURCE -DXC_WANT_COMPAT_MAP_FOREIGN_API
 CFLAGS += $(CFLAGS_libxentoolcore)
@@ -19,7 +19,7 @@ ACPI_PATH  = $(XEN_ROOT)/tools/libacpi
 DSDT_FILES = dsdt_pvh.c
 ACPI_OBJS = dsdt_pvh.o build.o static_tables.o
 $(DSDT_FILES) $(ACPI_OBJS): acpi
-$(ACPI_OBJS): CFLAGS += -I. -DLIBACPI_STDUTILS=\"$(CURDIR)/xg_internal.h\"
+$(ACPI_OBJS): CFLAGS += -I. -DLIBACPI_STDUTILS=\"$(CURDIR)/acpi-utils.h\"
 vpath build.c $(ACPI_PATH)/
 vpath static_tables.c $(ACPI_PATH)/
 

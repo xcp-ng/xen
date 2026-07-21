@@ -12,26 +12,20 @@
  * GNU Lesser General Public License for more details.
  */
 
-#include <stdlib.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdarg.h>
-
 #include <errno.h>
+#include <fcntl.h>
+#include <libgen.h>
 #include <sys/mman.h>
-#include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include <xenctrl.h>
-#include <xenguest.h>
-#include <xenstore.h>
-#include <xc_dom.h>
-#include <xen-tools/libs.h>
+#include "xg_internal.h"
+
 #include <xen/hvm/hvm_info_table.h>
 #include <xen/hvm/hvm_xs_strings.h>
 #include <xen/hvm/params.h>
 #include <xen/hvm/e820.h>
+
 #include "libacpi/libacpi.h"
 
 #include <xentoolcore_internal.h>
@@ -41,37 +35,33 @@ enum {
 #include <xen/arch-x86/cpufeatureset.h>
 };
 
-#include "xg_internal.h"
-
 char *xs_domain_path = NULL;
 char *pci_passthrough_sbdf_list = NULL;
 
 #define SYSFS_PCI_DEV "/sys/bus/pci/devices"
 #define PCI_SBDF      "%04x:%02x:%02x.%01x"
 
-static void failwith_oss_xc(char *fct)
+static void failwith_oss_xc(const char *msg)
 {
-    char buf[1030];
-    const xc_error *error;
+    const xc_error *error = xc_get_last_error(xch);
 
-    error = xc_get_last_error(xch);
-    if (error->code == XC_ERROR_NONE)
-        snprintf(buf, ARRAY_SIZE(buf), "%s: [%d] %s", fct, errno, strerror(errno));
+    if ( error->code == XC_ERROR_NONE )
+        xg_err("xenguest: %s: [%d] %s\n", msg, errno, strerror(errno));
     else
-        snprintf(buf, ARRAY_SIZE(buf), "%s: [%d] %s", fct, error->code, error->message);
-    xc_clear_last_error(xch);
-    xg_err("xenguest: %s\n", buf);
-    exit(1);
+        xg_err("xenguest: %s: [%d] %s\n", msg, error->code, error->message);
+
+    exit(EXIT_FAILURE);
 }
 
-/* The following boolean flags are all set by their value
-   in the platform area of xenstore. The only value that
-   is considered true is the string 'true' */
+/*
+ * The following boolean flags are all set by their value in the platform area
+ * of xenstore. The only value that is considered true is the string 'true'
+ */
 struct flags {
-    xc_dominfo_t dominfo;
+    xc_domaininfo_t dominfo;
     int vcpus;
     int vcpus_current;
-    char** vcpu_affinity; /* 0 means unset */
+    char **vcpu_affinity;   /* 0 means unset */
     uint16_t vcpu_weight;   /* 0 means unset (0 is an illegal weight) */
     uint16_t vcpu_cap;      /* 0 is default (no cap) */
     int nx;
@@ -104,10 +94,10 @@ char *xenstore_getsv(const char *fmt, va_list ap)
     char key[1024] = { 0 };
 
     n = snprintf(key, sizeof(key), "%s/", xs_domain_path);
-    if (n < 0)
+    if ( n < 0 )
         goto out;
     m = vsnprintf(key + n, sizeof(key) - n, fmt, ap);
-    if (m < 0)
+    if ( m < 0 )
         goto out;
 
     s = xs_read(xsh, XBT_NULL, key, NULL);
@@ -123,6 +113,7 @@ char *xenstore_gets(const char *fmt, ...)
     va_start(ap, fmt);
     s = xenstore_getsv(fmt, ap);
     va_end(ap);
+
     return s;
 }
 
@@ -135,26 +126,31 @@ uint64_t xenstore_get_value(bool *valid, const char *fmt, ...)
 
     va_start(ap, fmt);
     s = xenstore_getsv(fmt, ap);
-    if (s) {
+    if ( s )
+    {
         if ( !strcasecmp(s, "true") )
             value = 1;
         else if ( !strcasecmp(s, "false") )
             value = 0;
-        else {
+        else
+        {
             errno = 0;
             value = strtoull(s, NULL, 0);
-            if ( errno ) {
+            if ( errno )
+            {
                 value = 0;
                 got_value = false;
             }
         }
         free(s);
-    } else
+    }
+    else
         got_value = false;
 
     if ( valid )
         *valid = got_value;
     va_end(ap);
+
     return value;
 }
 
@@ -166,6 +162,7 @@ uint64_t xenstore_get(const char *fmt, ...)
     va_start(ap, fmt);
     value = xenstore_get_value(NULL, fmt, ap);
     va_end(ap);
+
     return value;
 }
 
@@ -176,13 +173,14 @@ int xenstore_putsv(const char *_key, const char *fmt, ...)
     va_list ap;
 
     n = snprintf(key, sizeof(key), "%s/%s", xs_domain_path, _key);
-    if (n < 0)
+    if ( n < 0 )
         goto out;
 
     va_start(ap, fmt);
     m = vsnprintf(val, sizeof(val), fmt, ap);
     va_end(ap);
-    if (m < 0)
+
+    if ( m < 0 )
         goto out;
 
     rc = xs_write(xsh, XBT_NULL, key, val, strlen(val));
@@ -265,7 +263,7 @@ static int get_vm_featureset(bool hvm)
     return rc;
 }
 
-static int construct_cpuid_policy(const struct flags *f, bool hvm)
+static int construct_cpuid_policy(const struct flags *f, bool hvm, bool restore)
 {
     int rc = -1;
 
@@ -306,6 +304,11 @@ static int construct_cpuid_policy(const struct flags *f, bool hvm)
     if ( !f->pae )
         clear_bit(X86_FEATURE_PAE, featureset);
 
+    if ( f->nested_virt ) {
+        set_bit(X86_FEATURE_VMX, featureset);
+        set_bit(X86_FEATURE_SVM, featureset);
+    }
+
     /*
      * Optionally advertise ITSC, given hardware support an a non-migratealbe
      * domain.
@@ -313,10 +316,10 @@ static int construct_cpuid_policy(const struct flags *f, bool hvm)
     if ( f->nomigrate && test_bit(X86_FEATURE_ITSC, host_featureset) )
         set_bit(X86_FEATURE_ITSC, featureset);
 
-    rc = xc_cpuid_apply_policy(xch, domid, featureset, nr_features,
-                               0, f->cores_per_socket);
+    rc = xc_cpuid_apply_policy(xch, domid, restore, featureset, nr_features,
+                               0, 0, f->nested_virt, f->cores_per_socket, NULL, NULL);
 
- out:
+out:
     free(featureset);
     featureset = NULL;
     return rc;
@@ -324,9 +327,10 @@ static int construct_cpuid_policy(const struct flags *f, bool hvm)
 
 static int hvmloader_flag(const char *key)
 {
-    /* Params going to hvmloader need to convert "true" -> '1' as Xapi gets
-     * this wrong when migrating from older hosts. */
-
+    /*
+     * Params going to hvmloader need to convert "true" -> '1' as Xapi gets
+     * this wrong when migrating from older hosts.
+     */
     char *val = xenstore_gets("%s", key);
     int ret = -1;
 
@@ -358,27 +362,26 @@ static int hvmloader_flag(const char *key)
     else
         xenstore_puts(key, "0");
 
- out:
+out:
     free(val);
     return ret;
 }
 
 static void get_flags(struct flags *f)
 {
-    char * tmp;
+    char *tmp;
     int n;
     bool stimer_set;
 
-    if ( xc_domain_getinfo(xch, domid, 1, &f->dominfo) != 1 ||
-         f->dominfo.domid != domid )
+    if ( xc_domain_getinfo_single(xch, domid, &f->dominfo) < 0 )
         failwith_oss_xc("xc_domain_getinfo");
 
     f->vcpus = xenstore_get("platform/vcpu/number");
     f->vcpu_affinity = malloc(sizeof(char*) * f->vcpus);
 
-    for (n = 0; n < f->vcpus; n++) {
+    for ( n = 0; n < f->vcpus; n++ )
         f->vcpu_affinity[n] = xenstore_gets("platform/vcpu/%d/affinity", n);
-    }
+
     f->vcpus_current = xenstore_get("platform/vcpu/current");
     f->vcpu_weight = xenstore_get("platform/vcpu/weight");
     f->vcpu_cap = xenstore_get("platform/vcpu/cap");
@@ -398,11 +401,12 @@ static void get_flags(struct flags *f)
      * If stimer has not been explicitly set, but one of the other two
      * have been enabled, default stimer to enabled.
      */
-     if ( opt_vgpu && !stimer_set &&
-         (f->viridian_reference_tsc || f->viridian_time_ref_count) ) {
-         xg_info("vgpu attached and stimer not set - defaulting to enabled.\n");
-         f->viridian_stimer = 1;
-     }
+    if ( opt_vgpu && !stimer_set &&
+         (f->viridian_reference_tsc || f->viridian_time_ref_count) )
+    {
+        xg_info("vgpu attached and stimer not set - defaulting to enabled.\n");
+        f->viridian_stimer = 1;
+    }
 
     f->apic     = xenstore_get("platform/apic");
     f->pae      = xenstore_get("platform/pae");
@@ -410,16 +414,13 @@ static void get_flags(struct flags *f)
     f->x87_fip_width = xenstore_get("platform/x87-fip-width");
     f->nomigrate = xenstore_get("platform/nomigrate");
 
-    if ( f->dominfo.hvm )
+    if ( f->dominfo.flags & XEN_DOMINF_hvm_guest )
     {
         unsigned int cps = xenstore_get("platform/cores-per-socket");
 
         if ( cps && (f->vcpus % cps) != 0 )
-        {
-            xg_err("Bad cores/socket setting: %u (nr vcpus %u)\n",
-                   cps, f->vcpus);
-            exit(1);
-        }
+            xg_fatal("Bad cores/socket setting: %u (nr vcpus %u)\n",
+                     cps, f->vcpus);
 
         /*
          * Must remain 0 for compatiblity with PV guests, which previously
@@ -468,7 +469,8 @@ static void get_flags(struct flags *f)
     }
 
     xg_info("Domain Properties: Type %s, hap %u\n",
-            f->dominfo.hvm ? "HVM" : "PV", f->dominfo.hap);
+            (f->dominfo.flags & XEN_DOMINF_hvm_guest) ? "HVM" : "PV",
+            !!(f->dominfo.flags & XEN_DOMINF_hap));
 
     xg_info("Determined the following parameters from xenstore:\n");
     xg_info("vcpu/number:%d vcpu/weight:%d vcpu/cap:%d\n",
@@ -486,59 +488,68 @@ static void get_flags(struct flags *f)
             f->viridian_hcall_remote_tlb_flush, f->viridian_apic_assist,
             f->viridian_crash_ctl, f->viridian_stimer, f->viridian_hcall_ipi);
 
-    for (n = 0; n < f->vcpus; n++){
-        xg_info("vcpu/%d/affinity:%s\n", n, (f->vcpu_affinity[n])?f->vcpu_affinity[n]:"unset");
-    }
+    for ( n = 0; n < f->vcpus; n++ )
+        xg_info("vcpu/%d/affinity:%s\n",
+                n, f->vcpu_affinity[n] ?: "unset");
 }
 
 static void free_flags(struct flags *f)
 {
-    int n;
-    for ( n = 0; n < f->vcpus; ++n )
+    for ( int n = 0; n < f->vcpus; ++n )
         free(f->vcpu_affinity[n]);
     free(f->vcpu_affinity);
 }
 
-static void configure_vcpus(struct flags *f){
+static void configure_vcpus(struct flags *f)
+{
     struct xen_domctl_sched_credit sdom;
     int i, j, r, size, pcpus_supplied, min;
     xc_cpumap_t cpumap;
 
     size = xc_get_cpumap_size(xch) * 8; /* array is of uint8_t */
 
-    for (i=0; i<f->vcpus; i++){
-        if (f->vcpu_affinity[i]){ /* NULL means unset */
-            pcpus_supplied = strlen(f->vcpu_affinity[i]);
-            min = (pcpus_supplied < size)?pcpus_supplied:size;
-            cpumap = xc_cpumap_alloc(xch);
-            if (cpumap == NULL)
-                failwith_oss_xc("xc_cpumap_alloc");
+    for ( i = 0; i < f->vcpus; i++ )
+    {
+        if ( !f->vcpu_affinity[i] )
+            continue;
 
-            for (j=0; j<min; j++) {
-                if (f->vcpu_affinity[i][j] == '1')
-                    cpumap[j/8] |= 1 << (j&7);
-            }
-            r = xc_vcpu_setaffinity(xch, domid, i, cpumap, NULL,
-                                    XEN_VCPUAFFINITY_HARD);
-            free(cpumap);
-            if (r) {
-                failwith_oss_xc("xc_vcpu_setaffinity");
-            }
+        pcpus_supplied = strlen(f->vcpu_affinity[i]);
+        min = (pcpus_supplied < size)?pcpus_supplied:size;
+        cpumap = xc_cpumap_alloc(xch);
+        if ( cpumap == NULL )
+            failwith_oss_xc("xc_cpumap_alloc");
+
+        for ( j = 0; j < min; j++ )
+        {
+            if ( f->vcpu_affinity[i][j] == '1' )
+                cpumap[j / 8] |= 1 << (j & 7);
         }
+        r = xc_vcpu_setaffinity(xch, domid, i, cpumap, NULL,
+                                XEN_VCPUAFFINITY_HARD);
+        free(cpumap);
+        if ( r )
+            failwith_oss_xc("xc_vcpu_setaffinity");
     }
 
     r = xc_sched_credit_domain_get(xch, domid, &sdom);
     /* This should only happen when a different scheduler is set */
-    if (r) {
+    if ( r )
+    {
         xg_info("Failed to get credit scheduler parameters: scheduler not enabled?\n");
         return;
     }
-    if (f->vcpu_weight != 0L) sdom.weight = f->vcpu_weight;
-    if (f->vcpu_cap != 0L) sdom.cap = f->vcpu_cap;
-    /* This shouldn't fail, if "get" above succeeds. This error is fatal
-       to highlight the need to investigate further. */
+
+    if ( f->vcpu_weight )
+        sdom.weight = f->vcpu_weight;
+    if ( f->vcpu_cap)
+        sdom.cap = f->vcpu_cap;
+
+    /*
+     * This shouldn't fail, if "get" above succeeds. This error is fatal to
+     * highlight the need to investigate further.
+     */
     r = xc_sched_credit_domain_set(xch, domid, &sdom);
-    if (r)
+    if ( r )
         failwith_oss_xc("xc_sched_credit_domain_set");
 }
 
@@ -551,40 +562,42 @@ static uint64_t get_image_max_size(const char *type)
     snprintf(key, sizeof(key), "/mh/limits/pv-%s-max_size", type);
 
     s = xs_read(xsh, XBT_NULL, key, NULL);
-    if (s) {
+    if ( s )
+    {
         errno = 0;
         max_size = strtoull(s, NULL, 0);
-        if (errno)
+        if ( errno )
             max_size = 0;
         free(s);
     }
-    return max_size ? max_size : XC_DOM_DECOMPRESS_MAX;
+
+    return max_size ?: XC_DOM_DECOMPRESS_MAX;
 }
 
 static void configure_tsc(struct flags *f)
 {
     int rc = xc_domain_set_tsc_info(xch, domid, f->tsc_mode, 0, 0, 0);
 
-    if (rc)
+    if ( rc )
         failwith_oss_xc("xc_domain_set_tsc_info");
 }
 
 
-int stub_xc_linux_build(int c_mem_max_mib, int mem_start_mib,
-                        const char *image_name, const char *ramdisk_name,
-                        const char *cmdline, const char *features,
-                        int flags, int store_evtchn, int store_domid,
-                        int console_evtchn, int console_domid,
-                        unsigned long *store_mfn, unsigned long *console_mfn,
-                        char *protocol)
+int stub_xc_pv_build(int c_mem_max_mib, int mem_start_mib,
+                     const char *image_name, const char *ramdisk_name,
+                     const char *cmdline, const char *features,
+                     int flags, int store_evtchn, int store_domid,
+                     int console_evtchn, int console_domid,
+                     unsigned long *store_mfn, unsigned long *console_mfn,
+                     char *protocol)
 {
     struct xc_dom_image *dom;
-
     struct flags f = {};
+
     get_flags(&f);
 
     dom = xc_dom_allocate(xch, cmdline, features);
-    if (!dom)
+    if ( !dom )
         failwith_oss_xc("xc_dom_allocate");
 
     dom->container_type = XC_DOM_PV_CONTAINER;
@@ -628,7 +641,7 @@ int stub_xc_linux_build(int c_mem_max_mib, int mem_start_mib,
     *console_mfn = xc_dom_p2m(dom, dom->console_pfn);
     *store_mfn = xc_dom_p2m(dom, dom->xenstore_pfn);
 
-    if ( construct_cpuid_policy(&f, false) )
+    if ( construct_cpuid_policy(&f, false, false) )
         failwith_oss_xc("construct_cpuid_policy");
 
     strncpy(protocol, xc_domain_get_native_protocol(xch, domid), 64);
@@ -649,12 +662,13 @@ static void hvm_init_info_table(struct hvm_info_table *va_hvm, struct flags *f)
     memset(va_hvm->vcpu_online, 0, sizeof(va_hvm->vcpu_online));
 
     for ( i = 0; i < f->vcpus_current; i++ )
-        va_hvm->vcpu_online[i/8] |= 1 << (i % 8);
+        va_hvm->vcpu_online[i / 8] |= 1 << (i % 8);
 
     va_hvm->checksum = 0;
 
     for ( i = 0, sum = 0; i < va_hvm->length; i++ )
         sum += ((uint8_t *) va_hvm)[i];
+
     va_hvm->checksum = -sum;
 }
 
@@ -733,14 +747,14 @@ static int init_acpi_config(struct xc_dom_image *dom,
                             struct flags *f,
                             struct acpi_config *config)
 {
-    xc_dominfo_t info;
+    xc_domaininfo_t info;
     struct hvm_info_table *hvminfo;
     int r;
 
     config->dsdt_anycpu = config->dsdt_15cpu = dsdt_pvh;
     config->dsdt_anycpu_len = config->dsdt_15cpu_len = dsdt_pvh_len;
 
-    r = xc_domain_getinfo(xch, domid, 1, &info);
+    r = xc_domain_getinfo_single(xch, domid, &info);
     if ( r < 0 )
     {
         xg_err("getdomaininfo failed (rc=%d)", r);
@@ -784,10 +798,10 @@ int xenguest_dom_load_acpi(struct xc_dom_image *dom,
         goto out;
     }
 
-    config.rsdp = (unsigned long)malloc(xenguest_ctxt.page_size);
-    config.infop = (unsigned long)malloc(xenguest_ctxt.page_size);
+    config.rsdp = (unsigned long)calloc(xenguest_ctxt.page_size, 1);
+    config.infop = (unsigned long)calloc(xenguest_ctxt.page_size, 1);
     /* Pages to hold ACPI tables */
-    xenguest_ctxt.buf = malloc(NUM_ACPI_PAGES * xenguest_ctxt.page_size);
+    xenguest_ctxt.buf = calloc(NUM_ACPI_PAGES * xenguest_ctxt.page_size, 1);
 
     if ( !config.rsdp || !config.infop || !xenguest_ctxt.buf )
         return -ENOMEM;
@@ -836,37 +850,44 @@ static void hvm_set_viridian_features(struct flags *f)
 
     xg_info("viridian base\n");
 
-    if (f->viridian_time_ref_count) {
+    if ( f->viridian_time_ref_count )
+    {
         xg_info("+ time_ref_count\n");
         feature_mask |= HVMPV_time_ref_count;
     }
 
-    if (f->viridian_reference_tsc) {
+    if ( f->viridian_reference_tsc )
+    {
         xg_info("+ reference_tsc\n");
         feature_mask |= HVMPV_reference_tsc;
     }
 
-    if (f->viridian_hcall_remote_tlb_flush) {
+    if ( f->viridian_hcall_remote_tlb_flush )
+    {
         xg_info("+ hcall_remote_tlb_flush\n");
         feature_mask |= HVMPV_hcall_remote_tlb_flush;
     }
 
-    if (f->viridian_apic_assist) {
+    if ( f->viridian_apic_assist )
+    {
         xg_info("+ apic_assist\n");
         feature_mask |= HVMPV_apic_assist;
     }
 
-    if (f->viridian_crash_ctl) {
+    if ( f->viridian_crash_ctl )
+    {
         xg_info("+ crash_ctl\n");
         feature_mask |= HVMPV_crash_ctl;
     }
 
-    if (f->viridian_stimer) {
+    if ( f->viridian_stimer )
+    {
         xg_info("+ stimer\n");
         feature_mask |= HVMPV_synic | HVMPV_stimer;
     }
 
-    if (f->viridian_hcall_ipi) {
+    if ( f->viridian_hcall_ipi )
+    {
         xg_info("+ hcall_ipi\n");
         feature_mask |= HVMPV_hcall_ipi;
     }
@@ -874,15 +895,13 @@ static void hvm_set_viridian_features(struct flags *f)
     xc_set_hvm_param(xch, domid, HVM_PARAM_VIRIDIAN, feature_mask);
 }
 
-static int hvm_build_set_params(int store_evtchn, unsigned long *store_mfn,
-                                int console_evtchn, unsigned long *console_mfn,
-                                bool is_pvh, struct flags *f)
+static int hvm_build_set_params(bool is_pvh, struct flags *f)
 {
     struct hvm_info_table *va_hvm;
     uint8_t *va_map;
     int rc = 0;
 
-    if( !is_pvh )
+    if ( !is_pvh )
     {
         va_map = xc_map_foreign_range(xch, domid,
                                       XC_PAGE_SIZE, PROT_READ | PROT_WRITE,
@@ -895,19 +914,10 @@ static int hvm_build_set_params(int store_evtchn, unsigned long *store_mfn,
         munmap(va_map, XC_PAGE_SIZE);
     }
 
-    xc_get_hvm_param(xch, domid, HVM_PARAM_STORE_PFN, store_mfn);
-
-    if (f->viridian)
+    if ( f->viridian )
         hvm_set_viridian_features(f);
 
-    xc_set_hvm_param(xch, domid, HVM_PARAM_STORE_EVTCHN, store_evtchn);
     xc_set_hvm_param(xch, domid, HVM_PARAM_HPET_ENABLED, f->hpet);
-    if ( f->nested_virt )
-        xc_set_hvm_param(xch, domid, HVM_PARAM_NESTEDHVM, f->nested_virt);
-    if ( f->nomigrate )
-        xc_domain_disable_migrate(xch, domid);
-    xc_get_hvm_param(xch, domid, HVM_PARAM_CONSOLE_PFN, console_mfn);
-    xc_set_hvm_param(xch, domid, HVM_PARAM_CONSOLE_EVTCHN, console_evtchn);
     xc_set_hvm_param(xch, domid, HVM_PARAM_TRIPLE_FAULT_REASON, SHUTDOWN_crash);
 
     /*
@@ -928,54 +938,119 @@ static int hvm_build_set_params(int store_evtchn, unsigned long *store_mfn,
     return rc;
 }
 
+#ifdef OVMF_PATH
+/*
+ * Returns the path to the OVMF firmware. Caller must free() the path on
+ * success. Returns 0 on success or -errno on failure.
+ */
+static int get_ovmf_path(char **path_out)
+{
+    char *key = xenstore_gets("platform/ovmf-override");
+
+    if ( key )
+    {
+        char *dir, *path;
+        int ret = 0;
+
+        /* Check the xenstore key is a simple filename */
+        if ( strchr(key, '/') )
+        {
+            xg_err("ovmf-override key '%s' must be a filename, not a path\n", key);
+            free(key);
+            return -EINVAL;
+        }
+
+        /* Construct a path relative to the directory of the default path */
+        dir = strdup(OVMF_PATH);
+        if ( !dir )
+        {
+            ret = -errno;
+            free(key);
+            return ret;
+        }
+
+        if ( asprintf(&path, "%s/%s", dirname(dir), key) == -1 )
+        {
+            ret = -errno;
+            path = NULL;
+        }
+
+        free(dir);
+        free(key);
+
+        *path_out = path;
+        return ret;
+    }
+
+    *path_out = strdup(OVMF_PATH);
+    return *path_out ? 0 : -errno;
+}
+#endif
+
+/*
+ * Loads the appropriate firmware according to the xenstore key
+ * "hvmloader/bios". Does nothing if the key is not present or empty.
+ * Returns an error if requested to load an unknown firmware type.
+ * Returns 0 on success or -errno on failure.
+ */
 static int hvm_load_firmware_module(struct xc_dom_image *dom)
 {
-#ifdef OVMF_PATH
-    FILE *f;
     struct stat st;
     struct xc_hvm_firmware_module *m = &dom->system_firmware_module;
     char *tmp = xenstore_gets("hvmloader/bios");
+    char *path = NULL;
+    int ret, fd;
 
-    if ( !tmp )
+    if ( !tmp || !strcmp(tmp, "") )
         return 0;
 
     if ( strcmp(tmp, "ovmf") )
     {
+        xg_err("Unsupported bios type '%s'\n", tmp);
         free(tmp);
-        return -1;
+        return -ENOTSUP;
     }
     free(tmp);
 
-    f = fopen(OVMF_PATH, "r");
-    if ( !f )
-        return -1;
+#ifdef OVMF_PATH
+    ret = get_ovmf_path(&path);
+    if ( ret )
+        return ret;
 
-    if ( fstat(fileno(f), &st) == -1 )
+    fd = open(path, O_RDONLY | O_NOFOLLOW);
+    if ( fd == -1 )
     {
-        fclose(f);
-        return -1;
+        ret = -errno;
+        goto out;
+    }
+
+    if ( fstat(fd, &st) == -1 )
+    {
+        ret = -errno;
+        goto out;
     }
 
     m->length = st.st_size;
-    m->data = malloc(m->length);
-    if ( !m->data )
+    m->data = mmap(NULL, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
+    if ( m->data == MAP_FAILED )
     {
-        fclose(f);
-        return -1;
+        ret = -errno;
+        goto out;
     }
 
-    if ( fread(m->data, 1, m->length, f) != m->length )
-    {
-        fclose(f);
-        free(m->data);
-        return -1;
-    }
+    xg_info("Loaded OVMF from %s\n", path);
+    ret = 0;
 
-    fclose(f);
+out:
+    free(path);
+    if ( fd >= 0 )
+        close(fd);
 
-    xg_info("Loaded OVMF from %s\n", OVMF_PATH);
+    return ret;
+#else
+    xg_err("Unsupported bios type 'ovmf'\n");
+    return -ENOTSUP;
 #endif
-    return 0;
 }
 
 static int pci_get_id(uint16_t seg, uint8_t bus, uint8_t dev, uint8_t func,
@@ -1024,25 +1099,28 @@ static int get_mmio_dev(uint16_t seg, uint8_t bus, uint8_t dev, uint8_t func,
              seg, bus, dev, func);
 
     file = fopen(namebuf, "r");
-    if (!file) {
+    if ( !file )
+    {
         xg_err("Cannot open '%s': %s\n", namebuf, strerror(errno));
         return -1;
     }
 
     *mmio_dev = 0;
-    for (i = 0; i < 7; i++)
+    for ( i = 0; i < 7; i++ )
     {
         unsigned long long start, end, size, flags;
-        if (!fgets(buf, sizeof(buf), file))
+
+        if ( !fgets(buf, sizeof(buf), file) )
             break;
 
-        if (sscanf(buf, "%llx %llx %llx", &start, &end, &flags) != 3) {
+        if ( sscanf(buf, "%llx %llx %llx", &start, &end, &flags) != 3 )
+        {
             xg_err("Syntax error in '%s'\n", namebuf);
             rc = -1;
             goto out;
         }
 
-        if (start)
+        if ( start )
             size = end - start + 1;
         else
             size = 0;
@@ -1064,29 +1142,31 @@ static int get_rdm(uint16_t seg, uint8_t bus, uint8_t devfn,
     r = xc_reserved_device_memory_map(xch, 0, seg, bus, devfn,
                                       NULL, nr_entries);
     /* "0" means we have no any rdm entry. */
-    if (!r)
+    if ( !r )
         goto out;
 
-    if (errno != ENOBUFS) {
+    if ( errno != ENOBUFS )
+    {
         rc = -1;
         goto out;
     }
+
     *xrdm = malloc(sizeof(**xrdm) * (*nr_entries));
-    if (!*xrdm)
+    if ( !*xrdm )
         rc = -1;
 
     r = xc_reserved_device_memory_map(xch, 0, seg, bus, devfn,
                                       *xrdm, nr_entries);
-    if (r)
+    if ( r )
         rc = -1;
 out:
     return rc;
 }
 
 /* Copied from xen hypervisor itself */
-const char * parse_pci_sbdf(char *s, unsigned int *seg_p,
-                             unsigned int *bus_p, unsigned int *dev_p,
-                             unsigned int *func_p)
+const char *parse_pci_sbdf(char *s, unsigned int *seg_p,
+                           unsigned int *bus_p, unsigned int *dev_p,
+                           unsigned int *func_p)
 {
     unsigned long seg = strtoul(s, &s, 16), bus, dev, func;
 
@@ -1139,10 +1219,12 @@ int hvm_build_setup_mem(struct xc_dom_image *dom, uint64_t max_mem_mib,
     bool allow_memory_relocate = ALLOW_MEMORY_RELOCATE;
     bool apply_mxgpu_workaround = false;
     char *s;
+    int ret;
 
     if ( pci_passthrough_sbdf_list )
     {
-        s = strtok(pci_passthrough_sbdf_list,",");
+        s = strtok(pci_passthrough_sbdf_list , ",");
+
         while ( s != NULL )
         {
             unsigned int seg, bus, device, func;
@@ -1157,25 +1239,21 @@ int hvm_build_setup_mem(struct xc_dom_image *dom, uint64_t max_mem_mib,
 
             xg_info("Getting RMRRs for device '%s'\n",s);
             if ( !get_rdm(seg, bus, (device << 3) + func,
-                    &nr_rdm_entries[nr_rmrr_devs], &xrdm[nr_rmrr_devs]) )
+                          &nr_rdm_entries[nr_rmrr_devs], &xrdm[nr_rmrr_devs]) )
             {
                 if ( nr_rdm_entries[nr_rmrr_devs] != 0 )
                     nr_rmrr_devs++;
 
                 if ( nr_rmrr_devs == MAX_RMRR_DEVICES )
-                {
-                    xg_err("Error: hit limit of %d RMRR devices for domain\n",
-                               MAX_RMRR_DEVICES);
-                    exit(1);
-                }
+                    xg_fatal("Error: hit limit of %d RMRR devices for domain\n",
+                             MAX_RMRR_DEVICES);
             }
 
             xg_info("Getting total MMIO space occupied for device '%s'\n",s);
+
             if ( get_mmio_dev(seg, bus, device, func, &mmio_dev) )
-            {
-                xg_err("Error: unable to get PCI MMIO info\n");
-                exit(1);
-            }
+                xg_fatal("Error: unable to get PCI MMIO info\n");
+
             mmio_total += mmio_dev;
 
             if ( !pci_get_id(seg, bus, device, func, "vendor", &vendor_id) &&
@@ -1187,11 +1265,12 @@ int hvm_build_setup_mem(struct xc_dom_image *dom, uint64_t max_mem_mib,
                 apply_mxgpu_workaround = true;
             }
 
-            s = strtok (NULL, ",");
+            s = strtok(NULL, ",");
         }
     }
+
     e820 = malloc(sizeof(*e820) * E820MAX);
-    if (!e820)
+    if ( !e820 )
 	    return -ENOMEM;
 
     dom->target_pages = max_start_mib << (20 - XC_PAGE_SHIFT);
@@ -1200,7 +1279,7 @@ int hvm_build_setup_mem(struct xc_dom_image *dom, uint64_t max_mem_mib,
     highmem_end = highmem_start = 1ull << 32;
     mmio_size   = HVM_BELOW_4G_MMIO_LENGTH;
 
-    if (opt_vgpu)
+    if ( opt_vgpu )
     {
         /*
          * Make additional room for vGPU BARs in low MMIO hole
@@ -1212,9 +1291,9 @@ int hvm_build_setup_mem(struct xc_dom_image *dom, uint64_t max_mem_mib,
         mmio_size <<= 1;
     }
 
-    if (allow_memory_relocate)
+    if ( allow_memory_relocate )
     {
-        while (mmio_size < mmio_total && (uint32_t)(mmio_size << 1) != 0)
+        while ( mmio_size < mmio_total && (uint32_t)(mmio_size << 1) != 0 )
             mmio_size <<= 1;
 
         if ( apply_mxgpu_workaround )
@@ -1246,15 +1325,17 @@ int hvm_build_setup_mem(struct xc_dom_image *dom, uint64_t max_mem_mib,
     nr++;
 
     /* RDM mapping */
-    for (i = 0; i < nr_rmrr_devs; i++)
+    for ( i = 0; i < nr_rmrr_devs; i++ )
     {
-        for (j = 0; j < nr_rdm_entries[i] && nr < E820MAX - 2; j++)
+        for ( j = 0; j < nr_rdm_entries[i] && nr < E820MAX - 2; j++ )
         {
             e820[nr].addr = xrdm[i][j].start_pfn << XC_PAGE_SHIFT;
             e820[nr].size = xrdm[i][j].nr_pages << XC_PAGE_SHIFT;
             e820[nr].type = E820_RESERVED;
             xg_info("Adding RMRR 0x%lx size 0x%lx\n", e820[nr].addr, e820[nr].size);
-            if ( e820[nr].addr < lowmem_end ) {
+
+            if ( e820[nr].addr < lowmem_end )
+            {
                 rmrr_overlapped_ram += ( lowmem_end - e820[nr].addr );
                 lowmem_end = e820[nr].addr;
             }
@@ -1262,11 +1343,9 @@ int hvm_build_setup_mem(struct xc_dom_image *dom, uint64_t max_mem_mib,
         }
         free(xrdm[i]);
     }
+
     if ( nr == E820MAX - 2 )
-    {
-        xg_err("Error: too many E820 reserved entries for domain\n");
-        exit(1);
-    }
+        xg_fatal("Error: too many E820 reserved entries for domain\n");
 
     e820[0].size -= rmrr_overlapped_ram;
     highmem_end += rmrr_overlapped_ram;
@@ -1296,11 +1375,9 @@ int hvm_build_setup_mem(struct xc_dom_image *dom, uint64_t max_mem_mib,
                 break;
             vram_reserved_addr -= VRAM_RESERVED_SIZE;
         }
+
         if ( vram_reserved_addr < mmio_start )
-        {
-            xg_err("Error: failed to allocate VRAM reserved region\n");
-            exit(1);
-        }
+            xg_fatal("Error: failed to allocate VRAM reserved region\n");
 
         e820[nr].addr = vram_reserved_addr;
         e820[nr].size = VRAM_RESERVED_SIZE;
@@ -1309,8 +1386,10 @@ int hvm_build_setup_mem(struct xc_dom_image *dom, uint64_t max_mem_mib,
 
         xg_info("Reserve VRAM region at 0x%lx size 0x%lx for vGPU\n",
                 vram_reserved_addr, VRAM_RESERVED_SIZE);
-        /* Put VRAM reserved region address and size to Xenstore so we could
-         * read it later from DEMU */
+        /*
+         * Put VRAM reserved region address and size to Xenstore so we could
+         * read it later from DEMU
+         */
         xenstore_putsv("vm-data/vram-reserved-addr", "%lx", vram_reserved_addr);
         xenstore_putsv("vm-data/vram-reserved-size", "%lu", VRAM_RESERVED_SIZE);
     }
@@ -1320,12 +1399,10 @@ int hvm_build_setup_mem(struct xc_dom_image *dom, uint64_t max_mem_mib,
     dom->mmio_size = mmio_size;
     dom->mmio_start = mmio_start;
 
-    if ( hvm_load_firmware_module(dom) )
-    {
-        xg_err("xenguest: Failed to load firmware module: %s\n",
-               strerror(errno));
-        exit(1);
-    }
+    ret = hvm_load_firmware_module(dom);
+    if ( ret )
+        xg_fatal("xenguest: Failed to load firmware module: %s\n",
+                 strerror(-ret));
 
     if ( xc_dom_mem_init(dom, max_mem_mib) )
         failwith_oss_xc("xc_dom_mem_init");
@@ -1333,8 +1410,10 @@ int hvm_build_setup_mem(struct xc_dom_image *dom, uint64_t max_mem_mib,
         failwith_oss_xc("xc_dom_boot_mem_init");
 
     xg_info("Final lower MMIO hole size is 0x%lx\n", mmio_size);
-    /* Put the lower MMIO hole size to Xenstore so we could
-     * read it later from QEMU wrapper */
+    /*
+     * Put the lower MMIO hole size to Xenstore so we could read it later from
+     * QEMU wrapper
+     */
     xenstore_putsv("vm-data/mmio-hole-size", "%lu", mmio_size);
 
     if ( xc_domain_set_memory_map(xch, domid, e820, nr) )
@@ -1443,29 +1522,14 @@ static void hvm_safety_check(struct flags *f, bool pod)
     if ( pod )
     {
         if ( f->nested_virt )
-        {
-            xg_err("Populate on Demand and Nested Virtualisation are mutually exclusive\n");
-            goto fail;
-        }
+            xg_fatal("Populate on Demand and Nested Virtualisation are mutually exclusive\n");
 
         if ( pci_passthrough_sbdf_list )
-        {
-            xg_err("Populate on Demand and PCI Passthrough are mutually exclusive\n");
-            goto fail;
-        }
+            xg_fatal("Populate on Demand and PCI Passthrough are mutually exclusive\n");
     }
 
-    if ( !f->dominfo.hap && f->nested_virt )
-    {
-        xg_err("Shadow Paging and Nested Virtualisation are mutually exclusive\n");
-        goto fail;
-    }
-
-    return;
-
- fail:
-    xg_info("Safety checks failed.  Aborting domain build\n");
-    exit(1);
+    if ( !(f->dominfo.flags & XEN_DOMINF_hap) && f->nested_virt )
+        xg_fatal("Shadow Paging and Nested Virtualisation are mutually exclusive\n");
 }
 
 int stub_xc_hvm_build(int mem_max_mib, int mem_start_mib,
@@ -1560,12 +1624,14 @@ int stub_xc_hvm_build(int mem_max_mib, int mem_start_mib,
     if ( xc_dom_gnttab_init(dom) )
         failwith_oss_xc("xc_dom_gnttab_init");
 
-    r = hvm_build_set_params(store_evtchn, store_mfn,
-                             console_evtchn, console_mfn, is_pvh, &f);
+    r = hvm_build_set_params(is_pvh, &f);
     if ( r )
         failwith_oss_xc("hvm_build_params");
 
-    r = construct_cpuid_policy(&f, !is_pvh);
+    *store_mfn = dom->xenstore_pfn;
+    *console_mfn = dom->console_pfn;
+
+    r = construct_cpuid_policy(&f, !is_pvh, false);
     if ( r )
         failwith_oss_xc("construct_cpuid_policy");
 
@@ -1590,10 +1656,7 @@ static void migration_safety_checks(void)
     }
 
     if ( xenstore_get("platform/nomigrate") )
-    {
-        xg_err("d%d is flagged as not being mobile\n", domid);
-        exit(1);
-    }
+        xg_fatal("d%d is flagged as not being mobile\n", domid);
 }
 
 #define GENERATION_ID_ADDRESS "hvmloader/generation-id-address"
@@ -1601,18 +1664,17 @@ static void migration_safety_checks(void)
 int emu_stub_xc_domain_save(int fd, void *data, int flags)
 {
     int r;
-    struct save_callbacks callbacks =
-        {
-            .suspend = emu_suspend_callback,
-            .switch_qemu_logdirty = switch_qemu_logdirty,
-            .data = data,
-            .precopy_policy = xenguest_precopy_policy,
-        };
+    struct save_callbacks callbacks = {
+        .suspend = emu_suspend_callback,
+        .switch_qemu_logdirty = switch_qemu_logdirty,
+        .data = data,
+        .precopy_policy = xenguest_precopy_policy,
+    };
 
     migration_safety_checks();
 
     r = xc_domain_save(xch, fd, domid, flags, &callbacks, XC_STREAM_PLAIN, -1);
-    if (r)
+    if ( r )
         failwith_oss_xc("xc_domain_save");
 
     return 0;
@@ -1621,17 +1683,16 @@ int emu_stub_xc_domain_save(int fd, void *data, int flags)
 int stub_xc_domain_save(int fd, int flags)
 {
     int r;
-    struct save_callbacks callbacks =
-        {
-            .suspend = suspend_callback,
-            .switch_qemu_logdirty = switch_qemu_logdirty,
-            .data = NULL,
-        };
+    struct save_callbacks callbacks = {
+        .suspend = suspend_callback,
+        .switch_qemu_logdirty = switch_qemu_logdirty,
+        .data = NULL,
+    };
 
     migration_safety_checks();
 
     r = xc_domain_save(xch, fd, domid, flags, &callbacks, XC_STREAM_PLAIN, -1);
-    if (r)
+    if ( r )
         failwith_oss_xc("xc_domain_save");
 
     return 0;
@@ -1645,52 +1706,48 @@ int stub_xc_domain_resume_slow(void)
 
     /* hard code fast to 0, we only want to expose the slow version here */
     r = xc_domain_resume(xch, domid, 0);
-    if (r)
+    if ( r )
         failwith_oss_xc("xc_domain_resume");
+
     return 0;
 }
 
-static int set_genid(void)
+static void set_genid(void)
 {
     uint64_t paddr = 0;
     void *vaddr;
     char *genid_val_str;
     char *end;
     uint64_t genid[2];
-    int rc = -1;
 
     xc_get_hvm_param(xch, domid, HVM_PARAM_VM_GENERATION_ID_ADDR, &paddr);
-    if (paddr == 0)
-        return 0;
+    if ( paddr == 0 )
+        return;
 
     genid_val_str = xenstore_gets("platform/generation-id");
     if ( !genid_val_str )
-        return 0;
+        return;
 
     errno = 0;
     genid[0] = strtoull(genid_val_str, &end, 0);
     genid[1] = 0;
     if ( end && end[0] == ':' )
-        genid[1] = strtoull(end+1, NULL, 0);
+        genid[1] = strtoull(end + 1, NULL, 0);
 
     if ( errno )
-    {
-        xg_err("strtoull of '%s' failed: %s\n", genid_val_str, strerror(errno));
-        goto out;
-    }
-    else if ( genid[0] == 0 || genid[1] == 0 )
-    {
-        xg_err("'%s' is not a valid generation id\n", genid_val_str);
-        goto out;
-    }
+        xg_fatal("strtoull of '%s' failed: %s\n", genid_val_str, strerror(errno));
+
+    if ( genid[0] == 0 || genid[1] == 0 )
+        xg_fatal("'%s' is not a valid generation id\n", genid_val_str);
+
+    free(genid_val_str);
 
     vaddr = xc_map_foreign_range(xch, domid, XC_PAGE_SIZE,
                                  PROT_READ | PROT_WRITE,
                                  paddr >> XC_PAGE_SHIFT);
-    if (vaddr == NULL) {
-        xg_err("Failed to map VM generation ID page: %s\n", strerror(errno));
-        goto out;
-    }
+    if ( vaddr == NULL )
+        xg_fatal("Failed to map VM generation ID page: %s\n", strerror(errno));
+
     memcpy(vaddr + (paddr & ~XC_PAGE_MASK), genid, 2 * sizeof(*genid));
     munmap(vaddr, XC_PAGE_SIZE);
 
@@ -1699,12 +1756,18 @@ static int set_genid(void)
      */
 
     xg_info("Wrote generation ID %"PRId64":%"PRId64" at 0x%"PRIx64"\n",
-         genid[0], genid[1], paddr);
-    rc = 0;
+            genid[0], genid[1], paddr);
+}
 
- out:
-    free(genid_val_str);
-    return rc;
+static int static_data_done(unsigned int missing, void *data)
+{
+    const struct flags *f = data;
+
+    if ( missing & XGR_SDD_MISSING_CPUID &&
+         construct_cpuid_policy(f, f->dominfo.flags & XEN_DOMINF_hap, true) )
+        failwith_oss_xc("construct_cpuid_policy");
+
+    return 0;
 }
 
 int stub_xc_domain_restore(int fd, int store_evtchn, int console_evtchn,
@@ -1713,6 +1776,10 @@ int stub_xc_domain_restore(int fd, int store_evtchn, int console_evtchn,
 {
     int r = 0;
     struct flags f = {};
+    struct restore_callbacks cbs = {
+        .static_data_done = static_data_done,
+        .data = &f,
+    };
 
     get_flags(&f);
 
@@ -1728,25 +1795,17 @@ int stub_xc_domain_restore(int fd, int store_evtchn, int console_evtchn,
 
     configure_vcpus(&f);
 
-    r = construct_cpuid_policy(&f, hvm);
-    if ( r )
-        failwith_oss_xc("construct_cpuid_policy");
-
     r = xc_domain_restore(xch, fd, domid,
                           store_evtchn, store_mfn, 0,
                           console_evtchn, console_mfn, 0,
-                          XC_STREAM_PLAIN, NULL, -1);
+                          XC_STREAM_PLAIN, &cbs, -1);
     if ( r )
         failwith_oss_xc("xc_domain_restore");
 
     free_flags(&f);
 
     if ( hvm )
-    {
-        r = set_genid();
-        if (r)
-            exit(1);
-    }
+        set_genid();
 
     return 0;
 }

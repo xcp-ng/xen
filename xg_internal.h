@@ -1,41 +1,50 @@
 #ifndef __XG_INTERNAL_H__
 #define __XG_INTERNAL_H__
 
-#include <assert.h>
 #include <inttypes.h>
+#include <stdarg.h>
+#include <stdbool.h>
+#include <stdlib.h>
 #include <string.h>
+
 #include <sys/time.h>
 
 #include <xenctrl.h>
 #include <xenguest.h>
+#include <xenstore.h>
+#include <xen-tools/libs.h>
 
 #include <xc_bitops.h>
-
-#define ASSERT(x) assert(x)
 
 #define __printf(f, v) __attribute__((format(__printf__, f, v)))
 
 enum xenguest_mode {
-    XG_MODE_SAVE,
-    XG_MODE_HVM_SAVE,
-    XG_MODE_RESTORE,
-    XG_MODE_HVM_RESTORE,
-    XG_MODE_RESUME_SLOW,
-    XG_MODE_LINUX_BUILD,
-    XG_MODE_HVM_BUILD,
-    XG_MODE_TEST,
-    XG_MODE_LISTEN,
-    XG_MODE_PVH_BUILD,
-    XG_MODE__END__,
+    XG_MODE_HVM_BUILD,      /* HVM create */
+    XG_MODE_PVH_BUILD,      /* PVH create */
+
+    XG_MODE_LISTEN,         /* Listen on empserver socket */
+
+    XG_MODE_HVM_SAVE,       /* HVM/PVH suspend/migrate-out */
+    XG_MODE_HVM_RESTORE,    /* HVM/PVH resume/migrate-in */
+
+    XG_MODE_PV_BUILD,       /* PV create */
+    XG_MODE_PV_SAVE,        /* PV suspend/migrate-out */
+    XG_MODE_PV_RESTORE,     /* PV resume/migrate-in */
+
+    XG_MODE_RESUME_SLOW,    /* Resume uncooperative domain */
 };
 
 void xg_err(const char *msg, ...) __printf(1, 2);
 void xg_info(const char *msg, ...) __printf(1, 2);
 
-typedef struct xs_handle xs_handle;
+#define xg_fatal(msg, ...)                      \
+    do {                                        \
+        xg_err(msg, ## __VA_ARGS__);            \
+        exit(EXIT_FAILURE);                     \
+    } while ( 0 )
 
 extern xc_interface *xch;
-extern xs_handle *xsh;
+extern struct xs_handle *xsh;
 extern int domid;
 extern bool force;
 extern int opt_flags;
@@ -55,13 +64,13 @@ uint64_t xenstore_get(const char *fmt, ...) __printf(1, 2);
 int xenstore_putsv(const char *key, const char *fmt, ...) __printf(2, 3);
 int xenstore_puts(const char *key, const char *val);
 
-int stub_xc_linux_build(int c_mem_max_mib, int mem_start_mib,
-                        const char *image_name, const char *ramdisk_name,
-                        const char *cmdline, const char *features,
-                        int flags, int store_evtchn, int store_domid,
-                        int console_evtchn, int console_domid,
-                        unsigned long *store_mfn, unsigned long *console_mfn,
-                        char *protocol);
+int stub_xc_pv_build(int c_mem_max_mib, int mem_start_mib,
+                     const char *image_name, const char *ramdisk_name,
+                     const char *cmdline, const char *features,
+                     int flags, int store_evtchn, int store_domid,
+                     int console_evtchn, int console_domid,
+                     unsigned long *store_mfn, unsigned long *console_mfn,
+                     char *protocol);
 int stub_xc_hvm_build(int mem_max_mib, int mem_start_mib,
                       const char *image_name, const char *cmdline,
                       const pvh_module *modules, int nmodules,
@@ -80,9 +89,6 @@ int stub_xc_domain_resume_slow(void);
 
 int suspend_callback(void *data);
 int emu_suspend_callback(void *data);
-
-void setup_legacy_conversion(int opt_fd, enum xenguest_mode mode);
-void cleanup_legacy_conversion(void);
 
 extern char *xs_domain_path;
 extern char *pci_passthrough_sbdf_list;

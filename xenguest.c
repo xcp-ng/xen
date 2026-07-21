@@ -1,15 +1,10 @@
-#include <getopt.h>
 #include <errno.h>
-#include <syslog.h>
-#include <stdlib.h>
 #include <stdio.h>
-#include <string.h>
-#include <stdarg.h>
-#include <stdbool.h>
+#include <stdlib.h>
+
+#include <getopt.h>
+#include <syslog.h>
 #include <unistd.h>
-#include <pthread.h>
-#include <fcntl.h>
-#include <sys/time.h>
 
 #include <xenctrl.h>
 #include <xenguest.h>
@@ -70,41 +65,28 @@ enum xenguest_opts {
 static int opt_mode = -1;
 static int opt_controlinfd = -1;
 static int opt_controloutfd = -1;
-static FILE *opt_debugfile = NULL;
+static FILE *opt_debugfile;
 static int opt_fd = -1;
-static const char *opt_image = NULL;
-static const char *opt_cmdline = NULL;
-static const char *opt_ramdisk = NULL;
+static const char *opt_image;
+static const char *opt_cmdline;
+static const char *opt_ramdisk;
 static int opt_store_port = -1;
-static int opt_store_domid = 0;
+static int opt_store_domid;
 static int opt_console_port = -1;
-static int opt_console_domid = 0;
-static const char *opt_features = NULL;
+static int opt_console_domid;
+static const char *opt_features;
 static int opt_mem_max_mib = -1;
 static int opt_mem_start_mib = -1;
 static pvh_module opt_modules[PVH_MODULE_MAX];
-static int opt_nmodules = 0;
-static int opt_ncmdlines = 0;
+static int opt_nmodules;
+static int opt_ncmdlines;
 
-static const char *xg_mode_names[] = {
-    [XG_MODE_SAVE] = "save",
-    [XG_MODE_HVM_SAVE] = "hvm_save",
-    [XG_MODE_RESTORE] = "restore",
-    [XG_MODE_HVM_RESTORE] = "hvm_restore",
-    [XG_MODE_RESUME_SLOW] = "resume_slow",
-    [XG_MODE_LINUX_BUILD] = "linux_build",
-    [XG_MODE_HVM_BUILD] = "hvm_build",
-    [XG_MODE_TEST] = "test",
-    [XG_MODE_LISTEN] = "listen",
-    [XG_MODE_PVH_BUILD] = "pvh_build"
-};
-
-xc_interface *xch = NULL;
-xs_handle *xsh = NULL;
+xc_interface *xch;
+struct xs_handle *xsh;
 int domid = -1;
-bool force = false;
+bool force;
 int opt_flags;
-bool opt_vgpu = false;
+bool opt_vgpu;
 
 void xg_err(const char *msg, ...)
 {
@@ -120,12 +102,14 @@ void xg_err(const char *msg, ...)
     {
         if ( opt_debugfile )
             fputs(buf, opt_debugfile);
+
         fputs(buf, stderr);
-        syslog(LOG_ERR|LOG_DAEMON, "%s", buf);
+
+        syslog(LOG_ERR | LOG_DAEMON, "%s", buf);
 
         if ( opt_controloutfd != -1 )
         {
-            char reply[] = "error:";
+            static const char reply[] = "error:";
 
             write(opt_controloutfd, reply, strlen(reply));
             write(opt_controloutfd, buf, rc);
@@ -149,7 +133,8 @@ void xg_info(const char *msg, ...)
     {
         if ( opt_debugfile )
             fputs(buf, opt_debugfile);
-        syslog(LOG_INFO|LOG_DAEMON, "%s", buf);
+
+        syslog(LOG_INFO | LOG_DAEMON, "%s", buf);
     }
 
     free(buf);
@@ -177,7 +162,8 @@ static void progressfn(struct xentoollog_logger *logger,
                        const char *context, const char *doing_what,
                        int percent, unsigned long done, unsigned long total)
 {
-    static struct timeval lasttime = { 0 };
+    static struct timeval lasttime;
+
     struct timeval curtime;
     uint64_t time_delta;
 
@@ -193,7 +179,7 @@ static void progressfn(struct xentoollog_logger *logger,
             xg_info("progress: %s\n", doing_what);
         else
             xg_info("progress: %s: %ld of %ld (%d%%)\n",
-                 doing_what, done, total, percent);
+                    doing_what, done, total, percent);
 
         lasttime = curtime;
     }
@@ -201,27 +187,37 @@ static void progressfn(struct xentoollog_logger *logger,
 
 static int parse_mode(const char *mode)
 {
-    int i;
+    static const char *const names[] = {
+        [XG_MODE_HVM_BUILD]    = "hvm_build",
+        [XG_MODE_PVH_BUILD]    = "pvh_build",
+        [XG_MODE_LISTEN]       = "listen",
+        [XG_MODE_HVM_SAVE]     = "hvm_save",
+        [XG_MODE_HVM_RESTORE]  = "hvm_restore",
+        [XG_MODE_PV_BUILD]     = "linux_build",
+        [XG_MODE_PV_SAVE]      = "save",
+        [XG_MODE_PV_RESTORE]   = "restore",
+        [XG_MODE_RESUME_SLOW]  = "resume_slow",
+    };
 
-    for (i = 0; i < XG_MODE__END__; i++) {
-        if (strcmp(mode, xg_mode_names[i]) == 0)
+    for ( unsigned int i = 0; i < ARRAY_SIZE(names); i++ )
+    {
+        if ( strcmp(mode, names[i]) == 0 )
             return i;
     }
-    xg_err("xenguest: unrecognized mode '%s'\n", mode);
-    exit(1);
+
+    xg_fatal("xenguest: unrecognized mode '%s'\n", mode);
 }
 
 static int parse_int(const char *str)
 {
     char *end;
-    int result;
+    long result;
 
+    errno = 0;
     result = strtol(str, &end, 10);
 
-    if (*end != '\0') {
-        xg_err("xenguest: '%s' is not a valid integer\n", str);
-        exit(1);
-    }
+    if ( errno || *end != '\0' || result != (int)result )
+        xg_fatal("xenguest: '%s' is not a valid int\n", str);
 
     return result;
 }
@@ -257,17 +253,16 @@ static void parse_options(int argc, char *const argv[])
         { "force", no_argument, NULL, XG_OPT_FORCE, },
         { "vgpu", no_argument, NULL, XG_OPT_VGPU, },
         { "module", required_argument, NULL, XG_OPT_MODULE, },
-        { NULL },
+        {},
     };
 
-    int c;
-
-    for(;;) {
+    for ( ;; )
+    {
         int option_index = 0;
+        int c = getopt_long_only(argc, argv, "", opts, &option_index);
 
-        c = getopt_long_only(argc, argv, "", opts, &option_index);
-
-        switch (c) {
+        switch (c)
+        {
         case -1:
             return;
 
@@ -285,19 +280,13 @@ static void parse_options(int argc, char *const argv[])
 
         case XG_OPT_DEBUGLOG:
             if ( opt_debugfile && fclose(opt_debugfile) )
-            {
-                xg_err("Unable to close existing debug file: %d %s\n",
-                    errno, strerror(errno));
-                exit(1);
-            }
+                xg_fatal("Unable to close existing debug file: %d %s\n",
+                         errno, strerror(errno));
 
             opt_debugfile = fopen(optarg, "a");
             if ( !opt_debugfile )
-            {
-                xg_err("Unable to open debug file '%s': %d %s\n",
-                    optarg, errno, strerror(errno));
-                exit(1);
-            }
+                xg_fatal("Unable to open debug file '%s': %d %s\n",
+                         optarg, errno, strerror(errno));
             break;
 
         case XG_OPT_FD:
@@ -394,28 +383,8 @@ static void parse_options(int argc, char *const argv[])
             break;
 
         default:
-            xg_err("xenguest: invalid command line '%s'\n", argv[optind - 1]);
-            exit(1);
+            xg_fatal("xenguest: invalid command line '%s'\n", argv[optind - 1]);
         }
-    }
-}
-
-static void set_cloexec(int fd)
-{
-    int flags = fcntl(fd, F_GETFD);
-
-    if ( flags == -1 )
-    {
-        xg_err("Failed fcntl(F_GETFD) on fd %d: %d, %s\n",
-               fd, errno, strerror(errno));
-        exit(1);
-    }
-
-    if ( fcntl(fd, flags | FD_CLOEXEC) == -1 )
-    {
-        xg_err("Failed to set FD_CLOEXEC on fd %d: %d %s\n",
-            fd, errno, strerror(errno));
-        exit(1);
     }
 }
 
@@ -427,10 +396,11 @@ static void write_status(unsigned long store_mfn, unsigned long console_mfn,
         char buf[64];
         size_t len;
 
-        if (protocol)
+        if ( protocol )
             len = snprintf(buf, sizeof(buf), "result:%lu %lu %s\n", store_mfn, console_mfn, protocol);
         else
             len = snprintf(buf, sizeof(buf), "result:%lu %lu\n", store_mfn, console_mfn);
+
         write(opt_controloutfd, buf, len);
         xg_info("Writing to control: '%s'\n", buf);
     }
@@ -440,12 +410,11 @@ static void write_status(unsigned long store_mfn, unsigned long console_mfn,
 
 static void do_save(void)
 {
-    if (domid == -1 || opt_fd == -1) {
-        xg_err("xenguest: missing command line options\n");
-        exit(1);
-    }
+    if ( domid == -1 || opt_fd == -1 )
+        xg_fatal("xenguest: missing command line options\n");
 
     stub_xc_domain_save(opt_fd, opt_flags);
+
     write_status(0, 0, NULL);
 }
 
@@ -453,11 +422,9 @@ static void do_restore(bool is_hvm)
 {
     unsigned long store_mfn = 0, console_mfn = 0;
 
-    if (domid == -1 || opt_fd == -1
-        || opt_store_port == -1 || opt_console_port == -1) {
-        xg_err("xenguest: missing command line options\n");
-        exit(1);
-    }
+    if ( domid == -1 || opt_fd == -1 || opt_store_port == -1 ||
+         opt_console_port == -1 )
+        xg_fatal("xenguest: missing command line options\n");
 
     stub_xc_domain_restore(opt_fd, opt_store_port, opt_console_port, is_hvm,
                            &store_mfn, &console_mfn);
@@ -467,10 +434,8 @@ static void do_restore(bool is_hvm)
 
 static void do_resume(void)
 {
-    if (domid == -1) {
-        xg_err("xenguest: missing command line options\n");
-        exit(1);
-    }
+    if ( domid == -1 )
+        xg_fatal("xenguest: missing command line options\n");
 
     stub_xc_domain_resume_slow();
     write_status(0, 0, NULL);
@@ -480,50 +445,54 @@ int suspend_callback(void *data)
 {
     static const char suspend_message[] = "suspend:\n";
 
-    write(opt_controloutfd, suspend_message, sizeof(suspend_message)-1);
+    write(opt_controloutfd, suspend_message, strlen(suspend_message));
 
     /* Read one line from control fd. */
-    for (;;) {
+    for ( ;; )
+    {
         char buf[8];
         ssize_t len, i;
 
         len = read(opt_controlinfd, buf, sizeof(buf));
-        if (len < 0 && errno == EINTR)
+        if ( len < 0 && errno == EINTR )
             continue;
-        if (len < 0) {
+
+        if ( len < 0 )
+        {
             xg_err("xenguest: read from control FD failed: %s\n", strerror(errno));
             return 0;
         }
-        if (len == 0) {
+
+        if ( len == 0 )
+        {
             xg_err("xenguest: unexpected EOF on control FD\n");
             return 0;
         }
+
         for ( i = 0; i < len; ++i )
             if (buf[i] == '\n')
                 return 1;
     }
 }
 
-static void do_linux_build(void)
+static void do_pv_build(void)
 {
     unsigned long store_mfn = 0, console_mfn = 0;
     char protocol[64];
 
-    if (domid == -1 || opt_mem_max_mib == -1 || opt_mem_start_mib == -1
-        || !opt_image || !opt_ramdisk || !opt_cmdline
-        || !opt_features || opt_flags == -1
-        || opt_store_port == -1 || opt_store_domid == -1
-        || opt_console_port == -1 || opt_console_domid == -1) {
-        xg_err("xenguest: missing command line options\n");
-        exit(1);
-    }
+    if ( domid == -1 || opt_mem_max_mib == -1 || opt_mem_start_mib == -1 ||
+         !opt_image || !opt_ramdisk || !opt_cmdline || !opt_features ||
+         opt_flags == -1 || opt_store_port == -1 || opt_store_domid == -1 ||
+         opt_console_port == -1 || opt_console_domid == -1 )
+        xg_fatal("xenguest: missing command line options\n");
 
-    stub_xc_linux_build(opt_mem_max_mib, opt_mem_start_mib,
-                        opt_image, opt_ramdisk,
-                        opt_cmdline, opt_features, opt_flags,
-                        opt_store_port, opt_store_domid,
-                        opt_console_port, opt_console_domid,
-                        &store_mfn, &console_mfn, protocol);
+    stub_xc_pv_build(opt_mem_max_mib, opt_mem_start_mib,
+                     opt_image, opt_ramdisk,
+                     opt_cmdline, opt_features, opt_flags,
+                     opt_store_port, opt_store_domid,
+                     opt_console_port, opt_console_domid,
+                     &store_mfn, &console_mfn, protocol);
+
     write_status(store_mfn, console_mfn, protocol);
 }
 
@@ -531,12 +500,10 @@ static void do_hvm_build(void)
 {
     unsigned long store_mfn = 0, console_mfn = 0;
 
-    if (domid == -1 || opt_mem_max_mib == -1 || opt_mem_start_mib == -1
-        || !opt_image || opt_store_port == -1 || opt_store_domid == -1
-        || opt_console_port == -1 || opt_console_domid == -1) {
-        xg_err("xenguest: missing command line options\n");
-        exit(1);
-    }
+    if ( domid == -1 || opt_mem_max_mib == -1 || opt_mem_start_mib == -1 ||
+         !opt_image || opt_store_port == -1 || opt_store_domid == -1 ||
+         opt_console_port == -1 || opt_console_domid == -1 )
+        xg_fatal("xenguest: missing command line options\n");
 
     stub_xc_hvm_build(opt_mem_max_mib, opt_mem_start_mib,
                       opt_image, NULL,
@@ -546,25 +513,21 @@ static void do_hvm_build(void)
                       opt_console_port, opt_console_domid,
                       &store_mfn, &console_mfn,
                       false);
+
     write_status(store_mfn, console_mfn, NULL);
 }
 
 static void do_pvh_build(void)
 {
     unsigned long store_mfn = 0, console_mfn = 0;
-    int i;
 
-    if ( domid == -1 || opt_mem_max_mib == -1 || opt_mem_start_mib == -1
-         || !opt_image || !opt_cmdline
-         || !opt_features || opt_flags == -1
-         || opt_store_port == -1 || opt_store_domid == -1
-         || opt_console_port == -1 || opt_console_domid == -1 )
-    {
-        xg_err("xenguest: missing command line options\n");
-        exit(1);
-    }
+    if ( domid == -1 || opt_mem_max_mib == -1 || opt_mem_start_mib == -1 ||
+         !opt_image || !opt_cmdline || !opt_features || opt_flags == -1 ||
+         opt_store_port == -1 || opt_store_domid == -1 ||
+         opt_console_port == -1 || opt_console_domid == -1 )
+        xg_fatal("xenguest: missing command line options\n");
 
-    for ( i = opt_ncmdlines; i < opt_nmodules; i++ )
+    for ( int i = opt_ncmdlines; i < opt_nmodules; i++ )
         opt_modules[i].cmdline = "";
 
     stub_xc_hvm_build(opt_mem_max_mib, opt_mem_start_mib,
@@ -575,46 +538,39 @@ static void do_pvh_build(void)
                       opt_console_port, opt_console_domid,
                       &store_mfn, &console_mfn,
                       true);
+
     write_status(store_mfn, console_mfn, NULL);
 }
 
-static void do_test(void)
+int main(int argc, char *const argv[])
 {
-    xg_err("xenguest: test mode not supported\n");
-    exit(1);
-}
-
-int main(int argc, char * const argv[])
-{
-    static char ident[32];
-    char *cmdline = NULL;
     static xentoollog_logger logger = { logfn, progressfn, NULL };
+    static char ident[32];
+
+    char *cmdline = NULL;
 
     {   /* Conjoin the command line into a single string for logging */
         size_t sum, s;
         int i;
         char *ptr;
 
-        sum = argc-1; /* Account for spaces and null */
+        sum = argc - 1; /* Account for spaces and null */
         for ( i = 1; i < argc; ++i )
             sum += strlen(argv[i]);
 
         ptr = cmdline = malloc(sum);
 
         if ( !cmdline )
-        {
-            fprintf(stderr, "Out of Memory\n");
-            exit(1);
-        }
+            xg_fatal("Out of Memory\n");
 
         for ( i = 1; i < argc; ++i )
         {
             s = strlen(argv[i]);
             memcpy(ptr, argv[i], s);
             ptr[s] = ' ';
-            ptr = &ptr[s+1];
+            ptr = &ptr[s + 1];
         }
-        ptr[-1] = 0;
+        ptr[-1] = '\0';
     }
 
     parse_options(argc, argv);
@@ -626,15 +582,16 @@ int main(int argc, char * const argv[])
 
         switch ( opt_mode )
         {
-        case XG_MODE_SAVE:
+        case XG_MODE_PV_SAVE:
         case XG_MODE_HVM_SAVE:
             suffix = "-save";
             break;
+
         case XG_MODE_LISTEN:
             suffix = "-emp";
             break;
 
-        case XG_MODE_RESTORE:
+        case XG_MODE_PV_RESTORE:
         case XG_MODE_HVM_RESTORE:
             suffix = "-restore";
             break;
@@ -643,7 +600,7 @@ int main(int argc, char * const argv[])
             suffix = "-resume";
             break;
 
-        case XG_MODE_LINUX_BUILD:
+        case XG_MODE_PV_BUILD:
         case XG_MODE_HVM_BUILD:
         case XG_MODE_PVH_BUILD:
             suffix = "-build";
@@ -654,53 +611,43 @@ int main(int argc, char * const argv[])
             break;
         }
 
-        snprintf(ident, sizeof ident, "xenguest-%d%s", domid, suffix);
+        snprintf(ident, sizeof(ident), "xenguest-%d%s", domid, suffix);
     }
     else
-        strncpy(ident, "xenguest", sizeof ident);
+        strncpy(ident, "xenguest", sizeof(ident));
 
     openlog(ident, LOG_NDELAY | LOG_PID, LOG_DAEMON);
 
     xg_info("Command line: %s\n", cmdline);
     free(cmdline);
 
-    set_cloexec(opt_controlinfd);
-    set_cloexec(opt_controloutfd);
-
     xch = xc_interface_open(&logger, &logger, 0);
-    if ( !xch ) {
-        xg_err("xenguest: Failed to open xc interface\n");
-        exit(1);
-    }
+    if ( !xch )
+        xg_fatal("xenguest: Failed to open xc interface\n");
 
     xsh = xs_open(0);
-    if ( !xsh ) {
-        xg_err("xenguest: Failed to open xenstore interface\n");
-        exit(1);
-    }
+    if ( !xsh )
+        xg_fatal("xenguest: Failed to open xenstore interface\n");
 
     if ( domid > 0 )
     {
         xs_domain_path = xs_get_domain_path(xsh, domid);
 
         if ( !xs_domain_path )
-        {
-            xg_err("Failed to obtain XenStore domain path\n");
-            exit(1);
-        }
+            xg_fatal("Failed to obtain XenStore domain path\n");
     }
 
-    switch (opt_mode) {
+    switch ( opt_mode )
+    {
     case -1:
-        xg_err("xenguest: no `-mode' option specified\n");
-        exit(1);
+        xg_fatal("xenguest: no '-mode' option specified\n");
 
-    case XG_MODE_SAVE:
+    case XG_MODE_PV_SAVE:
     case XG_MODE_HVM_SAVE:
         do_save();
         break;
 
-    case XG_MODE_RESTORE:
+    case XG_MODE_PV_RESTORE:
     case XG_MODE_HVM_RESTORE:
         do_restore(opt_mode == XG_MODE_HVM_RESTORE);
         break;
@@ -709,8 +656,8 @@ int main(int argc, char * const argv[])
         do_resume();
         break;
 
-    case XG_MODE_LINUX_BUILD:
-        do_linux_build();
+    case XG_MODE_PV_BUILD:
+        do_pv_build();
         break;
 
     case XG_MODE_HVM_BUILD:
@@ -721,9 +668,6 @@ int main(int argc, char * const argv[])
         do_pvh_build();
         break;
 
-    case XG_MODE_TEST:
-        do_test();
-        break;
     case XG_MODE_LISTEN:
         emp_do_listen();
         break;
@@ -737,6 +681,7 @@ int main(int argc, char * const argv[])
     xg_info("All done\n");
     if ( opt_debugfile )
         fclose(opt_debugfile);
+
     return 0;
 }
 
