@@ -1137,7 +1137,7 @@ int hvm_build_setup_mem(struct xc_dom_image *dom, uint64_t max_mem_mib,
                         uint64_t max_start_mib)
 {
     uint64_t lowmem_end, highmem_start, highmem_end, mmio_start, mmio_size;
-    uint64_t mmio_total = 0;
+    uint64_t mmio_total = HVM_BELOW_4G_MMIO_LENGTH;
     unsigned int i, j, nr = 0;
     struct e820entry *e820;
     unsigned int nr_rdm_entries[MAX_RMRR_DEVICES] = {0};
@@ -1157,21 +1157,24 @@ int hvm_build_setup_mem(struct xc_dom_image *dom, uint64_t max_mem_mib,
             uint64_t mmio_dev;
             uint16_t vendor_id, device_id;
 
-            xg_info("Getting RMRRs for device '%s'\n",s);
-            if ( parse_pci_sbdf(s, &seg, &bus, &device, &func) )
+            if ( !parse_pci_sbdf(s, &seg, &bus, &device, &func) )
             {
-                if ( !get_rdm(seg, bus, (device << 3) + func,
-                        &nr_rdm_entries[nr_rmrr_devs], &xrdm[nr_rmrr_devs]) )
-                {
-                    if ( nr_rdm_entries[nr_rmrr_devs] != 0 )
-                        nr_rmrr_devs++;
+                s = strtok (NULL, ",");
+                continue;
+            }
 
-                    if ( nr_rmrr_devs == MAX_RMRR_DEVICES )
-                    {
-                        xg_err("Error: hit limit of %d RMRR devices for domain\n",
-                                   MAX_RMRR_DEVICES);
-                        exit(1);
-                    }
+            xg_info("Getting RMRRs for device '%s'\n",s);
+            if ( !get_rdm(seg, bus, (device << 3) + func,
+                    &nr_rdm_entries[nr_rmrr_devs], &xrdm[nr_rmrr_devs]) )
+            {
+                if ( nr_rdm_entries[nr_rmrr_devs] != 0 )
+                    nr_rmrr_devs++;
+
+                if ( nr_rmrr_devs == MAX_RMRR_DEVICES )
+                {
+                    xg_err("Error: hit limit of %d RMRR devices for domain\n",
+                               MAX_RMRR_DEVICES);
+                    exit(1);
                 }
             }
 
