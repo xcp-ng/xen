@@ -85,6 +85,7 @@ struct flags {
     unsigned cores_per_socket;
     unsigned x87_fip_width;
     int64_t timeoffset;
+    uint64_t mmio_size;
 };
 
 char *xenstore_getsv(const char *fmt, va_list ap)
@@ -467,6 +468,7 @@ static void get_flags(struct flags *f)
         sscanf(tmp, "%" PRId64, &f->timeoffset);
         free(tmp);
     }
+    f->mmio_size = xenstore_get("platform/mmio_hole_size");
 
     xg_info("Domain Properties: Type %s, hap %u\n",
             (f->dominfo.flags & XEN_DOMINF_hvm_guest) ? "HVM" : "PV",
@@ -479,8 +481,8 @@ static void get_flags(struct flags *f)
             f->nx, f->pae, f->cores_per_socket, f->x87_fip_width, f->nested_virt);
     xg_info("apic: %d acpi: %d acpi_s4: %d acpi_s3: %d tsc_mode: %d hpet: %d\n",
             f->apic, f->acpi, f->acpi_s4, f->acpi_s3, f->tsc_mode, f->hpet);
-    xg_info("nomigrate %d, timeoffset %" PRId64 "\n",
-            f->nomigrate, f->timeoffset);
+    xg_info("nomigrate %d, timeoffset %" PRId64 " mmio_hole_size %#" PRIx64 "\n",
+            f->nomigrate, f->timeoffset, f->mmio_size);
     xg_info("viridian: %d, time_ref_count: %d, reference_tsc: %d "
             "hcall_remote_tlb_flush: %d apic_assist: %d "
             "crash_ctl: %d stimer: %d hcall_ipi: %d\n",
@@ -1206,7 +1208,7 @@ const char *parse_pci_sbdf(char *s, unsigned int *seg_p,
 #define VRAM_RESERVED_SIZE 0x1000000lu
 
 int hvm_build_setup_mem(struct xc_dom_image *dom, uint64_t max_mem_mib,
-                        uint64_t max_start_mib)
+                        uint64_t max_start_mib, uint64_t min_mmio_hole)
 {
     uint64_t lowmem_end, highmem_start, highmem_end, mmio_start, mmio_size;
     uint64_t mmio_total = HVM_BELOW_4G_MMIO_LENGTH;
@@ -1277,7 +1279,11 @@ int hvm_build_setup_mem(struct xc_dom_image *dom, uint64_t max_mem_mib,
 
     lowmem_end  = max_mem_mib << 20;
     highmem_end = highmem_start = 1ull << 32;
-    mmio_size   = HVM_BELOW_4G_MMIO_LENGTH;
+    /*
+     * Use the externally provide size as a minimum boundary, expand it if
+     * necessary for correct guest operation based on assigned devices.
+     */
+    mmio_size   = max_t(uint64_t, HVM_BELOW_4G_MMIO_LENGTH, min_mmio_hole);
 
     if ( opt_vgpu )
     {
@@ -1286,9 +1292,11 @@ int hvm_build_setup_mem(struct xc_dom_image *dom, uint64_t max_mem_mib,
          * as the existing NVIDIA drivers are unable to handle
          * 64-bit BARs properly.
          */
-        xg_info("NVIDIA vGPU plugged in. Add extra 0x%lx to MMIO hole\n", mmio_size);
-        mmio_total += mmio_size;
-        mmio_size <<= 1;
+        xg_info("NVIDIA vGPU plugged in. Add extra 0x%llx to MMIO hole\n",
+                HVM_BELOW_4G_MMIO_LENGTH);
+        mmio_total += HVM_BELOW_4G_MMIO_LENGTH;
+        if ( mmio_size < HVM_BELOW_4G_MMIO_LENGTH * 2 )
+            mmio_size = HVM_BELOW_4G_MMIO_LENGTH * 2;
     }
 
     if ( allow_memory_relocate )
@@ -1612,7 +1620,8 @@ int stub_xc_hvm_build(int mem_max_mib, int mem_start_mib,
     }
     else /* HVM */
     {
-        r = hvm_build_setup_mem(dom, mem_max_mib, mem_start_mib);
+        r = hvm_build_setup_mem(dom, mem_max_mib, mem_start_mib,
+                                f.mmio_size);
         if ( r )
             failwith_oss_xc("hvm_build_setup_mem");
     }
