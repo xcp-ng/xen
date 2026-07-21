@@ -21,6 +21,9 @@
 
 #include <errno.h>
 #include <sys/mman.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <unistd.h>
 
 #include <xenctrl.h>
@@ -42,7 +45,6 @@ enum {
 
 char *xs_domain_path = NULL;
 char *pci_passthrough_sbdf_list = NULL;
-char *gvtg_sbdf = NULL;
 
 #define SYSFS_PCI_DEV "/sys/bus/pci/devices"
 #define PCI_SBDF      "%04x:%02x:%02x.%01x"
@@ -76,6 +78,10 @@ struct flags {
     int viridian;
     int viridian_time_ref_count;
     int viridian_reference_tsc;
+    int viridian_hcall_remote_tlb_flush;
+    int viridian_apic_assist;
+    int viridian_crash_ctl;
+    int viridian_stimer;
     int pae;
     int acpi;
     int apic;
@@ -297,7 +303,7 @@ static int hvmloader_flag(const char *key)
     /* Params going to hvmloader need to convert "true" -> '1' as Xapi gets
      * this wrong when migrating from older hosts. */
 
-    char *val = xenstore_gets(key);
+    char *val = xenstore_gets("%s", key);
     int ret = -1;
 
     if ( val )
@@ -354,15 +360,20 @@ static void get_flags(struct flags *f)
     f->nx       = xenstore_get("platform/nx");
     f->viridian = xenstore_get("platform/viridian");
 
-    if ( !opt_vgpu )
-    {
-        f->viridian_time_ref_count = xenstore_get("platform/viridian_time_ref_count");
-        f->viridian_reference_tsc = xenstore_get("platform/viridian_reference_tsc");
-    }
-    else
-    {
-       f->viridian_reference_tsc = 0;
-       f->viridian_time_ref_count = 0;
+    f->viridian_time_ref_count = xenstore_get("platform/viridian_time_ref_count");
+    f->viridian_reference_tsc = xenstore_get("platform/viridian_reference_tsc");
+    f->viridian_hcall_remote_tlb_flush = xenstore_get("platform/viridian_hcall_remote_tlb_flush");
+    f->viridian_apic_assist = xenstore_get("platform/viridian_apic_assist");
+    f->viridian_crash_ctl = xenstore_get("platform/viridian_crash_ctl");
+    f->viridian_stimer = xenstore_get("platform/viridian_stimer");
+
+    /*
+     * Squash the timer enlightenments for a vGPU-enabled VM if stimer is
+     * not switched on.
+     */
+    if ( opt_vgpu && !f->viridian_stimer ) {
+        f->viridian_reference_tsc = 0;
+        f->viridian_time_ref_count = 0;
     }
 
     f->apic     = xenstore_get("platform/apic");
@@ -426,12 +437,13 @@ static void get_flags(struct flags *f)
             f->apic, f->acpi, f->acpi_s4, f->acpi_s3, f->tsc_mode, f->hpet);
     xg_info("nomigrate %d, timeoffset %" PRId64 "\n",
             f->nomigrate, f->timeoffset);
-    if ( !opt_vgpu )
-        xg_info("viridian: %d, time_ref_count: %d, reference_tsc: %d\n",
-                f->viridian, f->viridian_time_ref_count, f->viridian_reference_tsc);
-    else
-        xg_info("viridian: %d, ignoring time_ref_count and reference_tsc due to vgpu.\n",
-                f->viridian);
+    xg_info("viridian: %d, time_ref_count: %d, reference_tsc: %d "
+            "hcall_remote_tlb_flush: %d apic_assist: %d "
+            "crash_ctl: %d stimer %d\n",
+            f->viridian, f->viridian_time_ref_count, f->viridian_reference_tsc,
+            f->viridian_hcall_remote_tlb_flush, f->viridian_apic_assist,
+            f->viridian_crash_ctl, f->viridian_stimer);
+
     for (n = 0; n < f->vcpus; n++){
         xg_info("vcpu/%d/affinity:%s\n", n, (f->vcpu_affinity[n])?f->vcpu_affinity[n]:"unset");
     }
@@ -443,6 +455,45 @@ static void free_flags(struct flags *f)
     for ( n = 0; n < f->vcpus; ++n )
         free(f->vcpu_affinity[n]);
     free(f->vcpu_affinity);
+}
+
+/* Wait for IOMMU setup to complete */
+static void wait_for_pv_iommu(void)
+{
+    int fd;
+
+    fd = open("/sys/kernel/pv_iommu_ready", O_RDONLY);
+    if ( fd < 0 )
+    {
+        xg_err("Error: unable to check PV-IOMMU state\n");
+        exit(1);
+    }
+
+    /*
+     * The node does not have poll support, so we need to keep
+     * reading it.
+     */
+    for (;;)
+    {
+        char buf;
+        int rc = pread(fd, &buf, sizeof(buf), 0);
+
+        if ( rc <= 0 )
+        {
+            xg_err("Error: failed to get PV-IOMMU state\n");
+            exit(1);
+        }
+
+        if ( buf == '1' )
+            break;
+
+        xg_info("Waiting for PV-IOMMU...\n");
+        sleep(1);
+    }
+
+    xg_info("PV-IOMMU is ready\n");
+
+    close(fd);
 }
 
 static void configure_vcpus(struct flags *f){
@@ -529,6 +580,9 @@ int stub_xc_linux_build(int c_mem_max_mib, int mem_start_mib,
     struct flags f = {};
     get_flags(&f);
 
+    if ( xc_domain_set_gnttab_limits(xch, domid, 32, 1024) )
+        failwith_oss_xc("xc_domain_set_gnttab_limits");
+
     dom = xc_dom_allocate(xch, cmdline, features);
     if (!dom)
         failwith_oss_xc("xc_dom_allocate");
@@ -538,8 +592,8 @@ int stub_xc_linux_build(int c_mem_max_mib, int mem_start_mib,
     /* The default image size limits are too large. */
     if ( xc_dom_kernel_max_size(dom, get_image_max_size("kernel")) )
         failwith_oss_xc("xc_dom_kernel_max_size");
-    if ( xc_dom_ramdisk_max_size(dom, get_image_max_size("ramdisk")) )
-        failwith_oss_xc("xc_dom_ramdisk_max_size");
+    if ( xc_dom_module_max_size(dom, get_image_max_size("ramdisk")) )
+        failwith_oss_xc("xc_dom_module_max_size");
 
     configure_vcpus(&f);
     configure_tsc(&f);
@@ -547,12 +601,14 @@ int stub_xc_linux_build(int c_mem_max_mib, int mem_start_mib,
     if ( xc_dom_kernel_file(dom, image_name) )
         failwith_oss_xc("xc_dom_kernel_file");
     if ( ramdisk_name && strlen(ramdisk_name) &&
-         xc_dom_ramdisk_file(dom, ramdisk_name) )
-        failwith_oss_xc("xc_dom_ramdisk_file");
+         xc_dom_module_file(dom, ramdisk_name, NULL) )
+        failwith_oss_xc("xc_dom_module_file");
 
     dom->flags = flags;
     dom->console_evtchn = console_evtchn;
+    dom->console_domid = console_domid;
     dom->xenstore_evtchn = store_evtchn;
+    dom->xenstore_domid = store_domid;
 
     if ( xc_dom_boot_xen_init(dom, xch, domid) )
         failwith_oss_xc("xc_dom_boot_xen_init");
@@ -595,8 +651,28 @@ static void hvm_set_viridian_features(struct flags *f)
     }
 
     if (f->viridian_reference_tsc) {
-        xg_info("+ viridian_reference_tsc\n");
+        xg_info("+ reference_tsc\n");
         feature_mask |= HVMPV_reference_tsc;
+    }
+
+    if (f->viridian_hcall_remote_tlb_flush) {
+        xg_info("+ hcall_remote_tlb_flush\n");
+        feature_mask |= HVMPV_hcall_remote_tlb_flush;
+    }
+
+    if (f->viridian_apic_assist) {
+        xg_info("+ apic_assist\n");
+        feature_mask |= HVMPV_apic_assist;
+    }
+
+    if (f->viridian_crash_ctl) {
+        xg_info("+ crash_ctl\n");
+        feature_mask |= HVMPV_crash_ctl;
+    }
+
+    if (f->viridian_stimer) {
+        xg_info("+ stimer\n");
+        feature_mask |= HVMPV_synic | HVMPV_stimer;
     }
 
     xc_set_hvm_param(xch, domid, HVM_PARAM_VIRIDIAN, feature_mask);
@@ -667,6 +743,56 @@ static int hvm_build_set_params(int store_evtchn, unsigned long *store_mfn,
     rc = xc_domain_set_time_offset(xch, domid, f->timeoffset);
 
     return rc;
+}
+
+static int hvm_load_firmware_module(struct xc_dom_image *dom)
+{
+#ifdef OVMF_PATH
+    FILE *f;
+    struct stat st;
+    struct xc_hvm_firmware_module *m = &dom->system_firmware_module;
+    char *tmp = xenstore_gets("hvmloader/bios");
+
+    if ( !tmp )
+        return 0;
+
+    if ( strcmp(tmp, "ovmf") )
+    {
+        free(tmp);
+        return -1;
+    }
+    free(tmp);
+
+    f = fopen(OVMF_PATH, "r");
+    if ( !f )
+        return -1;
+
+    if ( fstat(fileno(f), &st) == -1 )
+    {
+        fclose(f);
+        return -1;
+    }
+
+    m->length = st.st_size;
+    m->data = malloc(m->length);
+    if ( !m->data )
+    {
+        fclose(f);
+        return -1;
+    }
+
+    if ( fread(m->data, 1, m->length, f) != m->length )
+    {
+        fclose(f);
+        free(m->data);
+        return -1;
+    }
+
+    fclose(f);
+
+    xg_info("Loaded OVMF from %s\n", OVMF_PATH);
+#endif
+    return 0;
 }
 
 static int pci_get_id(uint16_t seg, uint8_t bus, uint8_t dev, uint8_t func,
@@ -811,64 +937,22 @@ const char * parse_pci_sbdf(char *s, unsigned int *seg_p,
     return s;
 }
 
-#define MAX_RMRR_DEVICES 16
+#define MAX_RMRR_DEVICES E820MAX
 #define ALLOW_MEMORY_RELOCATE 1
-static unsigned int nr_rdm_entries[MAX_RMRR_DEVICES] = {0};
-static unsigned int nr_rmrr_devs = 0;
-static struct xen_reserved_device_memory *xrdm[MAX_RMRR_DEVICES] = {0};
-static bool apply_mxgpu_workaround = false;
 
-static uint64_t
-inspect_device(char *s)
+int hvm_build_setup_mem(struct xc_dom_image *dom, uint64_t max_mem_mib,
+                        uint64_t max_start_mib)
 {
-    unsigned int seg, bus, device, func;
-    uint64_t mmio_dev;
-    uint16_t vendor_id, device_id;
-
-    xg_info("Getting RMRRs for device '%s'\n",s);
-    if ( parse_pci_sbdf(s, &seg, &bus, &device, &func) )
-    {
-        if ( !get_rdm(seg, bus, (device << 3) + func,
-                &nr_rdm_entries[nr_rmrr_devs], &xrdm[nr_rmrr_devs]) )
-            nr_rmrr_devs++;
-    }
-    if ( nr_rmrr_devs == MAX_RMRR_DEVICES )
-    {
-        xg_err("Error: hit limit of %d RMRR devices for domain\n",
-                    MAX_RMRR_DEVICES);
-        exit(1);
-    }
-
-    xg_info("Getting total MMIO space occupied for device '%s'\n",s);
-    if ( get_mmio_dev(seg, bus, device, func, &mmio_dev) )
-    {
-        xg_err("Error: unable to get PCI MMIO info\n");
-        exit(1);
-    }
-
-    if ( !pci_get_id(seg, bus, device, func, "vendor", &vendor_id) &&
-         vendor_id == 0x1002 &&
-         !pci_get_id(seg, bus, device, func, "device", &device_id) &&
-         device_id == 0x692f )
-    {
-        xg_info("MxGPU device found. Applying MMIO hole workaround\n");
-        apply_mxgpu_workaround = true;
-    }
-
-    return mmio_dev;
-}
-
-int stub_xc_hvm_build_with_mem(uint64_t max_mem_mib, uint64_t max_start_mib,
-                               const char *image)
-{
-    struct xc_dom_image *dom;
-
     uint64_t lowmem_end, highmem_start, highmem_end, mmio_start, mmio_size;
     uint64_t mmio_total = 0;
     unsigned int i, j, nr = 0;
     struct e820entry *e820;
+    unsigned int nr_rdm_entries[MAX_RMRR_DEVICES] = {0};
+    unsigned int nr_rmrr_devs = 0;
+    struct xen_reserved_device_memory *xrdm[MAX_RMRR_DEVICES] = {0};
     unsigned long rmrr_overlapped_ram = 0;
     bool allow_memory_relocate = ALLOW_MEMORY_RELOCATE;
+    bool apply_mxgpu_workaround = false;
     char *s;
 
     if ( pci_passthrough_sbdf_list )
@@ -876,22 +960,51 @@ int stub_xc_hvm_build_with_mem(uint64_t max_mem_mib, uint64_t max_start_mib,
         s = strtok(pci_passthrough_sbdf_list,",");
         while ( s != NULL )
         {
-            mmio_total += inspect_device(s);
+            unsigned int seg, bus, device, func;
+            uint64_t mmio_dev;
+            uint16_t vendor_id, device_id;
+
+            xg_info("Getting RMRRs for device '%s'\n",s);
+            if ( parse_pci_sbdf(s, &seg, &bus, &device, &func) )
+            {
+                if ( !get_rdm(seg, bus, (device << 3) + func,
+                        &nr_rdm_entries[nr_rmrr_devs], &xrdm[nr_rmrr_devs]) )
+                {
+                    if ( nr_rdm_entries[nr_rmrr_devs] != 0 )
+                        nr_rmrr_devs++;
+
+                    if ( nr_rmrr_devs == MAX_RMRR_DEVICES )
+                    {
+                        xg_err("Error: hit limit of %d RMRR devices for domain\n",
+                                   MAX_RMRR_DEVICES);
+                        exit(1);
+                    }
+                }
+            }
+
+            xg_info("Getting total MMIO space occupied for device '%s'\n",s);
+            if ( get_mmio_dev(seg, bus, device, func, &mmio_dev) )
+            {
+                xg_err("Error: unable to get PCI MMIO info\n");
+                exit(1);
+            }
+            mmio_total += mmio_dev;
+
+            if ( !pci_get_id(seg, bus, device, func, "vendor", &vendor_id) &&
+                 vendor_id == 0x1002 &&
+                 !pci_get_id(seg, bus, device, func, "device", &device_id) &&
+                 device_id == 0x692f )
+            {
+                xg_info("MxGPU device found. Applying MMIO hole workaround\n");
+                apply_mxgpu_workaround = true;
+            }
+
             s = strtok (NULL, ",");
         }
     }
-    if ( gvtg_sbdf )
-        mmio_total += inspect_device(gvtg_sbdf);
     e820 = malloc(sizeof(*e820) * E820MAX);
     if (!e820)
 	    return -ENOMEM;
-
-    dom = xc_dom_allocate(xch, NULL, NULL);
-    if ( !dom )
-        failwith_oss_xc("xc_dom_allocate");
-
-    dom->container_type = XC_DOM_HVM_CONTAINER;
-    dom->device_model = true;
 
     dom->target_pages = max_start_mib << (20 - XC_PAGE_SHIFT);
 
@@ -947,7 +1060,7 @@ int stub_xc_hvm_build_with_mem(uint64_t max_mem_mib, uint64_t max_start_mib,
     /* RDM mapping */
     for (i = 0; i < nr_rmrr_devs; i++)
     {
-        for (j = 0; j < nr_rdm_entries[i]; j++)
+        for (j = 0; j < nr_rdm_entries[i] && nr < E820MAX; j++)
         {
             e820[nr].addr = xrdm[i][j].start_pfn << XC_PAGE_SHIFT;
             e820[nr].size = xrdm[i][j].nr_pages << XC_PAGE_SHIFT;
@@ -959,16 +1072,18 @@ int stub_xc_hvm_build_with_mem(uint64_t max_mem_mib, uint64_t max_start_mib,
             }
             nr++;
         }
+        free(xrdm[i]);
     }
+    if ( nr == E820MAX )
+    {
+        xg_err("Error: too many E820 reserved entries for domain\n");
+        exit(1);
+    }
+
     e820[0].size -= rmrr_overlapped_ram;
     highmem_end += rmrr_overlapped_ram;
     mmio_size += rmrr_overlapped_ram;
     mmio_start -= rmrr_overlapped_ram;
-
-    for (i = 0; i < nr_rmrr_devs; i++)
-    {
-        free(xrdm[i]);
-    }
 
     if ( highmem_end > highmem_start )
     {
@@ -983,31 +1098,26 @@ int stub_xc_hvm_build_with_mem(uint64_t max_mem_mib, uint64_t max_start_mib,
     dom->mmio_size = mmio_size;
     dom->mmio_start = mmio_start;
 
+    if ( hvm_load_firmware_module(dom) )
+    {
+        xg_err("xenguest: Failed to load firmware module: %s\n",
+               strerror(errno));
+        exit(1);
+    }
+
+    if ( xc_dom_mem_init(dom, max_mem_mib) )
+        failwith_oss_xc("xc_dom_mem_init");
+    if ( xc_dom_boot_mem_init(dom) )
+        failwith_oss_xc("xc_dom_boot_mem_init");
+
     xg_info("Final lower MMIO hole size is 0x%lx\n", mmio_size);
     /* Put the lower MMIO hole size to Xenstore so we could
      * read it later from QEMU wrapper */
     xenstore_putsv("vm-data/mmio-hole-size", "%lu", mmio_size);
 
-    if ( xc_dom_kernel_file(dom, image) )
-        failwith_oss_xc("xc_dom_kernel_file");
-
-    if ( xc_dom_boot_xen_init(dom, xch, domid) )
-        failwith_oss_xc("xc_dom_boot_xen_init");
-    if ( xc_dom_parse_image(dom) )
-        failwith_oss_xc("xc_dom_parse_image");
-    if ( xc_dom_mem_init(dom, max_mem_mib) )
-        failwith_oss_xc("xc_dom_mem_init");
-    if ( xc_dom_boot_mem_init(dom) )
-        failwith_oss_xc("xc_dom_boot_mem_init");
-    if ( xc_dom_build_image(dom) )
-        failwith_oss_xc("xc_dom_build_image");
-    if ( xc_dom_boot_image(dom) )
-        failwith_oss_xc("xc_dom_boot_image");
-
     if ( xc_domain_set_memory_map(xch, domid, e820, nr) )
         failwith_oss_xc("xc_domain_set_memory_map");
 
-    xc_dom_release(dom);
     free(e820);
 
     return 0;
@@ -1056,17 +1166,55 @@ int stub_xc_hvm_build(int mem_max_mib, int mem_start_mib, const char *image_name
 {
     int r;
     struct flags f = {};
+    struct xc_dom_image *dom;
+
+    if (opt_vgpu)
+        wait_for_pv_iommu();
 
     get_flags(&f);
 
     hvm_safety_check(&f, mem_start_mib < mem_max_mib);
 
+    r = xc_domain_set_gnttab_limits(xch, domid, 32, 1024);
+    if ( r )
+        failwith_oss_xc("xc_domain_set_gnttab_limits");
+
     configure_vcpus(&f);
     configure_tsc(&f);
 
-    r = stub_xc_hvm_build_with_mem(mem_max_mib, mem_start_mib, image_name);
+    dom = xc_dom_allocate(xch, NULL, NULL);
+    if ( !dom )
+        failwith_oss_xc("xc_dom_allocate");
+
+    dom->container_type = XC_DOM_HVM_CONTAINER;
+    dom->device_model = true;
+
+    dom->console_evtchn = console_evtchn;
+    dom->console_domid = console_domid;
+    dom->xenstore_evtchn = store_evtchn;
+    dom->xenstore_domid = store_domid;
+
+    if ( xc_dom_kernel_file(dom, image_name) )
+        failwith_oss_xc("xc_dom_kernel_file");
+
+    if ( xc_dom_module_file(dom, IPXE_PATH, "ipxe") )
+        failwith_oss_xc("xc_dom_module_file");
+
+    if ( xc_dom_boot_xen_init(dom, xch, domid) )
+        failwith_oss_xc("xc_dom_boot_xen_init");
+    if ( xc_dom_parse_image(dom) )
+        failwith_oss_xc("xc_dom_parse_image");
+
+    r = hvm_build_setup_mem(dom, mem_max_mib, mem_start_mib);
     if ( r )
-        failwith_oss_xc("hvm_build");
+        failwith_oss_xc("hvm_build_setup_mem");
+
+    if ( xc_dom_build_image(dom) )
+        failwith_oss_xc("xc_dom_build_image");
+    if ( xc_dom_boot_image(dom) )
+        failwith_oss_xc("xc_dom_boot_image");
+    if ( xc_dom_gnttab_init(dom) )
+        failwith_oss_xc("xc_dom_gnttab_init");
 
     r = hvm_build_set_params(store_evtchn, store_mfn,
                              console_evtchn, console_mfn, &f);
@@ -1077,87 +1225,16 @@ int stub_xc_hvm_build(int mem_max_mib, int mem_start_mib, const char *image_name
     if ( r )
         failwith_oss_xc("construct_cpuid_policy");
 
-    r = xc_dom_gnttab_hvm_seed(xch, domid, *console_mfn, *store_mfn,
-                               console_domid, store_domid);
-    if ( r )
-        failwith_oss_xc("xc_dom_gnttab_hvm_seed");
-
     free_flags(&f);
+    xc_dom_release(dom);
 
     return 0;
 }
 
-static int switch_qemu_logdirty(int _domid, unsigned enable, void *_data)
+static int switch_qemu_logdirty(uint32_t _domid, unsigned enable, void *_data)
 {
-    char buf[64], *reply = NULL;
-    static const char cmd_enable[] = "enable";
-    static const char cmd_disable[] = "disable";
-    const char *cmd = enable ? cmd_enable : cmd_disable;
-    struct timeval start, now;
-    uint64_t timeout_us = 15 * 1000 * 1000; /* 15 seconds, in microseconds. */
-    bool rc = 0;
-
-    snprintf(buf, sizeof buf, "/libxl/%u/dm-version", domid);
-
-    if ( (reply = xs_read(xsh, XBT_NULL, buf, NULL)) ) {
-        rc = strcmp("qemu_xen", reply) == 0;
-        free(reply);
-
-        /* qemu-upstream doesn't use xenguest to enable/disable logdirty. */
-        if ( rc )
-            return 0;
-    }
-
-    /* Clear logdirty/ret before reading it, to avoid reading stale data */
-    snprintf(buf, sizeof buf, "/local/domain/0/device-model/%u/logdirty/ret", domid);
-    if ( !xs_write(xsh, XBT_NULL, buf, "", 0) )
-    {
-        int saved_errno = errno;
-
-        xg_err("Failed to NULL logdirty/ret\n");
-        errno = saved_errno;
-        return 1;
-    }
-
-    snprintf(buf, sizeof buf, "/local/domain/0/device-model/%u/logdirty/cmd", domid);
-    if ( !xs_write(xsh, XBT_NULL, buf, cmd, strlen(cmd)) )
-    {
-        int saved_errno = errno;
-
-        xg_err("Failed to write logdirty '%s' command to xenstore\n", cmd);
-        errno = saved_errno;
-        return 1;
-    }
-
-    xg_info("Waiting for qemu to confirm logdirty '%s'\n", cmd);
-
-    snprintf(buf, sizeof buf, "/local/domain/0/device-model/%u/logdirty/ret", domid);
-    gettimeofday(&start, NULL);
-    do
-    {
-        usleep(100000); /* Wait a short while for Qemu to reply. */
-
-        reply = xs_read(xsh, XBT_NULL, buf, NULL);
-
-        if ( reply )
-        {
-            rc = strcmp(cmd, reply) == 0;
-            free(reply);
-        }
-
-        if ( !rc )
-            gettimeofday(&now, NULL);
-    } while ( !rc && (tv_delta_us(&now, &start) < timeout_us) );
-
-    if ( !rc )
-    {
-        xg_err("Timeout waiting for qemu to acknowledge logdirty '%s'\n", cmd);
-        errno = ETIMEDOUT;
-    }
-    else
-        xg_info("  got reply\n");
-
-    return !rc;
+    /* qemu-upstream doesn't use xenguest to enable/disable logdirty. */
+    return 0;
 }
 
 void migration_safety_checks(void)
@@ -1206,8 +1283,7 @@ int emu_stub_xc_domain_save(int fd, void* data,
     return 0;
 }
 
-int stub_xc_domain_save(int fd, int max_iters, int max_factors,
-                        int flags, int hvm)
+int stub_xc_domain_save(int fd, int flags, int hvm)
 {
     int r;
     struct save_callbacks callbacks =
@@ -1304,19 +1380,22 @@ int stub_xc_domain_restore(int fd, int store_evtchn, int console_evtchn,
     int r = 0;
     struct flags f = {};
 
+    if (opt_vgpu)
+        wait_for_pv_iommu();
+
     get_flags(&f);
+
+    r = xc_domain_set_gnttab_limits(xch, domid, 32, 1024);
+    if ( r )
+        failwith_oss_xc("xc_domain_set_gnttab_limits");
 
     if ( hvm )
     {
         /*
          * We generally have to do this even in the domain restore case as
          * XenServers prior to 6.0.2 did not create a viridian save record.
-         *
-         * However, if we're restoring with a VGPU, we know we have the save
-         * record, but are less sure what the viridian values were when
-         * started, and so should avoid setting in this case.
          */
-        if (f.viridian && !opt_vgpu)
+        if (f.viridian)
             hvm_set_viridian_features(&f);
 
         xc_set_hvm_param(xch, domid, HVM_PARAM_HPET_ENABLED, f.hpet);
@@ -1337,7 +1416,7 @@ int stub_xc_domain_restore(int fd, int store_evtchn, int console_evtchn,
     r = xc_domain_restore(xch, fd, domid,
                           store_evtchn, store_mfn, 0,
                           console_evtchn, console_mfn, 0,
-                          hvm, f.pae, 0, 0, NULL, -1);
+                          hvm, f.pae, 0, NULL, -1);
     if ( r )
         failwith_oss_xc("xc_domain_restore");
     /*

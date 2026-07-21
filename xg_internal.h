@@ -48,8 +48,7 @@ int stub_xc_linux_build(int c_mem_max_mib, int mem_start_mib,
 int stub_xc_hvm_build(int mem_max_mib, int mem_start_mib, const char *image_name,
                       int store_evtchn, int store_domid, int console_evtchn,
                       int console_domid, unsigned long *store_mfn, unsigned long *console_mfn);
-int stub_xc_domain_save(int fd, int max_iters, int max_factors,
-                        int flags, int hvm);
+int stub_xc_domain_save(int fd, int flags, int hvm);
 int emu_stub_xc_domain_save(int fd, void *data,
                             int flags, int hvm);
 
@@ -66,7 +65,6 @@ void cleanup_legacy_conversion(void);
 
 extern char *xs_domain_path;
 extern char *pci_passthrough_sbdf_list;
-extern char *gvtg_sbdf;
 
 /* Calcluate the difference between two timevals, in microseconds. */
 static inline uint64_t tv_delta_us(const struct timeval *new,

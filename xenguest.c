@@ -62,7 +62,6 @@ enum xenguest_opts {
     XG_OPT_PCI_PASSTHROUGH, /* str */
     XG_OPT_FORCE, /* bool */
     XG_OPT_VGPU, /* bool */
-    XG_OPT_GVTG, /* str */
 };
 
 static int opt_mode = -1;
@@ -250,7 +249,6 @@ static void parse_options(int argc, char *const argv[])
         { "pci_passthrough", required_argument, NULL, XG_OPT_PCI_PASSTHROUGH, },
         { "force", no_argument, NULL, XG_OPT_FORCE, },
         { "vgpu", no_argument, NULL, XG_OPT_VGPU, },
-        { "gvtg", required_argument, NULL, XG_OPT_GVTG, },
         { NULL },
     };
 
@@ -387,10 +385,6 @@ static void parse_options(int argc, char *const argv[])
             opt_vgpu = true;
             break;
 
-        case XG_OPT_GVTG:
-            gvtg_sbdf = optarg;
-            break;
-
         case XG_OPT_FAKE:
         case XG_OPT_FORK:
         case XG_OPT_NO_INC_GENID:
@@ -449,7 +443,7 @@ static void do_save(bool is_hvm)
         exit(1);
     }
 
-    stub_xc_domain_save(opt_fd, 0, 0, opt_flags, is_hvm);
+    stub_xc_domain_save(opt_fd, opt_flags, is_hvm);
     write_status(0, 0, NULL);
 }
 
