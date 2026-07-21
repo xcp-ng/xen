@@ -35,6 +35,8 @@
  * successfully reads a line from controlinfd.
  */
 
+#define PVH_MODULE_MAX 10
+
 enum xenguest_opts {
     XG_OPT_MODE, /* choice */
     XG_OPT_CONTROLINFD, /* int */
@@ -62,6 +64,7 @@ enum xenguest_opts {
     XG_OPT_PCI_PASSTHROUGH, /* str */
     XG_OPT_FORCE, /* bool */
     XG_OPT_VGPU, /* bool */
+    XG_OPT_MODULE, /* str */
 };
 
 static int opt_mode = -1;
@@ -79,6 +82,9 @@ static int opt_console_domid = 0;
 static const char *opt_features = NULL;
 static int opt_mem_max_mib = -1;
 static int opt_mem_start_mib = -1;
+static pvh_module opt_modules[PVH_MODULE_MAX];
+static int opt_nmodules = 0;
+static int opt_ncmdlines = 0;
 
 static const char *xg_mode_names[] = {
     [XG_MODE_SAVE] = "save",
@@ -90,6 +96,7 @@ static const char *xg_mode_names[] = {
     [XG_MODE_HVM_BUILD] = "hvm_build",
     [XG_MODE_TEST] = "test",
     [XG_MODE_LISTEN] = "listen",
+    [XG_MODE_PVH_BUILD] = "pvh_build"
 };
 
 xc_interface *xch = NULL;
@@ -249,6 +256,7 @@ static void parse_options(int argc, char *const argv[])
         { "pci_passthrough", required_argument, NULL, XG_OPT_PCI_PASSTHROUGH, },
         { "force", no_argument, NULL, XG_OPT_FORCE, },
         { "vgpu", no_argument, NULL, XG_OPT_VGPU, },
+        { "module", required_argument, NULL, XG_OPT_MODULE, },
         { NULL },
     };
 
@@ -300,8 +308,15 @@ static void parse_options(int argc, char *const argv[])
             opt_image = optarg;
             break;
 
+        case XG_OPT_MODULE:
+            opt_modules[opt_nmodules++].filename = optarg;
+            break;
+
         case XG_OPT_CMDLINE:
-            opt_cmdline = optarg;
+            if ( opt_cmdline == NULL )
+                opt_cmdline = optarg;
+            else
+                opt_modules[opt_ncmdlines++].cmdline = optarg;
             break;
 
         case XG_OPT_RAMDISK:
@@ -537,9 +552,42 @@ static void do_hvm_build(void)
     }
 
     stub_xc_hvm_build(opt_mem_max_mib, opt_mem_start_mib,
-                      opt_image, opt_store_port, opt_store_domid,
-                      opt_console_port, opt_console_domid, &store_mfn,
-                      &console_mfn);
+                      opt_image, NULL,
+                      NULL, 0,
+                      NULL, 0,
+                      opt_store_port, opt_store_domid,
+                      opt_console_port, opt_console_domid,
+                      &store_mfn, &console_mfn,
+                      false);
+    write_status(store_mfn, console_mfn, NULL);
+}
+
+static void do_pvh_build(void)
+{
+    unsigned long store_mfn = 0, console_mfn = 0;
+    int i;
+
+    if ( domid == -1 || opt_mem_max_mib == -1 || opt_mem_start_mib == -1
+         || !opt_image || !opt_cmdline
+         || !opt_features || opt_flags == -1
+         || opt_store_port == -1 || opt_store_domid == -1
+         || opt_console_port == -1 || opt_console_domid == -1 )
+    {
+        xg_err("xenguest: missing command line options\n");
+        exit(1);
+    }
+
+    for ( i = opt_ncmdlines; i < opt_nmodules; i++ )
+        opt_modules[i].cmdline = "";
+
+    stub_xc_hvm_build(opt_mem_max_mib, opt_mem_start_mib,
+                      opt_image, opt_cmdline,
+                      opt_modules, opt_nmodules,
+                      opt_features, opt_flags,
+                      opt_store_port, opt_store_domid,
+                      opt_console_port, opt_console_domid,
+                      &store_mfn, &console_mfn,
+                      true);
     write_status(store_mfn, console_mfn, NULL);
 }
 
@@ -613,6 +661,7 @@ int main(int argc, char * const argv[])
 
         case XG_MODE_LINUX_BUILD:
         case XG_MODE_HVM_BUILD:
+        case XG_MODE_PVH_BUILD:
             suffix = "-build";
             break;
 
@@ -682,6 +731,10 @@ int main(int argc, char * const argv[])
 
     case XG_MODE_HVM_BUILD:
         do_hvm_build();
+        break;
+
+    case XG_MODE_PVH_BUILD:
+        do_pvh_build();
         break;
 
     case XG_MODE_TEST:

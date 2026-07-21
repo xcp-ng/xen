@@ -1,8 +1,17 @@
 #ifndef __XG_INTERNAL_H__
 #define __XG_INTERNAL_H__
 
+#include <assert.h>
 #include <inttypes.h>
+#include <string.h>
 #include <sys/time.h>
+
+#include <xenctrl.h>
+#include <xenguest.h>
+
+#include <xc_bitops.h>
+
+#define ASSERT(x) assert(x)
 
 #define __printf(f, v) __attribute__((format(__printf__, f, v)))
 
@@ -16,6 +25,7 @@ enum xenguest_mode {
     XG_MODE_HVM_BUILD,
     XG_MODE_TEST,
     XG_MODE_LISTEN,
+    XG_MODE_PVH_BUILD,
     XG_MODE__END__,
 };
 
@@ -31,6 +41,13 @@ extern bool force;
 extern int opt_flags;
 extern bool opt_vgpu;
 
+struct pvh_module {
+    char *filename;
+    char *cmdline;
+};
+
+typedef struct pvh_module pvh_module;
+
 /* Read and write /local/domain/$domid/ relative paths. */
 char *xenstore_getsv(const char *fmt, va_list ap);
 char *xenstore_gets(const char *fmt, ...)  __printf(1, 2);
@@ -45,9 +62,14 @@ int stub_xc_linux_build(int c_mem_max_mib, int mem_start_mib,
                         int console_evtchn, int console_domid,
                         unsigned long *store_mfn, unsigned long *console_mfn,
                         char *protocol);
-int stub_xc_hvm_build(int mem_max_mib, int mem_start_mib, const char *image_name,
-                      int store_evtchn, int store_domid, int console_evtchn,
-                      int console_domid, unsigned long *store_mfn, unsigned long *console_mfn);
+int stub_xc_hvm_build(int mem_max_mib, int mem_start_mib,
+                      const char *image_name, const char *cmdline,
+                      const pvh_module *modules, int nmodules,
+                      const char *features, int flags,
+                      int store_evtchn, int store_domid,
+                      int console_evtchn, int console_domid,
+                      unsigned long *store_mfn, unsigned long *console_mfn,
+                      bool is_pvh);
 int stub_xc_domain_save(int fd, int flags, int hvm);
 int emu_stub_xc_domain_save(int fd, void *data,
                             int flags, int hvm);

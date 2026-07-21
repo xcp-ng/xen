@@ -15,9 +15,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <string.h>
 #include <stdarg.h>
-#include <inttypes.h>
 
 #include <errno.h>
 #include <sys/mman.h>
@@ -34,6 +32,9 @@
 #include <xen/hvm/hvm_xs_strings.h>
 #include <xen/hvm/params.h>
 #include <xen/hvm/e820.h>
+#include "libacpi/libacpi.h"
+
+#include <xentoolcore_internal.h>
 
 enum {
 #define XEN_CPUFEATURE(name, value) X86_FEATURE_##name = value,
@@ -41,7 +42,6 @@ enum {
 };
 
 #include "xg_internal.h"
-#include "xc_bitops.h"
 
 char *xs_domain_path = NULL;
 char *pci_passthrough_sbdf_list = NULL;
@@ -95,8 +95,6 @@ struct flags {
     unsigned cores_per_socket;
     unsigned x87_fip_width;
     int64_t timeoffset;
-    uint32_t max_grant_frames;
-    uint32_t max_maptrack_frames;
 };
 
 char *xenstore_getsv(const char *fmt, va_list ap)
@@ -128,26 +126,45 @@ char *xenstore_gets(const char *fmt, ...)
     return s;
 }
 
-uint64_t xenstore_get(const char *fmt, ...)
+uint64_t xenstore_get_value(bool *valid, const char *fmt, ...)
 {
     char *s;
     uint64_t value = 0;
     va_list ap;
+    bool got_value = true;
 
     va_start(ap, fmt);
     s = xenstore_getsv(fmt, ap);
     if (s) {
-        if (!strcasecmp(s, "true"))
+        if ( !strcasecmp(s, "true") )
             value = 1;
-        else
-        {
+        else if ( !strcasecmp(s, "false") )
+            value = 0;
+        else {
             errno = 0;
             value = strtoull(s, NULL, 0);
-            if ( errno )
+            if ( errno ) {
                 value = 0;
+                got_value = false;
+            }
         }
         free(s);
-    }
+    } else
+        got_value = false;
+
+    if ( valid )
+        *valid = got_value;
+    va_end(ap);
+    return value;
+}
+
+uint64_t xenstore_get(const char *fmt, ...)
+{
+    uint64_t value;
+    va_list ap;
+
+    va_start(ap, fmt);
+    value = xenstore_get_value(NULL, fmt, ap);
     va_end(ap);
     return value;
 }
@@ -346,6 +363,7 @@ static void get_flags(struct flags *f)
 {
     char * tmp;
     int n;
+    bool stimer_set;
 
     if ( xc_domain_getinfo(xch, domid, 1, &f->dominfo) != 1 ||
          f->dominfo.domid != domid )
@@ -368,16 +386,19 @@ static void get_flags(struct flags *f)
     f->viridian_hcall_remote_tlb_flush = xenstore_get("platform/viridian_hcall_remote_tlb_flush");
     f->viridian_apic_assist = xenstore_get("platform/viridian_apic_assist");
     f->viridian_crash_ctl = xenstore_get("platform/viridian_crash_ctl");
-    f->viridian_stimer = xenstore_get("platform/viridian_stimer");
+    f->viridian_stimer = xenstore_get_value(&stimer_set, "platform/viridian_stimer");
 
     /*
-     * Squash the timer enlightenments for a vGPU-enabled VM if stimer is
-     * not switched on.
+     * For vGPU-enabled VMs, it is unsafe to migrate VMs with time_ref_count
+     * or reference_tsc enabled, but not stimer.
+     * If stimer has not been explicitly set, but one of the other two
+     * have been enabled, default stimer to enabled.
      */
-    if ( opt_vgpu && !f->viridian_stimer ) {
-        f->viridian_reference_tsc = 0;
-        f->viridian_time_ref_count = 0;
-    }
+     if ( opt_vgpu && !stimer_set &&
+         (f->viridian_reference_tsc || f->viridian_time_ref_count) ) {
+         xg_info("vgpu attached and stimer not set - defaulting to enabled.\n");
+         f->viridian_stimer = 1;
+     }
 
     f->apic     = xenstore_get("platform/apic");
     f->pae      = xenstore_get("platform/pae");
@@ -398,9 +419,6 @@ static void get_flags(struct flags *f)
 
     /* Nested virt doesn't currently work with migration. */
     if ( f->nested_virt )
-        f->nomigrate = 1;
-    /* VM's can't migrate if they are cold-plugged with PCI devices. */
-    if ( pci_passthrough_sbdf_list )
         f->nomigrate = 1;
 
     /* Params going to hvmloader - need to convert "true" -> '1' as Xapi gets
@@ -427,21 +445,6 @@ static void get_flags(struct flags *f)
         sscanf(tmp, "%" PRId64, &f->timeoffset);
         free(tmp);
     }
-
-    f->max_grant_frames = 32;
-    if ((tmp = xenstore_gets("platform/max_grant_frames")))
-    {
-        sscanf(tmp, "%" PRIu32, &f->max_grant_frames);
-        free(tmp);
-    }
-    f->max_maptrack_frames = 1024;
-    if ((tmp = xenstore_gets("platform/max_maptrack_frames")))
-    {
-        sscanf(tmp, "%" PRIu32, &f->max_maptrack_frames);
-        free(tmp);
-    }
-    xg_info("max_grant_frames %" PRIu32", max_maptrack_frames %" PRIu32 "\n",
-            f->max_grant_frames, f->max_maptrack_frames);
 
     xg_info("Domain Properties: Type %s, hap %u\n",
             f->dominfo.hvm ? "HVM" : "PV", f->dominfo.hap);
@@ -598,10 +601,6 @@ int stub_xc_linux_build(int c_mem_max_mib, int mem_start_mib,
     struct flags f = {};
     get_flags(&f);
 
-    if (xc_domain_set_gnttab_limits(xch, domid, f.max_grant_frames,
-                                     f.max_maptrack_frames))
-        failwith_oss_xc("xc_domain_set_gnttab_limits");
-
     dom = xc_dom_allocate(xch, cmdline, features);
     if (!dom)
         failwith_oss_xc("xc_dom_allocate");
@@ -658,6 +657,208 @@ int stub_xc_linux_build(int c_mem_max_mib, int mem_start_mib,
     return 0;
 }
 
+static void hvm_init_info_table(struct hvm_info_table *va_hvm, struct flags *f)
+{
+    uint32_t i;
+    uint8_t sum;
+
+    va_hvm->apic_mode = f->apic;
+    va_hvm->nr_vcpus = f->vcpus;
+    memset(va_hvm->vcpu_online, 0, sizeof(va_hvm->vcpu_online));
+
+    for ( i = 0; i < f->vcpus_current; i++ )
+        va_hvm->vcpu_online[i/8] |= 1 << (i % 8);
+
+    va_hvm->checksum = 0;
+
+    for ( i = 0, sum = 0; i < va_hvm->length; i++ )
+        sum += ((uint8_t *) va_hvm)[i];
+    va_hvm->checksum = -sum;
+}
+
+/* ACPI bits and pieces */
+/* Most of this is from libxl_x86_acpi.c */
+
+/* Number of pages holding ACPI tables */
+#define NUM_ACPI_PAGES 16
+/* Store RSDP in the last 64 bytes of BIOS RO memory */
+#define RSDP_ADDRESS (0x100000 - 64)
+
+#define ACPI_INFO_PHYSICAL_ADDRESS 0xfc000000
+#define LAPIC_BASE_ADDRESS         0xfee00000
+
+struct xenguest_acpi_ctxt {
+    struct acpi_ctxt c;
+
+    unsigned int page_size;
+    unsigned int page_shift;
+
+    /* Memory allocator */
+    unsigned long alloc_base_paddr;
+    unsigned long alloc_base_vaddr;
+    unsigned long alloc_currp;
+    unsigned long alloc_end;
+};
+
+extern const unsigned char dsdt_pvh[];
+extern const unsigned int dsdt_pvh_len;
+
+/* Assumes contiguous physical space */
+static unsigned long virt_to_phys(struct acpi_ctxt *ctxt, void *v)
+{
+    struct xenguest_acpi_ctxt *xenguest_ctxt =
+        CONTAINER_OF(ctxt, struct xenguest_acpi_ctxt, c);
+
+    return (((unsigned long)v - xenguest_ctxt->alloc_base_vaddr) +
+            xenguest_ctxt->alloc_base_paddr);
+}
+
+static void *mem_alloc(struct acpi_ctxt *ctxt,
+                       uint32_t size, uint32_t align)
+{
+    struct xenguest_acpi_ctxt *xenguest_ctxt =
+        CONTAINER_OF(ctxt, struct xenguest_acpi_ctxt, c);
+    unsigned long s, e;
+
+    /* Align to at least 16 bytes. */
+    if ( align < 16 )
+        align = 16;
+
+    s = (xenguest_ctxt->alloc_currp + align) & ~((unsigned long)align - 1);
+    e = s + size - 1;
+
+    /* TODO: Reallocate memory */
+    if ( (e < s) || (e >= xenguest_ctxt->alloc_end) )
+        return NULL;
+
+    while ( xenguest_ctxt->alloc_currp >> xenguest_ctxt->page_shift !=
+            e >> xenguest_ctxt->page_shift )
+        xenguest_ctxt->alloc_currp += xenguest_ctxt->page_size;
+
+    xenguest_ctxt->alloc_currp = e;
+
+    return (void *)s;
+}
+
+static void acpi_mem_free(struct acpi_ctxt *ctxt,
+                          void *v, uint32_t size)
+{
+}
+
+static uint32_t acpi_lapic_id(unsigned cpu)
+{
+    return cpu * 2;
+}
+
+static int init_acpi_config(struct xc_dom_image *dom,
+                            struct flags *f,
+                            struct acpi_config *config)
+{
+    xc_dominfo_t info;
+    struct hvm_info_table *hvminfo;
+    int r;
+
+    config->dsdt_anycpu = config->dsdt_15cpu = dsdt_pvh;
+    config->dsdt_anycpu_len = config->dsdt_15cpu_len = dsdt_pvh_len;
+
+    r = xc_domain_getinfo(xch, domid, 1, &info);
+    if ( r < 0 )
+    {
+        xg_err("getdomaininfo failed (rc=%d)", r);
+
+        return -1;
+    }
+
+    hvminfo = xc_dom_malloc(dom, sizeof(*hvminfo));
+    if ( !hvminfo )
+        return -ENOMEM;
+
+    hvm_init_info_table(hvminfo, f);
+
+    config->hvminfo = hvminfo;
+
+    config->lapic_base_address = LAPIC_BASE_ADDRESS;
+    config->lapic_id = acpi_lapic_id;
+    config->acpi_revision = 5;
+
+    return 0;
+}
+
+int xenguest_dom_load_acpi(struct xc_dom_image *dom,
+                           struct flags *f)
+{
+    struct acpi_config config = {0};
+    struct xenguest_acpi_ctxt xenguest_ctxt;
+    int rc = 0, acpi_pages_num;
+    void *acpi_pages;
+    unsigned long page_mask;
+
+    xenguest_ctxt.page_size = XC_DOM_PAGE_SIZE(dom);
+    xenguest_ctxt.page_shift =  XC_DOM_PAGE_SHIFT(dom);
+    page_mask = (1UL << xenguest_ctxt.page_shift) - 1;
+
+    xenguest_ctxt.c.mem_ops.alloc = mem_alloc;
+    xenguest_ctxt.c.mem_ops.v2p = virt_to_phys;
+    xenguest_ctxt.c.mem_ops.free = acpi_mem_free;
+
+    rc = init_acpi_config(dom, f, &config);
+    if ( rc )
+    {
+        xg_err("init_acpi_config failed (rc=%d)", rc);
+        goto out;
+    }
+
+    config.rsdp = (unsigned long)xc_dom_malloc(dom, xenguest_ctxt.page_size);
+    config.infop = (unsigned long)xc_dom_malloc(dom, xenguest_ctxt.page_size);
+    /* Pages to hold ACPI tables */
+    acpi_pages =  xc_dom_malloc(dom, (NUM_ACPI_PAGES + 1) *
+                                xenguest_ctxt.page_size);
+
+    if ( !config.rsdp || !config.infop || !acpi_pages )
+        return -ENOMEM;
+
+    /*
+     * Set up allocator memory.
+     * Start next to acpi_info page to avoid fracturing e820.
+     */
+    xenguest_ctxt.alloc_base_paddr = ACPI_INFO_PHYSICAL_ADDRESS +
+        xenguest_ctxt.page_size;
+    xenguest_ctxt.alloc_base_vaddr = xenguest_ctxt.alloc_currp =
+        (unsigned long)acpi_pages;
+    xenguest_ctxt.alloc_end = (unsigned long)acpi_pages +
+        (NUM_ACPI_PAGES * xenguest_ctxt.page_size);
+
+    /* Build the tables. */
+    rc = acpi_build_tables(&xenguest_ctxt.c, &config);
+    if ( rc )
+    {
+        xg_err("acpi_build_tables failed with %d", rc);
+        goto out;
+    }
+
+    /* Calculate how many pages are needed for the tables. */
+    acpi_pages_num =
+        ((xenguest_ctxt.alloc_currp - (unsigned long)acpi_pages)
+         >> xenguest_ctxt.page_shift) +
+        ((xenguest_ctxt.alloc_currp & page_mask) ? 1 : 0);
+
+    dom->acpi_modules[0].data = (void *)config.rsdp;
+    dom->acpi_modules[0].length = 64;
+    dom->acpi_modules[0].guest_addr_out = RSDP_ADDRESS;
+
+    dom->acpi_modules[1].data = (void *)config.infop;
+    dom->acpi_modules[1].length = 4096;
+    dom->acpi_modules[1].guest_addr_out = ACPI_INFO_PHYSICAL_ADDRESS;
+
+    dom->acpi_modules[2].data = acpi_pages;
+    dom->acpi_modules[2].length = acpi_pages_num  << xenguest_ctxt.page_shift;
+    dom->acpi_modules[2].guest_addr_out = ACPI_INFO_PHYSICAL_ADDRESS +
+        xenguest_ctxt.page_size;
+
+out:
+    return rc;
+}
+
 static void hvm_set_viridian_features(struct flags *f)
 {
     uint64_t feature_mask = HVMPV_base_freq;
@@ -704,30 +905,24 @@ static void hvm_set_viridian_features(struct flags *f)
 
 static int hvm_build_set_params(int store_evtchn, unsigned long *store_mfn,
                                 int console_evtchn, unsigned long *console_mfn,
-                                struct flags *f)
+                                bool is_pvh, struct flags *f)
 {
     struct hvm_info_table *va_hvm;
-    uint8_t *va_map, sum;
-    uint32_t i;
+    uint8_t *va_map;
     int rc = 0;
 
-    va_map = xc_map_foreign_range(xch, domid,
-                                  XC_PAGE_SIZE, PROT_READ | PROT_WRITE,
-                                  HVM_INFO_PFN);
-    if (va_map == NULL)
-        return -1;
+    if( !is_pvh )
+    {
+        va_map = xc_map_foreign_range(xch, domid,
+                                      XC_PAGE_SIZE, PROT_READ | PROT_WRITE,
+                                      HVM_INFO_PFN);
+        if ( va_map == NULL )
+            return -1;
 
-    va_hvm = (struct hvm_info_table *)(va_map + HVM_INFO_OFFSET);
-    va_hvm->apic_mode = f->apic;
-    va_hvm->nr_vcpus = f->vcpus;
-    memset(va_hvm->vcpu_online, 0, sizeof(va_hvm->vcpu_online));
-    for (i = 0; i < f->vcpus_current; i++)
-        va_hvm->vcpu_online[i/8] |= 1 << (i % 8);
-    va_hvm->checksum = 0;
-    for (i = 0, sum = 0; i < va_hvm->length; i++)
-        sum += ((uint8_t *) va_hvm)[i];
-    va_hvm->checksum = -sum;
-    munmap(va_map, XC_PAGE_SIZE);
+        va_hvm = (struct hvm_info_table *)(va_map + HVM_INFO_OFFSET);
+        hvm_init_info_table(va_hvm, f);
+        munmap(va_map, XC_PAGE_SIZE);
+    }
 
     xc_get_hvm_param(xch, domid, HVM_PARAM_STORE_PFN, store_mfn);
     xc_set_hvm_param(xch, domid, HVM_PARAM_PAE_ENABLED, f->pae);
@@ -762,7 +957,15 @@ static int hvm_build_set_params(int store_evtchn, unsigned long *store_mfn,
         rc = xc_domain_set_cores_per_socket(xch, domid, f->cores_per_socket);
 
     if ( rc )
-        return rc;
+    {
+        if ( errno == ENOSYS )
+        {
+            rc = 0;
+            xg_info("XEN_DOMCTL_set_cores_per_socket not implemented - skipping");
+        }
+        else
+            failwith_oss_xc("xc_domain_set_cores_per_socket");
+    }
 
     rc = xc_domain_set_time_offset(xch, domid, f->timeoffset);
 
@@ -1147,6 +1350,93 @@ int hvm_build_setup_mem(struct xc_dom_image *dom, uint64_t max_mem_mib,
     return 0;
 }
 
+static int pvh_setup_mem(struct xc_dom_image *dom, uint64_t max_mem_mib,
+                         uint64_t max_start_mib)
+{
+    uint64_t lowmem_end, highmem_start, highmem_end, mmio_start, mmio_size;
+
+    if ( pci_passthrough_sbdf_list )
+    {
+        xg_err("PCI passthrough not supported under PVH");
+        return -EINVAL;
+    }
+
+    dom->target_pages = max_start_mib << (20 - XC_PAGE_SHIFT);
+
+    lowmem_end  = max_mem_mib << 20;
+    highmem_end = highmem_start = 1ull << 32;
+    mmio_size   = HVM_BELOW_4G_MMIO_LENGTH;
+
+    mmio_start  = highmem_start - mmio_size;
+
+    if ( lowmem_end > mmio_start )
+    {
+        highmem_end = (1ull << 32) + (lowmem_end - mmio_start);
+        lowmem_end = mmio_start;
+    }
+
+    dom->lowmem_end = lowmem_end;
+    dom->highmem_end = highmem_end;
+    dom->mmio_size = mmio_size;
+    dom->mmio_start = mmio_start;
+
+    if ( xc_dom_mem_init(dom, max_mem_mib) )
+        failwith_oss_xc("xc_dom_mem_init");
+    if ( xc_dom_boot_mem_init(dom) )
+        failwith_oss_xc("xc_dom_boot_mem_init");
+
+    return 0;
+}
+
+static int pvh_setup_e820(struct xc_dom_image *dom)
+{
+    struct e820entry *e820;
+    uint64_t lowmem_end, highmem_start, highmem_end;
+    uint32_t lowmem_start = dom->device_model ? 0x100000u : 0;
+    unsigned int i, nr = 0;
+
+    lowmem_end = dom->lowmem_end;
+    highmem_start = 1ull << 32;
+    highmem_end = dom->highmem_end;
+
+    e820 = malloc(sizeof(*e820) * E820MAX);
+    if ( !e820 )
+        return -ENOMEM;
+
+    e820[nr].addr = lowmem_start;
+    e820[nr].size = lowmem_end - lowmem_start;
+    e820[nr].type = E820_RAM;
+    nr++;
+
+    for ( i = 0; i < MAX_ACPI_MODULES; i++ )
+    {
+        if ( dom->acpi_modules[i].length )
+        {
+            e820[nr].addr = dom->acpi_modules[i].guest_addr_out &
+                            ~(XC_PAGE_SIZE - 1);
+            e820[nr].size = dom->acpi_modules[i].length +
+                (dom->acpi_modules[i].guest_addr_out & (XC_PAGE_SIZE - 1));
+            e820[nr].type = E820_ACPI;
+            nr++;
+        }
+    }
+
+    if ( highmem_end > highmem_start )
+    {
+        e820[nr].addr = highmem_start;
+        e820[nr].size = highmem_end - e820[nr].addr;
+        e820[nr].type = E820_RAM;
+        nr++;
+    }
+
+    if ( xc_domain_set_memory_map(xch, domid, e820, nr) )
+        failwith_oss_xc("xc_domain_set_memory_map");
+
+    free(e820);
+
+    return 0;
+}
+
 static void hvm_safety_check(struct flags *f, bool pod)
 {
     if ( force )
@@ -1183,56 +1473,93 @@ static void hvm_safety_check(struct flags *f, bool pod)
     exit(1);
 }
 
-int stub_xc_hvm_build(int mem_max_mib, int mem_start_mib, const char *image_name,
+int stub_xc_hvm_build(int mem_max_mib, int mem_start_mib,
+                      const char *image_name, const char *cmdline,
+                      const pvh_module *modules, int nmodules,
+                      const char *features, int flags,
                       int store_evtchn, int store_domid,
                       int console_evtchn, int console_domid,
-                      unsigned long *store_mfn, unsigned long *console_mfn)
+                      unsigned long *store_mfn, unsigned long *console_mfn,
+                      bool is_pvh)
 {
-    int r;
+    int r, i;
     struct flags f = {};
     struct xc_dom_image *dom;
 
-    if (opt_vgpu)
+    if ( !is_pvh && opt_vgpu )
         wait_for_pv_iommu();
 
     get_flags(&f);
 
     hvm_safety_check(&f, mem_start_mib < mem_max_mib);
 
-    r = xc_domain_set_gnttab_limits(xch, domid, f.max_grant_frames,
-                                    f.max_maptrack_frames);
-    if ( r )
-        failwith_oss_xc("xc_domain_set_gnttab_limits");
-
     configure_vcpus(&f);
     configure_tsc(&f);
 
-    dom = xc_dom_allocate(xch, NULL, NULL);
+    dom = xc_dom_allocate(xch, cmdline, NULL);
     if ( !dom )
         failwith_oss_xc("xc_dom_allocate");
 
     dom->container_type = XC_DOM_HVM_CONTAINER;
-    dom->device_model = true;
+    dom->device_model = !is_pvh;
+    dom->max_vcpus = f.vcpus;
 
     dom->console_evtchn = console_evtchn;
     dom->console_domid = console_domid;
     dom->xenstore_evtchn = store_evtchn;
     dom->xenstore_domid = store_domid;
 
+    if ( is_pvh )
+    {
+        /* The default image size limits are too large. */
+        if ( xc_dom_kernel_max_size(dom, get_image_max_size("kernel")) )
+            failwith_oss_xc("xc_dom_kernel_max_size");
+        if ( xc_dom_module_max_size(dom, get_image_max_size("ramdisk")) )
+            failwith_oss_xc("xc_dom_module_max_size");
+    }
+
     if ( xc_dom_kernel_file(dom, image_name) )
         failwith_oss_xc("xc_dom_kernel_file");
 
-    if ( xc_dom_module_file(dom, IPXE_PATH, "ipxe") )
-        failwith_oss_xc("xc_dom_module_file");
+    if ( is_pvh )
+    {
+        for ( i = 0; i < nmodules; i++ )
+        {
+            if ( xc_dom_module_file(dom, modules[i].filename,
+                                    modules[i].cmdline) )
+                failwith_oss_xc("xc_dom_module_file");
+        }
+    }
+    else /* HVM */
+    {
+        if ( xc_dom_module_file(dom, IPXE_PATH, "ipxe") )
+            failwith_oss_xc("xc_dom_module_file");
+    }
 
     if ( xc_dom_boot_xen_init(dom, xch, domid) )
         failwith_oss_xc("xc_dom_boot_xen_init");
     if ( xc_dom_parse_image(dom) )
         failwith_oss_xc("xc_dom_parse_image");
 
-    r = hvm_build_setup_mem(dom, mem_max_mib, mem_start_mib);
-    if ( r )
-        failwith_oss_xc("hvm_build_setup_mem");
+    if ( is_pvh )
+    {
+        r = pvh_setup_mem(dom, mem_max_mib, mem_start_mib);
+        if ( r )
+            failwith_oss_xc("pvh_setup_mem");
+
+        r = xenguest_dom_load_acpi(dom, &f);
+        if ( r )
+            failwith_oss_xc("xenguest_dom_load_acpi");
+
+        if ( pvh_setup_e820(dom) )
+            failwith_oss_xc("pvh_setup_e820");
+    }
+    else /* HVM */
+    {
+        r = hvm_build_setup_mem(dom, mem_max_mib, mem_start_mib);
+        if ( r )
+            failwith_oss_xc("hvm_build_setup_mem");
+    }
 
     if ( xc_dom_build_image(dom) )
         failwith_oss_xc("xc_dom_build_image");
@@ -1242,11 +1569,11 @@ int stub_xc_hvm_build(int mem_max_mib, int mem_start_mib, const char *image_name
         failwith_oss_xc("xc_dom_gnttab_init");
 
     r = hvm_build_set_params(store_evtchn, store_mfn,
-                             console_evtchn, console_mfn, &f);
+                             console_evtchn, console_mfn, is_pvh, &f);
     if ( r )
         failwith_oss_xc("hvm_build_params");
 
-    r = construct_cpuid_policy(&f, true);
+    r = construct_cpuid_policy(&f, !is_pvh);
     if ( r )
         failwith_oss_xc("construct_cpuid_policy");
 
@@ -1275,7 +1602,15 @@ void migration_safety_checks(void)
 
     ret = xc_domain_query_disable_migrate(xch, domid, &migration_disabled);
     if ( ret )
-        failwith_oss_xc("xc_domain_query_disable_migrate");
+    {
+        if ( errno == ENOSYS )
+        {
+            migration_disabled = false;
+            xg_info("XEN_DOMCTL_query_disable_migrate not implemented - skipping");
+        }
+        else
+            failwith_oss_xc("xc_domain_query_disable_migrate");
+    }
 
     if ( migration_disabled )
     {
@@ -1410,26 +1745,22 @@ int stub_xc_domain_restore(int fd, int store_evtchn, int console_evtchn,
 
     get_flags(&f);
 
-    r = xc_domain_set_gnttab_limits(xch, domid, f.max_grant_frames,
-                                    f.max_maptrack_frames);
-    if ( r )
-        failwith_oss_xc("xc_domain_set_gnttab_limits");
-
     if ( hvm )
     {
-        /*
-         * We generally have to do this even in the domain restore case as
-         * XenServers prior to 6.0.2 did not create a viridian save record.
-         */
-        if (f.viridian)
-            hvm_set_viridian_features(&f);
-
         xc_set_hvm_param(xch, domid, HVM_PARAM_HPET_ENABLED, f.hpet);
         if ( f.cores_per_socket > 0 )
             r = xc_domain_set_cores_per_socket(xch, domid, f.cores_per_socket);
 
         if ( r )
-            failwith_oss_xc("xc_domain_set_cores_per_socket");
+        {
+            if ( errno == ENOSYS )
+            {
+                r = 0;
+                xg_info("XEN_DOMCTL_set_cores_per_socket not implemented - skipping");
+            }
+            else
+                failwith_oss_xc("xc_domain_set_cores_per_socket");
+        }
 
         r = xc_domain_set_time_offset(xch, domid, f.timeoffset);
 
