@@ -315,11 +315,6 @@ static int construct_cpuid_policy(const struct flags *f, bool hvm, bool restore)
     if ( !f->pae )
         clear_bit(X86_FEATURE_PAE, featureset);
 
-    if ( f->nested_virt ) {
-        set_bit(X86_FEATURE_VMX, featureset);
-        set_bit(X86_FEATURE_SVM, featureset);
-    }
-
     /*
      * Optionally advertise ITSC, given hardware support an a non-migratealbe
      * domain.
