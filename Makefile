@@ -1,10 +1,10 @@
 XEN_ROOT=$(CURDIR)/../..
 include $(XEN_ROOT)/tools/Rules.mk
 
-CFLAGS += -Werror -Wshadow
+CFLAGS += -Werror -Wshadow -Wno-unused-result
 CFLAGS += -I. -I$(XEN_ROOT)/tools/libxc -include $(XEN_ROOT)/tools/config.h -I$(XEN_ROOT)/tools
 CFLAGS += $(CFLAGS_libxentoollog) $(CFLAGS_libxenctrl) $(CFLAGS_libguest) $(CFLAGS_libxenstore)
-CFLAGS += -D_GNU_SOURCE -D_BSD_SOURCE -DXC_WANT_COMPAT_MAP_FOREIGN_API
+CFLAGS += -D_GNU_SOURCE -DXC_WANT_COMPAT_MAP_FOREIGN_API
 CFLAGS += $(CFLAGS_libxentoolcore)
 
 PROGRAMS := xenguest

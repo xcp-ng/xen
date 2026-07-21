@@ -246,6 +246,7 @@ void do_cmd_set_args(emp_call_args *args)
     const char *val;
     int bad = 0;
     int i;
+    json_object_iter iter;
 
     if ( jobj == NULL )
     {
@@ -254,19 +255,19 @@ void do_cmd_set_args(emp_call_args *args)
         return;
     }
 
-    json_object_object_foreach(jobj, s_key, jval)
+    json_object_object_foreachC(jobj, iter)
     {
-        if ( json_object_get_type(jval) != json_type_string )
+        if ( json_object_get_type(iter.val) != json_type_string )
         {
-            xg_err("expecting only string arguments.  (%s)", s_key);
+            xg_err("expecting only string arguments.  (%s)", iter.key);
             bad = 1;
             continue;
         }
-        val = json_object_get_string(jval);
+        val = json_object_get_string(iter.val);
 
         for (i = 0; setable_args[i].name != NULL; i++)
         {
-            if ( strcmp(setable_args[i].name, s_key) == 0 )
+            if ( strcmp(setable_args[i].name, iter.key) == 0 )
             {
                 switch (setable_args[i].atype)
                 {
@@ -274,7 +275,7 @@ void do_cmd_set_args(emp_call_args *args)
                     ival = strtol(val, &str_end, 10);
                     if ( *str_end != '\0' )
                     {
-                        xg_err("Bad args %s = %s", s_key, val);
+                        xg_err("Bad args %s = %s", iter.key, val);
                         bad = 1;
                     }
                     else
@@ -292,7 +293,7 @@ void do_cmd_set_args(emp_call_args *args)
                         *(setable_args[i].a_int) = 0;
                     else
                     {
-                        xg_err("Bad args %s = %s", s_key, val);
+                        xg_err("Bad args %s = %s", iter.key, val);
                         bad = 1;
                     }
                     break;
@@ -302,7 +303,7 @@ void do_cmd_set_args(emp_call_args *args)
         }
         if ( setable_args[i].name == NULL )
         {
-            xg_err("Unknown arg: %s", s_key);
+            xg_err("Unknown arg: %s", iter.key);
             bad = 1;
         }
     }

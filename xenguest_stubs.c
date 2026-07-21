@@ -27,6 +27,7 @@
 #include <xenguest.h>
 #include <xenstore.h>
 #include <xc_dom.h>
+#include <xen-tools/libs.h>
 #include <xen/hvm/hvm_info_table.h>
 #include <xen/hvm/hvm_xs_strings.h>
 #include <xen/hvm/params.h>
@@ -50,14 +51,14 @@ char *pci_passthrough_sbdf_list = NULL;
 
 static void failwith_oss_xc(char *fct)
 {
-    char buf[80];
+    char buf[1030];
     const xc_error *error;
 
     error = xc_get_last_error(xch);
     if (error->code == XC_ERROR_NONE)
-        snprintf(buf, 80, "%s: [%d] %s", fct, errno, strerror(errno));
+        snprintf(buf, ARRAY_SIZE(buf), "%s: [%d] %s", fct, errno, strerror(errno));
     else
-        snprintf(buf, 80, "%s: [%d] %s", fct, error->code, error->message);
+        snprintf(buf, ARRAY_SIZE(buf), "%s: [%d] %s", fct, error->code, error->message);
     xc_clear_last_error(xch);
     xg_err("xenguest: %s\n", buf);
     exit(1);
