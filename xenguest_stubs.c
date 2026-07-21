@@ -82,6 +82,7 @@ struct flags {
     int viridian_apic_assist;
     int viridian_crash_ctl;
     int viridian_stimer;
+    int viridian_hcall_ipi;
     int pae;
     int acpi;
     int apic;
@@ -439,10 +440,10 @@ static void get_flags(struct flags *f)
             f->nomigrate, f->timeoffset);
     xg_info("viridian: %d, time_ref_count: %d, reference_tsc: %d "
             "hcall_remote_tlb_flush: %d apic_assist: %d "
-            "crash_ctl: %d stimer %d\n",
+            "crash_ctl: %d stimer: %d hcall_ipi: %d\n",
             f->viridian, f->viridian_time_ref_count, f->viridian_reference_tsc,
             f->viridian_hcall_remote_tlb_flush, f->viridian_apic_assist,
-            f->viridian_crash_ctl, f->viridian_stimer);
+            f->viridian_crash_ctl, f->viridian_stimer, f->viridian_hcall_ipi);
 
     for (n = 0; n < f->vcpus; n++){
         xg_info("vcpu/%d/affinity:%s\n", n, (f->vcpu_affinity[n])?f->vcpu_affinity[n]:"unset");
@@ -673,6 +674,11 @@ static void hvm_set_viridian_features(struct flags *f)
     if (f->viridian_stimer) {
         xg_info("+ stimer\n");
         feature_mask |= HVMPV_synic | HVMPV_stimer;
+    }
+
+    if (f->viridian_hcall_ipi) {
+        xg_info("+ hcall_ipi\n");
+        feature_mask |= HVMPV_hcall_ipi;
     }
 
     xc_set_hvm_param(xch, domid, HVM_PARAM_VIRIDIAN, feature_mask);
