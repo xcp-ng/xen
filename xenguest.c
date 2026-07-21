@@ -186,8 +186,8 @@ static void progressfn(struct xentoollog_logger *logger,
 
     send_emu_progress(done, total);
 
-    if ( (( done == 0 || done == total ) && (time_delta > 1UL * 500 * 1000 ))
-         || (time_delta > 5UL * 1000 * 1000) )
+    if ( (time_delta > SEC(5)) ||
+         ((done == 0 || done == total) && (time_delta > MSEC(500))) )
     {
         if ( done == 0 && total == 0 )
             xg_info("progress: %s\n", doing_what);
@@ -369,23 +369,10 @@ static void parse_options(int argc, char *const argv[])
 
         case XG_OPT_SUPPORTS:
             if ( !strcmp("migration-v2", optarg) )
-            {
-                if ( getenv("XG_MIGRATION_V2") )
-                {
-                    printf("true\n");
-                    exit(0);
-                }
-                else
-                {
-                    printf("false\n");
-                    exit(0);
-                }
-            }
+                printf("true\n");
             else
-            {
                 printf("false\n");
-                exit(0);
-            }
+            exit(0);
             break;
 
         case XG_OPT_PCI_PASSTHROUGH:
@@ -451,14 +438,14 @@ static void write_status(unsigned long store_mfn, unsigned long console_mfn,
         xg_err("No control fd to write success to\n");
 }
 
-static void do_save(bool is_hvm)
+static void do_save(void)
 {
     if (domid == -1 || opt_fd == -1) {
         xg_err("xenguest: missing command line options\n");
         exit(1);
     }
 
-    stub_xc_domain_save(opt_fd, opt_flags, is_hvm);
+    stub_xc_domain_save(opt_fd, opt_flags);
     write_status(0, 0, NULL);
 }
 
@@ -603,9 +590,6 @@ int main(int argc, char * const argv[])
     char *cmdline = NULL;
     static xentoollog_logger logger = { logfn, progressfn, NULL };
 
-    /* Force migration v2 all the time. */
-    setenv("XG_MIGRATION_V2", "", 1);
-
     {   /* Conjoin the command line into a single string for logging */
         size_t sum, s;
         int i;
@@ -713,7 +697,7 @@ int main(int argc, char * const argv[])
 
     case XG_MODE_SAVE:
     case XG_MODE_HVM_SAVE:
-        do_save(opt_mode == XG_MODE_HVM_SAVE);
+        do_save();
         break;
 
     case XG_MODE_RESTORE:

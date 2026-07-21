@@ -39,9 +39,9 @@ void send_emu_progress(unsigned long done, unsigned long total)
         {
             lastprog = curtime;
         }
-        else if ( ts_delta_us(&curtime, &lastprog) > 1UL * 500 * 1000 )
+        else if ( ts_delta_us(&curtime, &lastprog) > MSEC(500) )
         {
-            /* Don't send dirty_conut, is out of date */
+            /* Don't send dirty_count, is out of date */
             emp_send_event_migrate_progress(progress_cli, last_sent + done, -1, last_iter);
             lastprog = curtime;
         }
@@ -142,7 +142,7 @@ static void do_migrate_live(emp_call_args *args)
 
     emp_send_return(args->cli, NULL);
 
-    emu_stub_xc_domain_save(stream_fd, (void*) &args->cli, XCFLAGS_LIVE, !pv_mode);
+    emu_stub_xc_domain_save(stream_fd, &args->cli, XCFLAGS_LIVE);
     xg_info("Finished, send complete");
     if ( progress_cli.num >= 0 )
         emp_send_event_migrate_completed(progress_cli, migration_success);
@@ -158,7 +158,7 @@ static void do_migrate_nonlive(emp_call_args *args)
 
     emp_send_return(args->cli, NULL);
 
-    emu_stub_xc_domain_save(stream_fd, (void*) &args->cli, 0, !pv_mode);
+    emu_stub_xc_domain_save(stream_fd, &args->cli, 0);
     xg_info("Finished, send complete");
     emp_send_event_migrate_completed(args->cli, migration_success);
 
@@ -336,53 +336,32 @@ static void emp_log(enum emp_log_level level, const char *msg)
         xg_info("libempserver:debug: %s", msg);
 }
 
-#define EMU_HOME     "/var/xen/xenguest"
-#define CONTROL_PATH "%s/%d/control"
+#define EMU_NAME     "xenguest"
 
 void emp_do_listen(void)
 {
     struct emp_sock_inf *cs_inf;
     int rc;
-    char *fname;
-    char *path;
+    char fname[PATH_MAX];
     int r;
     struct timespec act_time;
 
     emp_set_log_cb(emp_log);
 
-    r = mkdir(EMU_HOME, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
-    if ( r != 0 && errno != EEXIST )
-    {
-        xg_err("Couldn't create directory, %d", errno);
-        return;
-    }
-
-    r = asprintf(&fname, CONTROL_PATH, EMU_HOME, domid);
+    r = emp_get_default_path(fname, sizeof(fname), EMU_NAME, domid);
     if ( r < 0 )
     {
-        xg_err("no memory (fname)");
+        xg_err("Failed to get control path. err=%d", errno);
         return;
     }
 
-    path = strdup(fname);
-    if ( path == NULL )
+    if (r > (int) sizeof(fname))
     {
-        xg_err("no memory (path)");
-        free(fname);
-        return;
-    }
-
-    r = mkdir(dirname(path), S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
-    free(path);
-    if ( r != 0 && errno != EEXIST )
-    {
-        xg_err("could not make directory, %d", errno);
-        free(fname);
+        xg_err("Control path too long.");
         return;
     }
 
     r = emp_sock_init(fname, &cs_inf, actions);
-    free(fname);
     if ( r )
     {
         xg_err("control socket failed");
@@ -416,10 +395,11 @@ void emp_do_listen(void)
         {
            struct timespec cur_time;
            uint64_t timediff;
-           clock_gettime(CLOCK_MONOTONIC, &cur_time);
 
+           clock_gettime(CLOCK_MONOTONIC, &cur_time);
            timediff = ts_delta_us(&cur_time, &act_time);
-           if ( timediff > (COMMAND_TIMEOUT * 1000000) )
+
+           if ( timediff > SEC(COMMAND_TIMEOUT) )
            {
                xg_err("Control timeout");
                abort_all();
@@ -441,4 +421,5 @@ void emp_do_listen(void)
     }
     /* wait for any threads to finish */
     emp_sock_close(&cs_inf);
+    unlink(fname);
 }

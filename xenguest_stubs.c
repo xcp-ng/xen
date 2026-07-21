@@ -21,7 +21,6 @@
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <fcntl.h>
 #include <unistd.h>
 
 #include <xenctrl.h>
@@ -310,7 +309,8 @@ int construct_cpuid_policy(const struct flags *f, bool hvm)
     if ( f->nomigrate && test_bit(X86_FEATURE_ITSC, host_featureset) )
         set_bit(X86_FEATURE_ITSC, featureset);
 
-    rc = xc_cpuid_apply_policy(xch, domid, featureset, nr_features);
+    rc = xc_cpuid_apply_policy(xch, domid, featureset, nr_features,
+                               f->pae, f->cores_per_socket);
 
  out:
     free(featureset);
@@ -403,9 +403,26 @@ static void get_flags(struct flags *f)
     f->apic     = xenstore_get("platform/apic");
     f->pae      = xenstore_get("platform/pae");
     f->tsc_mode = xenstore_get("platform/tsc_mode");
-    f->cores_per_socket = xenstore_get("platform/cores-per-socket");
     f->x87_fip_width = xenstore_get("platform/x87-fip-width");
     f->nomigrate = xenstore_get("platform/nomigrate");
+
+    if ( f->dominfo.hvm )
+    {
+        unsigned int cps = xenstore_get("platform/cores-per-socket");
+
+        if ( cps && (f->vcpus % cps) != 0 )
+        {
+            xg_err("Bad cores/socket setting: %u (nr vcpus %u)\n",
+                   cps, f->vcpus);
+            exit(1);
+        }
+
+        /*
+         * Must remain 0 for compatiblity with PV guests, which previously
+         * ignores their cores-per-socket setting.
+         */
+        f->cores_per_socket = cps;
+    }
 
     /*
      * Follow 'nested-virt' if present.  Fall back to checking
@@ -476,45 +493,6 @@ static void free_flags(struct flags *f)
     for ( n = 0; n < f->vcpus; ++n )
         free(f->vcpu_affinity[n]);
     free(f->vcpu_affinity);
-}
-
-/* Wait for IOMMU setup to complete */
-static void wait_for_pv_iommu(void)
-{
-    int fd;
-
-    fd = open("/sys/kernel/pv_iommu_ready", O_RDONLY);
-    if ( fd < 0 )
-    {
-        xg_err("Error: unable to check PV-IOMMU state\n");
-        exit(1);
-    }
-
-    /*
-     * The node does not have poll support, so we need to keep
-     * reading it.
-     */
-    for (;;)
-    {
-        char buf;
-        int rc = pread(fd, &buf, sizeof(buf), 0);
-
-        if ( rc <= 0 )
-        {
-            xg_err("Error: failed to get PV-IOMMU state\n");
-            exit(1);
-        }
-
-        if ( buf == '1' )
-            break;
-
-        xg_info("Waiting for PV-IOMMU...\n");
-        sleep(1);
-    }
-
-    xg_info("PV-IOMMU is ready\n");
-
-    close(fd);
 }
 
 static void configure_vcpus(struct flags *f){
@@ -953,20 +931,6 @@ static int hvm_build_set_params(int store_evtchn, unsigned long *store_mfn,
             xc_hvm_param_set(xch, domid, HVM_PARAM_X87_FIP_WIDTH, f->x87_fip_width);
     }
 
-    if ( f->cores_per_socket > 0 )
-        rc = xc_domain_set_cores_per_socket(xch, domid, f->cores_per_socket);
-
-    if ( rc )
-    {
-        if ( errno == ENOSYS )
-        {
-            rc = 0;
-            xg_info("XEN_DOMCTL_set_cores_per_socket not implemented - skipping");
-        }
-        else
-            failwith_oss_xc("xc_domain_set_cores_per_socket");
-    }
-
     rc = xc_domain_set_time_offset(xch, domid, f->timeoffset);
 
     return rc;
@@ -1166,6 +1130,8 @@ const char * parse_pci_sbdf(char *s, unsigned int *seg_p,
 
 #define MAX_RMRR_DEVICES E820MAX
 #define ALLOW_MEMORY_RELOCATE 1
+#define VRAM_RESERVED_ADDR_INIT 0xfb000000lu
+#define VRAM_RESERVED_SIZE 0x1000000lu
 
 int hvm_build_setup_mem(struct xc_dom_image *dom, uint64_t max_mem_mib,
                         uint64_t max_start_mib)
@@ -1287,7 +1253,7 @@ int hvm_build_setup_mem(struct xc_dom_image *dom, uint64_t max_mem_mib,
     /* RDM mapping */
     for (i = 0; i < nr_rmrr_devs; i++)
     {
-        for (j = 0; j < nr_rdm_entries[i] && nr < E820MAX; j++)
+        for (j = 0; j < nr_rdm_entries[i] && nr < E820MAX - 2; j++)
         {
             e820[nr].addr = xrdm[i][j].start_pfn << XC_PAGE_SHIFT;
             e820[nr].size = xrdm[i][j].nr_pages << XC_PAGE_SHIFT;
@@ -1301,7 +1267,7 @@ int hvm_build_setup_mem(struct xc_dom_image *dom, uint64_t max_mem_mib,
         }
         free(xrdm[i]);
     }
-    if ( nr == E820MAX )
+    if ( nr == E820MAX - 2 )
     {
         xg_err("Error: too many E820 reserved entries for domain\n");
         exit(1);
@@ -1318,6 +1284,40 @@ int hvm_build_setup_mem(struct xc_dom_image *dom, uint64_t max_mem_mib,
         e820[nr].size = highmem_end - e820[nr].addr;
         e820[nr].type = E820_RAM;
         nr++;
+    }
+
+    /* Select VRAM reserved region for vGPU within MMIO hole */
+    if ( opt_vgpu )
+    {
+        uint64_t vram_reserved_addr = VRAM_RESERVED_ADDR_INIT;
+
+        while ( vram_reserved_addr >= mmio_start )
+        {
+            for ( i = 0; i < nr; i++ )
+                if ( (vram_reserved_addr + VRAM_RESERVED_SIZE > e820[i].addr) &&
+                     (vram_reserved_addr < e820[i].addr + e820[i].size) )
+                    break;
+            if ( i == nr )
+                break;
+            vram_reserved_addr -= VRAM_RESERVED_SIZE;
+        }
+        if ( vram_reserved_addr < mmio_start )
+        {
+            xg_err("Error: failed to allocate VRAM reserved region\n");
+            exit(1);
+        }
+
+        e820[nr].addr = vram_reserved_addr;
+        e820[nr].size = VRAM_RESERVED_SIZE;
+        e820[nr].type = E820_RESERVED;
+        nr++;
+
+        xg_info("Reserve VRAM region at 0x%lx size 0x%lx for vGPU\n",
+                vram_reserved_addr, VRAM_RESERVED_SIZE);
+        /* Put VRAM reserved region address and size to Xenstore so we could
+         * read it later from DEMU */
+        xenstore_putsv("vm-data/vram-reserved-addr", "%lx", vram_reserved_addr);
+        xenstore_putsv("vm-data/vram-reserved-size", "%lu", VRAM_RESERVED_SIZE);
     }
 
     dom->lowmem_end = lowmem_end;
@@ -1486,9 +1486,6 @@ int stub_xc_hvm_build(int mem_max_mib, int mem_start_mib,
     struct flags f = {};
     struct xc_dom_image *dom;
 
-    if ( !is_pvh && opt_vgpu )
-        wait_for_pv_iommu();
-
     get_flags(&f);
 
     hvm_safety_check(&f, mem_start_mib < mem_max_mib);
@@ -1589,30 +1586,15 @@ static int switch_qemu_logdirty(uint32_t _domid, unsigned enable, void *_data)
     return 0;
 }
 
-void migration_safety_checks(void)
+static void migration_safety_checks(void)
 {
-    bool migration_disabled;
-    int ret;
-
     if ( force )
     {
         xg_info("--force in effect - skipping safety checks\n");
         return;
     }
 
-    ret = xc_domain_query_disable_migrate(xch, domid, &migration_disabled);
-    if ( ret )
-    {
-        if ( errno == ENOSYS )
-        {
-            migration_disabled = false;
-            xg_info("XEN_DOMCTL_query_disable_migrate not implemented - skipping");
-        }
-        else
-            failwith_oss_xc("xc_domain_query_disable_migrate");
-    }
-
-    if ( migration_disabled )
+    if ( xenstore_get("platform/nomigrate") )
     {
         xg_err("d%d is flagged as not being mobile\n", domid);
         exit(1);
@@ -1621,8 +1603,7 @@ void migration_safety_checks(void)
 
 #define GENERATION_ID_ADDRESS "hvmloader/generation-id-address"
 
-int emu_stub_xc_domain_save(int fd, void* data,
-                        int flags, int hvm)
+int emu_stub_xc_domain_save(int fd, void *data, int flags)
 {
     int r;
     struct save_callbacks callbacks =
@@ -1635,15 +1616,14 @@ int emu_stub_xc_domain_save(int fd, void* data,
 
     migration_safety_checks();
 
-    r = xc_domain_save(xch, fd, domid,
-                       flags, &callbacks, hvm, 0, -1);
+    r = xc_domain_save(xch, fd, domid, flags, &callbacks, XC_STREAM_PLAIN, -1);
     if (r)
         failwith_oss_xc("xc_domain_save");
 
     return 0;
 }
 
-int stub_xc_domain_save(int fd, int flags, int hvm)
+int stub_xc_domain_save(int fd, int flags)
 {
     int r;
     struct save_callbacks callbacks =
@@ -1655,8 +1635,7 @@ int stub_xc_domain_save(int fd, int flags, int hvm)
 
     migration_safety_checks();
 
-    r = xc_domain_save(xch, fd, domid,
-                       flags, &callbacks, hvm, 0, -1);
+    r = xc_domain_save(xch, fd, domid, flags, &callbacks, XC_STREAM_PLAIN, -1);
     if (r)
         failwith_oss_xc("xc_domain_save");
 
@@ -1740,27 +1719,11 @@ int stub_xc_domain_restore(int fd, int store_evtchn, int console_evtchn,
     int r = 0;
     struct flags f = {};
 
-    if (opt_vgpu)
-        wait_for_pv_iommu();
-
     get_flags(&f);
 
     if ( hvm )
     {
         xc_set_hvm_param(xch, domid, HVM_PARAM_HPET_ENABLED, f.hpet);
-        if ( f.cores_per_socket > 0 )
-            r = xc_domain_set_cores_per_socket(xch, domid, f.cores_per_socket);
-
-        if ( r )
-        {
-            if ( errno == ENOSYS )
-            {
-                r = 0;
-                xg_info("XEN_DOMCTL_set_cores_per_socket not implemented - skipping");
-            }
-            else
-                failwith_oss_xc("xc_domain_set_cores_per_socket");
-        }
 
         r = xc_domain_set_time_offset(xch, domid, f.timeoffset);
 
@@ -1773,7 +1736,7 @@ int stub_xc_domain_restore(int fd, int store_evtchn, int console_evtchn,
     r = xc_domain_restore(xch, fd, domid,
                           store_evtchn, store_mfn, 0,
                           console_evtchn, console_mfn, 0,
-                          hvm, f.pae, 0, NULL, -1);
+                          XC_STREAM_PLAIN, NULL, -1);
     if ( r )
         failwith_oss_xc("xc_domain_restore");
     /*

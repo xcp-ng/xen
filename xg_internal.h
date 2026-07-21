@@ -70,9 +70,8 @@ int stub_xc_hvm_build(int mem_max_mib, int mem_start_mib,
                       int console_evtchn, int console_domid,
                       unsigned long *store_mfn, unsigned long *console_mfn,
                       bool is_pvh);
-int stub_xc_domain_save(int fd, int flags, int hvm);
-int emu_stub_xc_domain_save(int fd, void *data,
-                            int flags, int hvm);
+int stub_xc_domain_save(int fd, int flags);
+int emu_stub_xc_domain_save(int fd, void *data, int flags);
 
 int stub_xc_domain_restore(int fd, int store_evtchn, int console_evtchn,
                            int hvm,
@@ -96,13 +95,17 @@ static inline uint64_t tv_delta_us(const struct timeval *new,
             (new->tv_usec - old->tv_usec));
 }
 
-/* Calcluate the difference between two timevals, in microseconds. */
+/* Calcluate the difference between two timespecs, in microseconds. */
 static inline uint64_t ts_delta_us(const struct timespec *new,
                                    const struct timespec *old)
 {
     return (((new->tv_sec - old->tv_sec)*1000000) +
             ((new->tv_nsec - old->tv_nsec)/1000));
 }
+
+/* Seconds and milliseconds expressed as microseconds. */
+#define SEC(s)  ((s) * 1000ull * 1000)
+#define MSEC(s) ((s) * 1000ull)
 
 int xenguest_precopy_policy(struct precopy_stats stats, void *user);
 void emp_do_listen(void);
