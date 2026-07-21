@@ -299,6 +299,16 @@ static int construct_cpuid_policy(const struct flags *f, bool hvm, bool restore)
     if ( get_vm_featureset(hvm) )
         goto out;
 
+    /*
+     * If nested-virt is opted in to, set both VMX and SVM.  One (or
+     * both) will be filtered out later depending on hardware support.
+     */
+    if ( f->nested_virt )
+    {
+        set_bit(X86_FEATURE_VMX, featureset);
+        set_bit(X86_FEATURE_SVM, featureset);
+    }
+
     if ( !f->nx )
         clear_bit(X86_FEATURE_NX, featureset);
 
