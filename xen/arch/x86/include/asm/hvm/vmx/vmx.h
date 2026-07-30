@@ -460,19 +460,16 @@ static inline void vpid_sync_vcpu_gva(struct vcpu *v, unsigned long gva)
      * If individual address invalidation is not supported, we escalate to
      * use single context invalidation.
      */
-    if ( likely(cpu_has_vmx_vpid_invvpid_individual_addr) )
-        goto execute_invvpid;
-
-    type = INVVPID_SINGLE_CONTEXT;
+    if ( unlikely(!cpu_has_vmx_vpid_invvpid_individual_addr) )
+        type = INVVPID_SINGLE_CONTEXT;
 
     /*
      * If single context invalidation is not supported, we escalate to
      * use all context invalidation.
      */
-    if ( !cpu_has_vmx_vpid_invvpid_single_context )
+    if ( unlikely(!cpu_has_vmx_vpid_invvpid_single_context) )
         type = INVVPID_ALL_CONTEXT;
 
-execute_invvpid:
     __invvpid(type, v->arch.hvm.n1asid.asid, (u64)gva);
 }
 
