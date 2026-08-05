@@ -565,7 +565,8 @@ struct vmcb_struct {
     u8 _cpl;                    /* cleanbit 8 */
     u32 res12;
     u64 _efer;                  /* offset 0x400 + 0xD0 - cleanbit 5 */
-    u64 res13[14];
+    u64 res13[13];
+    u64 xss;
     u64 _cr4;                   /* offset 0x400 + 0x148 - cleanbit 5 */
     u64 _cr3;                   /* cleanbit 5 */
     u64 _cr0;                   /* cleanbit 5 */

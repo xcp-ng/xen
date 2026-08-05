@@ -43,6 +43,8 @@
 
 #include <public/sched.h>
 
+#include "asm/prot-key.h"
+#include "asm/xstate.h"
 #include "nestedhvm.h"
 #include "svm.h"
 #include "vmcb.h"
@@ -2256,6 +2258,30 @@ svm_vmexit_do_vmsave(struct vmcb_struct *vmcb,
     svm_vmsave_pa(page_to_maddr(page));
     put_page(page);
     __update_guest_eip(regs, inst_len);
+
+    if ( is_sev_es_domain(v->domain) )
+    {
+        /*
+         * All host state for SEV-ES guests is categorized into three swap types
+         * based on how it is handled by hardware during a world switch:
+         *
+         * A: VMRUN:   Host state saved in host save area
+         *    VMEXIT:  Host state loaded from host save area
+         *
+         * B: VMRUN:   Host state _NOT_ saved in host save area
+         *    VMEXIT:  Host state loaded from host save area
+         *
+         * C: VMRUN:   Host state _NOT_ saved in host save area
+         *    VMEXIT:  Host state initialized to default(reset) values
+         *
+         * Manually save type-B state, i.e. state that is loaded by VMEXIT but
+         * isn't saved by VMRUN, that isn't already saved by VMSAVE (performed
+         * by common SVM code).
+         */
+        vmcb->vmsa_regs.xcr0 = get_xcr0();
+        vmcb->vmsa_regs.pkru = rdpkru();
+        vmcb->xss = get_msr_xss();
+    }
 }
 
 static int svm_is_erratum_383(struct cpu_user_regs *regs)

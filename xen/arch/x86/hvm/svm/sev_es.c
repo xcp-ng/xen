@@ -21,6 +21,195 @@
 
 #include "vmcb.h"
 #include "sev_es.h"
+#include "xen/coco.h"
+
+#define GHCB_VALID_BIT(field) \
+({ \
+    const unsigned long _offset_bit = offsetof(struct ghcb_save_area, field) / 8; \
+    BUILD_BUG_ON(_offset_bit >= 128); \
+    _offset_bit; \
+})
+
+#define GHCB_TEST_VALID(ghcb, field) \
+    test_bit(GHCB_VALID_BIT(field), (ghcb)->save.valid_bitmap)
+
+#define GHCB_SET_VALID(ghcb, field) \
+    __set_bit(GHCB_VALID_BIT(field), (ghcb)->save.valid_bitmap)
+
+#define GHCB_SET_FIELD(ghcb, field, value) do { \
+    GHCB_SET_VALID(ghcb, field); \
+    ghcb->save.field = value; \
+} while (0);
+
+#define GHCB_CLEAR_VALID(ghcb) \
+    bitmap_clear((ghcb)->save.valid_bitmap, 0, 128)
+
+static int sev_es_update_vmsa(struct vcpu *v, gfn_t vmsa_gfn, bool start)
+{
+    p2m_type_t p2mt;
+    struct page_info *vmsa_page;
+    struct svm_vcpu *svm_v = &v->arch.hvm.svm;
+    /* TODO: This needs some work to make it actually safe. */
+
+    gdprintk(XENLOG_DEBUG, "sev-es: GHCB AP Create v%d, vmsa=%"PRI_gfn", start=%d\n",
+             v->vcpu_id, gfn_x(vmsa_gfn), start);
+
+    /* If the vCPU is online, bail out. */
+    if ( v->is_initialised && is_vcpu_online(v) )
+    {
+        gdprintk(XENLOG_DEBUG, "sev-es: GHCB AP Create v%d: vCPU is already up\n", v->vcpu_id);
+        return -EBUSY;
+    }
+
+    /* Get the VMSA page */
+    vmsa_page = get_page_from_gfn(v->domain, gfn_x(vmsa_gfn), &p2mt, P2M_ALLOC);
+
+    if ( p2mt != p2m_ram_rw )
+    {
+        gprintk(XENLOG_WARNING,
+                "sev-es: Invalid VMSA page type: gfn=%"PRI_xen_pfn", %d != %d\n",
+                gfn_x(vmsa_gfn), p2mt, p2m_ram_rw);
+
+        if ( vmsa_page )
+            put_page(vmsa_page);
+        return -EINVAL;
+    }
+
+    /* If the vCPU already has a VMSA page, unregister it. */
+    if ( svm_v->sev.vmsa_page )
+    {
+        /* TODO: VMSA page is not always get_page()'d */
+        //struct page_info *old_vmsa_page = svm_v->sev.vmsa_page;
+        svm_v->vmcb->vmsa_pa = 0;
+        svm_v->sev.vmsa_page = 0;
+        smp_wmb();
+        //put_page(old_vmsa_page);
+    }
+
+    /* Register the new VMSA page */
+    svm_v->sev.vmsa_page = vmsa_page;
+    svm_v->vmcb->vmsa_pa = page_to_maddr(vmsa_page);
+    smp_wmb();
+
+    /* If the CPU hasn't been initialized, initialize it */
+    if ( !v->is_initialised )
+    {
+        paging_update_paging_modes(v);
+        v->is_initialised = 1;
+        set_bit(_VPF_down, &v->pause_flags);
+    }
+
+    if ( start )
+    {
+        clear_bit(_VPF_down, &v->pause_flags);
+        vcpu_wake(v);
+    }
+
+    return 0;
+}
+
+static void ghcb_ap_creation(struct vcpu *v, struct ghcb *ghcb)
+{
+    /*
+     * On Xen, for SMP implementation purposes, we implement GHCB v2 "SNP AP Creation"
+     * for SEV-ES guests; in this case, rules slightly deviate from specification :
+     *  - there is no need to transition the VMSA page with RMPADJUST (since this
+     *    mechanism doesn't exist in SEV-ES), any "ram" guest page is accepted
+     *  - there is no VMPL support
+     *  - SEV_FEATURES is restricted to the ones available to SEV-ES guests (TODO)
+     */
+    struct domain *currd = v->domain;
+    struct vcpu *candidate_v, *target_v = NULL;
+    /*
+     * SW_EXITINFO1[15:0] = Command
+     * SW_EXITINFO1[19:16] = VMPL
+     * SW_EXITINFO1[31:20] = 0
+     * SW_EXITINFO1[63:32] = APIC
+     */
+    union snp_ap_creation_param {
+        uint64_t raw;
+        struct {
+            uint16_t cmd;
+            unsigned int vmpl:4;
+            unsigned int mbz:12;
+            uint32_t apic_id;
+        };
+    };
+
+    uint64_t sev_features = ghcb->save.rax;
+    union snp_ap_creation_param param = { .raw = ghcb->save.sw_exitinfo1 };
+    uint64_t vmsa = ghcb->save.sw_exitinfo2;
+    smp_rmb();
+
+    if ( !GHCB_TEST_VALID(ghcb, rax) )
+        sev_features = 0;
+    
+    if ( param.mbz )
+    {
+        gdprintk(XENLOG_WARNING, "sev-es: MBZ bit set in SW_EXITINFO1 in AP creation\n");
+        GHCB_SET_FIELD(ghcb, sw_exitinfo1, 2); /* Malformed input */
+        GHCB_SET_FIELD(ghcb, sw_exitinfo2, 5); /* Invalid input */
+        return;
+    }
+
+    if ( sev_features )
+    {
+        gdprintk(XENLOG_WARNING, "sev-es: TODO: support for SEV_FEATURES\n");
+        GHCB_SET_FIELD(ghcb, sw_exitinfo1, 2); /* Malformed input */
+        GHCB_SET_FIELD(ghcb, sw_exitinfo2, 5); /* Invalid input */
+    }
+
+    if ( param.vmpl )
+    {
+        /* TODO: SEV-SNP VMPL support */
+        gdprintk(XENLOG_WARNING, "sev-es: Rejecting AP creation with VMPL > 0\n");
+        GHCB_SET_FIELD(ghcb, sw_exitinfo1, 2); /* Malformed input */
+        GHCB_SET_FIELD(ghcb, sw_exitinfo2, 5); /* Invalid input */
+        return;
+    }
+
+    /* Find the matching vCPU */
+    for_each_vcpu( currd, candidate_v )
+    {
+        gdprintk(XENLOG_DEBUG, "sev-es:- %d == %d?\n", VLAPIC_ID(vcpu_vlapic(candidate_v)), param.apic_id);
+        if ( VLAPIC_ID(vcpu_vlapic(candidate_v)) == param.apic_id )
+        {
+            target_v = candidate_v;
+            break;
+        }
+    }
+
+    if ( !target_v )
+    {
+        gdprintk(XENLOG_WARNING, "sev-es: Unknown APIC ID %"PRIu32"\n", param.apic_id);
+        /* No vCPU found. */
+        GHCB_SET_FIELD(ghcb, sw_exitinfo1, 2); /* Malformed input */
+        GHCB_SET_FIELD(ghcb, sw_exitinfo2, 5); /* Invalid input */
+        return;
+    }
+
+    switch ( param.cmd )
+    {
+        case 0: /* Create/add */
+        case 1: /* Create/add then run (VMPL) */
+            if ( sev_es_update_vmsa(target_v, gaddr_to_gfn(vmsa), param.cmd == 1) )
+            {
+                GHCB_SET_FIELD(ghcb, sw_exitinfo1, 2); /* Malformed input */
+                GHCB_SET_FIELD(ghcb, sw_exitinfo2, 5); /* Invalid input */
+            }
+            break;
+
+        case 2: /* Destroy/remove */
+            gprintk(XENLOG_WARNING, "sev-es: TODO: AP Creation cmd=%d\n", param.cmd);
+            GHCB_SET_FIELD(ghcb, sw_exitinfo1, 2); /* Malformed input */
+            GHCB_SET_FIELD(ghcb, sw_exitinfo2, 5); /* Invalid input */
+            return;
+    }
+
+    GHCB_SET_FIELD(ghcb, sw_exitinfo1, 0);
+    GHCB_SET_FIELD(ghcb, sw_exitinfo2, 0);
+    smp_wmb();
+}
 
 int sev_es_build_vmsa(struct vcpu *v)
 {
@@ -71,27 +260,6 @@ int sev_es_build_vmsa(struct vcpu *v)
 
     return 0;
 }
-
-#define GHCB_VALID_BIT(field) \
-({ \
-    const unsigned long _offset_bit = offsetof(struct ghcb_save_area, field) / 8; \
-    BUILD_BUG_ON(_offset_bit >= 128); \
-    _offset_bit; \
-})
-
-#define GHCB_TEST_VALID(ghcb, field) \
-    test_bit(GHCB_VALID_BIT(field), (ghcb)->save.valid_bitmap)
-
-#define GHCB_SET_VALID(ghcb, field) \
-    __set_bit(GHCB_VALID_BIT(field), (ghcb)->save.valid_bitmap)
-
-#define GHCB_SET_FIELD(ghcb, field, value) do { \
-    GHCB_SET_VALID(ghcb, field); \
-    ghcb->save.field = value; \
-} while (0);
-
-#define GHCB_CLEAR_VALID(ghcb) \
-    bitmap_clear((ghcb)->save.valid_bitmap, 0, 128)
 
 static void sev_es_ghcb_call(struct vcpu *v, struct ghcb *ghcb)
 {
@@ -267,6 +435,10 @@ static void sev_es_ghcb_call(struct vcpu *v, struct ghcb *ghcb)
         v->arch.hvm.svm.sev.in_nmi = false;
         GHCB_SET_FIELD(ghcb, sw_exitinfo1, 0);
         GHCB_SET_FIELD(ghcb, sw_exitinfo2, 0);
+        break;
+
+    case VMGEXIT_AP_CREATION:
+        ghcb_ap_creation(v, ghcb);
         break;
 
     default:
