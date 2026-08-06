@@ -1,0 +1,139 @@
+name: vcpu
+hypercall_index: 24
+
+subops:
+  initialise:
+    index: 0
+    input:
+      vcpuid: 2
+      context_gfn: 3
+    c_lang:
+      params:
+        vcpuid: uint32_t
+        context_gfn: uint64_t
+
+  up:
+    index: 1
+    input:
+      vcpuid: 2
+    c_lang:
+      params:
+        vcpuid: uint32_t
+
+  down:
+    index: 2
+    input:
+      vcpuid: 2
+    c_lang:
+      params:
+        vcpuid: uint32_t
+
+  is_up:
+    index: 3
+    input:
+      vcpuid: 2
+    c_lang:
+      params:
+        vcpuid: uint32_t
+
+  get_runstate_info:
+    index: 4
+    input:
+      vcpuid: 2
+    output:
+      state: 2
+      state_entry_time: 3
+      time[0]: 4
+      time[1]: 5
+      time[2]: 6
+      time[3]: 7
+    c_lang:
+      struct: vcpu_runstate_info
+      params:
+        vcpuid: uint32_t
+
+  register_runstate_phys_area:
+    index: 14
+    input:
+      vcpuid: 2
+      addr.p: 3
+    c_lang:
+      struct: vcpu_register_time_memory_area
+      params:
+        vcpuid: uint32_t
+
+  set_periodic_timer:
+    index: 6
+    input:
+      vcpuid: 2
+      period_ns: 3
+    c_lang:
+      struct: vcpu_set_periodic_timer
+      params:
+        vcpuid: uint32_t
+
+  stop_periodic_timer:
+    index: 7
+    input:
+      vcpuid: 2
+    c_lang:
+      params:
+        vcpuid: uint32_t
+  
+  set_singleshot_timer:
+    index: 8
+    input:
+      vcpuid: 2
+      timeout_abs_ns: 3
+      flags: 4
+    c_lang:
+      struct: vcpu_set_singleshot_timer
+      params:
+        vcpuid: uint32_t
+
+  stop_singleshot_timer:
+    index: 9
+    input:
+      vcpuid: 2
+    c_lang:
+      params:
+        vcpuid: uint32_t
+
+  register_vcpu_info:
+    index: 10
+    input:
+      vcpuid: 2
+      mfn: 3
+      offset: 4
+    c_lang:
+      struct: vcpu_register_vcpu_info
+      params:
+        vcpuid: uint32_t
+
+  send_nmi:
+    index: 11
+    input:
+      vcpuid: 2
+    c_lang:
+      params:
+        vcpuid: uint32_t
+
+  get_physid:
+    index: 12
+    input:
+      vcpuid: 2
+      phys_id: 3
+    c_lang:
+      struct: vcpu_get_physid
+      params:
+        vcpuid: uint32_t
+
+  register_vcpu_time_phys_area:
+    index: 15
+    input:
+      vcpuid: 2
+      addr.p: 3
+    c_lang:
+      struct: vcpu_register_time_memory_area
+      params:
+        vcpuid: uint32_t

@@ -1,0 +1,15 @@
+name: version
+hypercall_index: 17
+
+subops:
+  version:
+    index: 0
+
+  get_features:
+    index: 6
+    input:
+      submap_idx: 2
+    output:
+      submap: 3
+    c_lang:
+      struct: xen_feature_info

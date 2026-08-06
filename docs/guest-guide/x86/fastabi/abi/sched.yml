@@ -1,0 +1,48 @@
+name: sched
+hypercall_index: 29
+
+subops:
+  yield:
+    index: 0
+
+  block:
+    index: 1
+
+  shutdown:
+    index: 2
+    input:
+      reason: 2
+    c_lang:
+      struct: sched_shutdown
+
+  poll:
+    index: 3
+    input:
+      timeout: 2
+      port: 3
+    c_lang:
+      params:
+        timeout: uint64_t
+        port: evtchn_port_t
+
+  shutdown_code:
+    index: 5
+    input:
+      reason: 2
+    c_lang:
+      struct: sched_shutdown
+
+  watchdog:
+    index: 6
+    input:
+      id: 2
+      timeout: 3
+    c_lang:
+      struct: sched_watchdog
+
+  pin_override:
+    index: 7
+    input:
+      pcpu: 2
+    c_lang:
+      struct: sched_pin_override

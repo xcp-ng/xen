@@ -1,0 +1,130 @@
+name: event_channel
+hypercall_index: 32
+
+subops:
+  alloc_unbound:
+    index: 6
+    input:
+      dom: 2
+      remote_dom: 3
+    output:
+      port: 4
+    c_lang:
+      struct: evtchn_alloc_unbound
+
+  bind_interdomain:
+    index: 0
+    input:
+      remote_dom: 2
+      remote_port: 3
+    output:
+      local_port: 4
+    c_lang:
+      struct: evtchn_bind_interdomain
+
+  bind_virq:
+    index: 1
+    input:
+      virq: 2
+      vcpu: 3
+    output:
+      port: 4
+    c_lang:
+      struct: evtchn_bind_virq
+
+  bind_ipi:
+    index: 7
+    input:
+      vcpu: 2
+    output:
+      port: 4
+    c_lang:
+      struct: evtchn_bind_ipi
+
+  bind_pirq:
+    index: 2
+    input:
+      pirq: 2
+      flags: 3
+    output:
+      port: 4
+    c_lang:
+      struct: evtchn_bind_pirq
+  
+  close:
+    index: 3
+    input:
+      port: 2
+    c_lang:
+      struct: evtchn_close
+  
+  send:
+    index: 4
+    input:
+      port: 2
+    c_lang:
+      struct: evtchn_send
+
+  status:
+    index: 5
+    input:
+      dom: 2
+      port: 3
+    output:
+      status: 4
+      vcpu: 5
+      output1: 6
+      output2: 7
+    c_lang:
+      struct: evtchn_status
+      mapping:
+        output1: u._output1
+        output2: u._output2
+  
+  bind_vcpu:
+    index: 8
+    input:
+      vcpu: 2
+      port: 3
+    c_lang:
+      struct: evtchn_bind_vcpu
+  
+  unmask:
+    index: 9
+    input:
+      port: 2
+    c_lang:
+      struct: evtchn_unmask
+  
+  reset:
+    index: 10
+    input:
+      dom: 2
+    c_lang:
+      struct: evtchn_reset
+
+  init_control:
+    index: 11
+    input:
+      control_gfn: 2
+      offset: 3
+      vcpu: 4
+    output:
+      link_bits: 5
+    c_lang:
+      struct: evtchn_init_control
+  
+  expand_array:
+    index: 12
+    input:
+      array_gfn: 2
+    c_lang:
+      struct: evtchn_expand_array
+
+  set_priority:
+    index: 13
+    input:
+      port: 2
+      priority: 3
+    c_lang:
+      struct: evtchn_set_priority
