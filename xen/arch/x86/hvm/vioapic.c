@@ -748,3 +748,69 @@ void vioapic_deinit(struct domain *d)
 
     vioapic_free(d, d->arch.hvm.nr_vioapics);
 }
+
+void vioapic_dump(struct domain *d)
+{
+    struct hvm_irq *hvm_irq;
+    unsigned int i;
+
+    if ( !has_vioapic(d) || !d->arch.hvm.vioapic )
+        return;
+
+    hvm_irq = hvm_domain_irq(d);
+    if ( !hvm_irq )
+        return;
+
+    printk("VIOAPIC domain %u: nr %u\n",
+           d->domain_id,
+           d->arch.hvm.nr_vioapics);
+
+    for ( i = 0; i < d->arch.hvm.nr_vioapics; i++ )
+    {
+        const struct hvm_vioapic *vioapic = domain_vioapic(d, i);
+        unsigned int pin;
+
+        if ( !vioapic )
+            continue;
+
+        printk("    apic %u: id %u base %#" PRIx64 " ioregsel %#x"
+               " base_gsi %u pins %u\n",
+               i,
+               vioapic->id,
+               vioapic->base_address,
+               vioapic->ioregsel,
+               vioapic->base_gsi,
+               vioapic->nr_pins);
+
+        for ( pin = 0; pin < vioapic->nr_pins; pin++ )
+        {
+            union vioapic_redir_entry entry;
+            unsigned int gsi = vioapic->base_gsi + pin;
+            uint8_t assert_count = 0;
+
+            spin_lock(&d->arch.hvm.irq_lock);
+            entry = vioapic->redirtbl[pin];
+            if ( gsi < hvm_irq->nr_gsis )
+                assert_count = hvm_irq->gsi_assert_count[gsi];
+            spin_unlock(&d->arch.hvm.irq_lock);
+
+            printk("        pin %u: gsi %u rte %016" PRIx64
+                   " vector %#x delivery_mode %u dest_mode %u dest_id %#x\n",
+                   pin,
+                   gsi,
+                   entry.bits,
+                   entry.fields.vector,
+                   entry.fields.delivery_mode,
+                   entry.fields.dest_mode,
+                   entry.fields.dest_id);
+            printk("            delivery_status %u polarity %u remote_irr %u"
+                   " trig_mode %u mask %u gsi_assert_count %u\n",
+                   entry.fields.delivery_status,
+                   entry.fields.polarity,
+                   entry.fields.remote_irr,
+                   entry.fields.trig_mode,
+                   entry.fields.mask,
+                   assert_count);
+        }
+    }
+}
