@@ -73,6 +73,8 @@ struct flags {
     int viridian_crash_ctl;
     int viridian_stimer;
     int viridian_hcall_ipi;
+    int viridian_ex_processor_masks;
+    int viridian_no_vp_limit;
     int pae;
     int acpi;
     int apic;
@@ -377,7 +379,7 @@ static void get_flags(struct flags *f)
 {
     char *tmp;
     int n;
-    bool stimer_set;
+    bool stimer_set, ex_processor_masks_set, no_vp_limit_set;
 
     if ( xc_domain_getinfo_single(xch, domid, &f->dominfo) < 0 )
         failwith_oss_xc("xc_domain_getinfo");
@@ -400,6 +402,13 @@ static void get_flags(struct flags *f)
     f->viridian_apic_assist = xenstore_get("platform/viridian_apic_assist");
     f->viridian_crash_ctl = xenstore_get("platform/viridian_crash_ctl");
     f->viridian_stimer = xenstore_get_value(&stimer_set, "platform/viridian_stimer");
+    f->viridian_hcall_ipi = xenstore_get("platform/viridian_hcall_ipi");
+    f->viridian_ex_processor_masks =
+        xenstore_get_value(&ex_processor_masks_set,
+                           "platform/viridian_ex_processor_masks");
+    f->viridian_no_vp_limit =
+        xenstore_get_value(&no_vp_limit_set,
+                           "platform/viridian_no_vp_limit");
 
     /*
      * For vGPU-enabled VMs, it is unsafe to migrate VMs with time_ref_count
@@ -412,6 +421,20 @@ static void get_flags(struct flags *f)
     {
         xg_info("vgpu attached and stimer not set - defaulting to enabled.\n");
         f->viridian_stimer = 1;
+    }
+
+    if ( f->vcpus > 64 && !no_vp_limit_set )
+    {
+        xg_info("vcpus > 64 and no_vp_limit not set - enabling.\n");
+        f->viridian_no_vp_limit = 1;
+    }
+
+    if ( f->vcpus > 64 && !ex_processor_masks_set &&
+         (f->viridian_hcall_remote_tlb_flush || f->viridian_hcall_ipi) )
+    {
+        xg_info("vcpus > 64 and hcall_remote_tlb_flush and/or hcall_ipi enabled"
+                " - enabling ex_processor_masks.\n");
+        f->viridian_ex_processor_masks = 1;
     }
 
     f->apic     = xenstore_get("platform/apic");
@@ -490,10 +513,12 @@ static void get_flags(struct flags *f)
             f->nomigrate, f->timeoffset, f->mmio_size);
     xg_info("viridian: %d, time_ref_count: %d, reference_tsc: %d "
             "hcall_remote_tlb_flush: %d apic_assist: %d "
-            "crash_ctl: %d stimer: %d hcall_ipi: %d\n",
+            "crash_ctl: %d stimer: %d hcall_ipi: %d "
+            "ex_processor_masks: %d no_vp_limit: %d\n",
             f->viridian, f->viridian_time_ref_count, f->viridian_reference_tsc,
             f->viridian_hcall_remote_tlb_flush, f->viridian_apic_assist,
-            f->viridian_crash_ctl, f->viridian_stimer, f->viridian_hcall_ipi);
+            f->viridian_crash_ctl, f->viridian_stimer, f->viridian_hcall_ipi,
+            f->viridian_ex_processor_masks, f->viridian_no_vp_limit);
 
     for ( n = 0; n < f->vcpus; n++ )
         xg_info("vcpu/%d/affinity:%s\n",
@@ -897,6 +922,18 @@ static void hvm_set_viridian_features(struct flags *f)
     {
         xg_info("+ hcall_ipi\n");
         feature_mask |= HVMPV_hcall_ipi;
+    }
+
+    if ( f->viridian_ex_processor_masks )
+    {
+        xg_info("+ ex_processor_masks\n");
+        feature_mask |= HVMPV_ex_processor_masks;
+    }
+
+    if ( f->viridian_no_vp_limit )
+    {
+        xg_info("+ no_vp_limit\n");
+        feature_mask |= HVMPV_no_vp_limit;
     }
 
     xc_set_hvm_param(xch, domid, HVM_PARAM_VIRIDIAN, feature_mask);
