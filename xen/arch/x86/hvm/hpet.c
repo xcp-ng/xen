@@ -795,6 +795,121 @@ void hpet_reset(struct domain *d)
     hpet_set(domain_vhpet(d));
 }
 
+void hpet_dump(struct domain *d)
+{
+    HPETState *h;
+    struct pl_time *pl_time;
+    struct vcpu *v;
+    uint64_t guest_time;
+    uint64_t hpet_now;
+    s_time_t now = NOW();
+    unsigned int i;
+
+    if ( !has_vhpet(d) || !d->arch.hvm.pl_time )
+        return;
+
+    pl_time = d->arch.hvm.pl_time;
+    h = &pl_time->vhpet;
+
+    if ( !h->stime_freq || !(v = pt_global_vcpu_target(d)) )
+        return;
+
+    guest_time = hvm_get_guest_time(v) / STIME_PER_HPET_TICK;
+
+    read_lock(&h->lock);
+    hpet_now = hpet_read_maincounter(h, guest_time);
+
+    printk("HPET domain %u: freq %" PRIu64 " scale %" PRIu64
+           " limit %" PRIu64 " offset %" PRId64 "\n",
+           d->domain_id,
+           h->stime_freq,
+           h->hpet_to_ns_scale,
+           h->hpet_to_ns_limit,
+           (int64_t)h->mc_offset);
+    printk("    cap %08x.%08x config %#" PRIx64 " (%c%c) isr %" PRIu64
+           " mc64 %" PRIu64 "\n",
+           (uint32_t)(h->hpet.capability >> 32),
+           (uint32_t)h->hpet.capability,
+           h->hpet.config,
+           hpet_enabled(h) ? 'E' : '_',
+           h->hpet.config & HPET_CFG_LEGACY ? 'L' : '_',
+           h->hpet.isr,
+           h->hpet.mc64);
+
+    for ( i = 0; i < HPET_TIMER_NUM; i++ )
+    {
+        const struct periodic_time *pt = &h->pt[i];
+        struct periodic_time pt_snapshot;
+        struct vcpu *pt_vcpu;
+        uint64_t config = timer_config(h, i);
+
+        printk("    timer %u: config %#" PRIx64
+               " (cap %c%c%c set %c%c%c%c routecap %#" PRIx64
+               " route %" PRIu64 ")\n",
+               i,
+               config,
+               config & HPET_TN_PERIODIC_CAP ? 'P' : '_',
+               config & HPET_TN_64BIT_CAP ? '8' : '_',
+               config & HPET_TN_FSB_CAP ? 'F' : '_',
+               config & HPET_TN_ENABLE ? 'E' : '_',
+               config & HPET_TN_PERIODIC ? 'P' : '_',
+               config & HPET_TN_SETVAL ? 'S' : '_',
+               config & HPET_TN_32BIT ? '4' : '_',
+               (uint64_t)timer_int_route_cap(h, i),
+               timer_int_route(h, i));
+        printk("        cmp %" PRIu64 " fsb %" PRIu64 " period %" PRIu64
+               " cmp64 %" PRIu64 "\n",
+               h->hpet.timers[i].cmp,
+               h->hpet.timers[i].fsb,
+               h->hpet.period[i],
+               h->hpet.comparator64[i]);
+
+        read_lock(&pl_time->pt_migrate);
+        pt_vcpu = pt->vcpu;
+        if ( pt_vcpu )
+        {
+            spin_lock(&pt_vcpu->arch.hvm.tm_lock);
+            pt_snapshot = *pt;
+            spin_unlock(&pt_vcpu->arch.hvm.tm_lock);
+        }
+        read_unlock(&pl_time->pt_migrate);
+
+        if ( !pt_vcpu )
+        {
+            printk("        pt not initialized\n");
+            continue;
+        }
+
+        if ( timer_is_32bit(h, i) )
+            printk("        hpet_now %" PRIu64 " (%" PRIu32 ")\n",
+                   hpet_now,
+                   (uint32_t)hpet_now);
+        else
+            printk("        hpet_now %" PRIu64 "\n", hpet_now);
+
+        printk("        pt %c%c%c%c%c%c src %u irq %u pending %u"
+               " period %" PRIu64 "\n",
+               pt_snapshot.on_list ? 'L' : '_',
+               pt_snapshot.one_shot ? '1' : '_',
+               pt_snapshot.do_not_freeze ? 'F' : '_',
+               pt_snapshot.irq_issued ? 'I' : '_',
+               pt_snapshot.warned_timeout_too_short ? 'W' : '_',
+               pt_snapshot.level ? 'V' : '_',
+               pt_snapshot.source,
+               pt_snapshot.irq,
+               pt_snapshot.pending_intr_nr,
+               pt_snapshot.period);
+        printk("        sched %" PRI_stime " last %" PRIu64
+               " (now %" PRI_stime " delta %" PRI_stime ")\n",
+               pt_snapshot.scheduled,
+               pt_snapshot.last_plt_gtime,
+               now,
+               now - pt_snapshot.scheduled);
+    }
+
+    read_unlock(&h->lock);
+}
+
 /*
  * Local variables:
  * mode: C

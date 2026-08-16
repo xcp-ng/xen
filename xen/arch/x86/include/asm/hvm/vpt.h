@@ -201,5 +201,6 @@ int pmtimer_change_ioport(struct domain *d, uint64_t version);
 void hpet_init(struct domain *d);
 void hpet_deinit(struct domain *d);
 void hpet_reset(struct domain *d);
+void hpet_dump(struct domain *d);
 
 #endif /* __ASM_X86_HVM_VPT_H__ */

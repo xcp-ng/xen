@@ -52,6 +52,9 @@
 #include <asm/hvm/hvm.h>
 #include <asm/hvm/nestedhvm.h>
 #include <asm/hvm/support.h>
+#ifdef CONFIG_HVM
+#include <asm/hvm/vpt.h>
+#endif
 #include <asm/hvm/svm/svm.h>
 #include <asm/hvm/viridian.h>
 #include <asm/debugreg.h>
@@ -2481,6 +2484,11 @@ void cpuid_policy_updated(struct vcpu *v)
 void arch_dump_domain_info(struct domain *d)
 {
     paging_dump_domain_info(d);
+
+#ifdef CONFIG_HVM
+    if ( is_hvm_domain(d) )
+        hpet_dump(d);
+#endif
 }
 
 void arch_dump_vcpu_info(struct vcpu *v)
