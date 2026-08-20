@@ -4,8 +4,9 @@
  * Copyright (c) Vates SAS
  */
 
-#include <xen/config.h>
 #include <xen/coco.h>
+#include <xen/config.h>
+#include <xen/errno.h>
 #include <xen/mm.h>
 
 #include <asm/cpu-policy.h>
@@ -363,14 +364,35 @@ static int sev_init(void)
 
 static int sev_get_platform_status(struct coco_platform_status *status)
 {
+    int rc = 0;
+    unsigned int psp_ret = 0;
+    struct sev_user_data_status platform_status = { 0 };
+
     status->platform = COCO_PLATFORM_amd_sev;
 
     if ( cpu_has_sev_es )
         status->platform_flags |= COCO_PLATFORM_FLAG_sev_es;
 
-    status->flags = COCO_STATUS_FLAG_supported;
 
-    return 0;
+    
+    rc = sev_do_cmd(SEV_CMD_PLATFORM_STATUS, &platform_status, &psp_ret, true);
+
+    if ( !rc )
+    {
+        status->flags = COCO_STATUS_FLAG_supported;
+
+        status->version_major = platform_status.api_major;
+        status->version_minor = platform_status.api_minor;
+        status->version_build = platform_status.build;
+    }
+    else
+    {
+        printk(XENLOG_ERR
+                "sev: Unable to get platform status (%d, %u)\n",
+                rc, psp_ret);
+    }
+
+    return rc;
 }
 
 static struct coco_domain_ops *sev_get_domain_ops(struct domain *d,
@@ -399,4 +421,3 @@ struct coco_ops sev_coco_ops = {
     .get_platform_status = sev_get_platform_status,
     .get_domain_ops = sev_get_domain_ops,
 };
-

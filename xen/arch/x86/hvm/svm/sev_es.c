@@ -243,7 +243,7 @@ int sev_es_build_vmsa(struct vcpu *v)
     vmcb->rsp = regs->rsp;
     vmcb->rflags = regs->rflags | X86_EFLAGS_MBS;
 
-    vmcb->vmsa_regs.xcr0 = X86_XCR0_X87; /* must be set */
+    vmcb->vmsa_regs.xcr0 = v->arch.xcr0 | X86_XCR0_X87;
 
     /*
      * Copy VMCB Save Area into VMSA page.
