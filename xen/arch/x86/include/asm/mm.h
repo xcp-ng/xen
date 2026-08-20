@@ -86,19 +86,21 @@
 /* Page needs to be scrubbed. */
 #define _PGC_need_scrub   PG_shift(7)
 #define PGC_need_scrub    PG_mask(1, 7)
+ /* Page access is restricted by platform for confidential computing. */
+#define PGC_coco_restrict PG_mask(1, 8)
 #ifdef CONFIG_SHADOW_PAGING
  /* Set when a page table page has been shadowed. */
-#define _PGC_shadowed_pt  PG_shift(8)
-#define PGC_shadowed_pt   PG_mask(1, 8)
+#define _PGC_shadowed_pt  PG_shift(9)
+#define PGC_shadowed_pt   PG_mask(1, 9)
 #else
 #define PGC_shadowed_pt   0
 #endif
 
 /* Count of references to this frame. */
 #if PGC_shadowed_pt
-#define PGC_count_width   PG_shift(8)
+#define PGC_count_width   PG_shift(9)
 #else
-#define PGC_count_width   PG_shift(7)
+#define PGC_count_width   PG_shift(8)
 #endif
 #define PGC_count_mask    ((1UL<<PGC_count_width)-1)
 

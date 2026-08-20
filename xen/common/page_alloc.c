@@ -120,6 +120,7 @@
  *   regions within it.
  */
 
+#include <xen/coco.h>
 #include <xen/domain_page.h>
 #include <xen/event.h>
 #include <xen/init.h>
@@ -797,7 +798,7 @@ void scrub_one_page(const struct page_info *pg, bool cold)
 {
     void *ptr;
 
-    if ( unlikely(pg->count_info & PGC_broken) )
+    if ( unlikely(pg->count_info & (PGC_broken | PGC_coco_restrict)) )
         return;
 
     ptr = __map_domain_page(pg);
@@ -1494,6 +1495,19 @@ static bool mark_page_free(struct page_info *pg, mfn_t mfn)
     bool pg_offlined = false;
 
     ASSERT(mfn_x(mfn) == mfn_x(page_to_mfn(pg)));
+
+    /* If the page is coco restricted, try to unlock it first. */
+    if ( IS_ENABLED(CONFIG_COCO) && pg->count_info & PGC_coco_restrict )
+    {
+        struct domain *d = page_get_owner(pg);
+
+        if ( !d || !is_coco_domain(d) )
+            printk(XENLOG_ERR
+                   "pg MFN %"PRI_mfn" is coco restricted with invalid owner d%d\n",
+                   mfn_x(mfn), d ? d->domain_id : -1);
+        else if ( d->coco_ops && d->coco_ops->reclaim_mem )
+            d->coco_ops->reclaim_mem(d, pg);
+    }
 
     /*
      * Cannot assume that count_info == 0, as there are some corner cases

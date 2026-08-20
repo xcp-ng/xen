@@ -1,6 +1,7 @@
 #include <xen/acpi.h>
 #include <xen/alternative-call.h>
 #include <xen/bitops.h>
+#include <xen/coco.h>
 #include <xen/console.h>
 #include <xen/cpu.h>
 #include <xen/cpuidle.h>
@@ -2171,6 +2172,8 @@ void asmlinkage __init noreturn __start_xen(void)
     smp_cpus_done();
 
     do_initcalls();
+
+    coco_init_late();
 
     if ( opt_watchdog ) 
         watchdog_setup();

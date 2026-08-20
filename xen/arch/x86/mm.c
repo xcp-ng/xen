@@ -2914,6 +2914,16 @@ static int _get_page_type(struct page_info *page, unsigned long type,
             return -EINVAL;
         }
 
+        if ( unlikely((type == PGT_writable_page) &&
+                      (page->count_info & PGC_coco_restrict)) )
+        {
+            printk(XENLOG_WARNING
+                   "Can't get writable mapping to a CoCo restricted page %"PRI_mfn"\n",
+                   page_to_mfn(page));
+            WARN();
+            return -EPERM;
+        }
+
         if ( unlikely((x & PGT_count_mask) == 0) )
         {
             /*

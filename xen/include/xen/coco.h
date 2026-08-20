@@ -9,10 +9,17 @@
 #include <public/domctl.h>
 #include <public/hvm/coco.h>
 
-extern __read_mostly struct coco_platform_status platform_status;
+extern __read_mostly struct coco_platform_status coco_platform_status;
 
 struct coco_domain_ops {
+    /*
+     * Prepare initial domain memory (encrypt it, lock it down, ...).
+     * Expected to set PGC_coco_restrict on pages that are expected to be
+     * reclaimed using reclaim_mem.
+     */
     int (*prepare_initial_mem)(struct domain *d, gfn_t gfn, size_t page_count);
+    /* Called to reclaim pages with PGC_coco_restrict flag. */
+    void (*reclaim_mem)(struct domain *d, struct page_info *page);
 
     /* HVM domain hooks */
     int (*domain_initialise)(struct domain *d);
@@ -33,19 +40,21 @@ struct coco_ops {
     const char *name;
     
     int (*init)(void);
+    int (*init_late)(void);
     int (*get_platform_status)(coco_platform_status_t *status);
     struct coco_domain_ops *(*get_domain_ops)(struct domain *d,
         const struct xen_domctl_createdomain *config);
 };
 
+#ifdef CONFIG_COCO
 void __init coco_register_ops(struct coco_ops *ops);
 int __init coco_init(void);
+void __init coco_init_late(void);
 void coco_set_domain_ops(struct domain *d, const struct xen_domctl_createdomain *config);
 
-#ifdef CONFIG_COCO
 static inline bool coco_is_supported(void)
 {
-    return evaluate_nospec(platform_status.flags & COCO_STATUS_FLAG_supported);
+    return evaluate_nospec(coco_platform_status.flags & COCO_STATUS_FLAG_supported);
 }
 
 static inline int coco_domain_initialise(struct domain *d)
@@ -88,6 +97,24 @@ static inline bool coco_show_execution_state(struct vcpu *v)
     return false;
 }
 #else
+static inline void coco_register_ops(struct coco_ops *ops)
+{
+    ASSERT_UNREACHABLE();
+}
+static inline int coco_init(void)
+{
+    return 0;
+}
+
+static inline void coco_init_late(void)
+{
+    return 0;
+}
+
+static inline void coco_set_domain_ops(struct domain *d, const struct xen_domctl_createdomain *config)
+{
+}
+
 static inline bool coco_is_supported(void)
 {
     return false;
