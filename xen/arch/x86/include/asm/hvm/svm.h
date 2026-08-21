@@ -9,6 +9,10 @@
 #ifndef __ASM_X86_HVM_SVM_H__
 #define __ASM_X86_HVM_SVM_H__
 
+#include <xen/percpu.h>
+
+DECLARE_PER_CPU(paddr_t, hsa);
+
 void svm_asid_init(void);
 void svm_vcpu_assign_asid(struct vcpu *v);
 void svm_vcpu_set_tlb_control(struct vcpu *v);

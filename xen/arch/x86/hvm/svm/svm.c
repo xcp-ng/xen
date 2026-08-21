@@ -58,7 +58,7 @@ u32 svm_feature_flags;
  * which contains Xen's fs/gs/tr/ldtr and GSBASE/STAR/SYSENTER state when in
  * guest vcpu context.
  */
-static DEFINE_PER_CPU_READ_MOSTLY(paddr_t, hsa);
+DEFINE_PER_CPU_READ_MOSTLY(paddr_t, hsa);
 static DEFINE_PER_CPU_READ_MOSTLY(paddr_t, host_vmcb);
 #ifdef CONFIG_PV
 static DEFINE_PER_CPU(struct vmcb_struct *, host_vmcb_va);

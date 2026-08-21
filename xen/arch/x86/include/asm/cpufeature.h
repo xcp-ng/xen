@@ -260,6 +260,7 @@ static inline bool boot_cpu_has(unsigned int feat)
 #define cpu_has_sme             boot_cpu_has(X86_FEATURE_SME)
 #define cpu_has_sev             boot_cpu_has(X86_FEATURE_SEV)
 #define cpu_has_sev_es          boot_cpu_has(X86_FEATURE_SEV_ES)
+#define cpu_has_sev_snp         boot_cpu_has(X86_FEATURE_SEV_SNP)
 
 /* Bugs. */
 #define cpu_bug_fpu_ptrs        boot_cpu_has(X86_BUG_FPU_PTRS)

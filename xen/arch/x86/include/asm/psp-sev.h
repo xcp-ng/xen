@@ -65,6 +65,37 @@ enum sev_cmd {
     SEV_CMD_DBG_DECRYPT    = 0x060,
     SEV_CMD_DBG_ENCRYPT    = 0x061,
 
+    /* SNP specific commands */
+    SEV_CMD_SNP_INIT		= 0x081,
+    SEV_CMD_SNP_SHUTDOWN		= 0x082,
+    SEV_CMD_SNP_PLATFORM_STATUS	= 0x083,
+    SEV_CMD_SNP_DF_FLUSH		= 0x084,
+    SEV_CMD_SNP_INIT_EX		= 0x085,
+    SEV_CMD_SNP_SHUTDOWN_EX		= 0x086,
+    SEV_CMD_SNP_DECOMMISSION	= 0x090,
+    SEV_CMD_SNP_ACTIVATE		= 0x091,
+    SEV_CMD_SNP_GUEST_STATUS	= 0x092,
+    SEV_CMD_SNP_GCTX_CREATE		= 0x093,
+    SEV_CMD_SNP_GUEST_REQUEST	= 0x094,
+    SEV_CMD_SNP_ACTIVATE_EX		= 0x095,
+    SEV_CMD_SNP_LAUNCH_START	= 0x0A0,
+    SEV_CMD_SNP_LAUNCH_UPDATE	= 0x0A1,
+    SEV_CMD_SNP_LAUNCH_FINISH	= 0x0A2,
+    SEV_CMD_SNP_DBG_DECRYPT		= 0x0B0,
+    SEV_CMD_SNP_DBG_ENCRYPT		= 0x0B1,
+    SEV_CMD_SNP_PAGE_SWAP_OUT	= 0x0C0,
+    SEV_CMD_SNP_PAGE_SWAP_IN	= 0x0C1,
+    SEV_CMD_SNP_PAGE_MOVE		= 0x0C2,
+    SEV_CMD_SNP_PAGE_MD_INIT	= 0x0C3,
+    SEV_CMD_SNP_PAGE_SET_STATE	= 0x0C6,
+    SEV_CMD_SNP_PAGE_RECLAIM	= 0x0C7,
+    SEV_CMD_SNP_PAGE_UNSMASH	= 0x0C8,
+    SEV_CMD_SNP_CONFIG		= 0x0C9,
+    SEV_CMD_SNP_DOWNLOAD_FIRMWARE_EX = 0x0CA,
+    SEV_CMD_SNP_COMMIT		= 0x0CB,
+    SEV_CMD_SNP_VLEK_LOAD		= 0x0CD,
+    SEV_CMD_SNP_FEATURE_INFO	= 0x0CE,
+
     SEV_CMD_MAX,
 };
 
@@ -221,6 +252,37 @@ union sev_guest_policy {
     };
 } __packed;
 
+union snp_guest_policy {
+    uint64_t raw;
+    struct {
+        unsigned long rsvd: 38;
+        /* Disable access to SNP_PAGE_MOVE, SNP_SWAP_OUT and SNP_SWAP_IN. */
+        bool no_page_swap: 1;
+        /* Require ciphertext hiding for the DRAM. */
+        bool ciphertext_hiding: 1;
+        /* Require RAPL from being disabled. */
+        bool no_rapl: 1;
+        /* Require AES-256-XTS for memory encryption. */
+        bool aes_256_xts: 1;
+        /* Allow CXL to be populated with devices or memory. */
+        bool allow_cxl: 1;
+        /* Require the guest from being activated only on one socket. */
+        bool single_socket: 1;
+        /* Enable debugging mode. */
+        bool debug: 1;
+        /* Enable support for live migration with Migration Agent. */
+        bool migrate_ma: 1;
+        /* Reserved, must be one. */
+        bool rsvd_one: 1;
+        /* Allow SMT to be enabled. */
+        bool smt: 1;
+        /* Minumum API major */
+        uint8_t api_major;
+        /* Minimum API minor */
+        uint8_t api_minor;
+    };
+};
+
 /**
  * struct sev_data_guest_status - SEV GUEST_STATUS command parameters
  *
@@ -315,11 +377,11 @@ struct sev_data_launch_secret {
     uint64_t hdr_address;    /* In */
     uint32_t hdr_len;        /* In */
     uint32_t reserved2;
-    uint64_t guest_address; /* In */
-    uint32_t guest_len;     /* In */
+    uint64_t guest_address;  /* In */
+    uint32_t guest_len;      /* In */
     uint32_t reserved3;
-    uint64_t trans_address; /* In */
-    uint32_t trans_len;     /* In */
+    uint64_t trans_address;  /* In */
+    uint32_t trans_len;      /* In */
 } __packed;
 
 /**
@@ -346,19 +408,19 @@ struct sev_data_launch_finish {
  * @session_len: len of session data
  */
 struct sev_data_send_start {
-    uint32_t handle;           /* In */
+    uint32_t handle;               /* In */
     union sev_guest_policy policy; /* Out */
-    uint64_t pdh_cert_address; /* In */
-    uint32_t pdh_cert_len;     /* In */
+    uint64_t pdh_cert_address;     /* In */
+    uint32_t pdh_cert_len;         /* In */
     uint32_t reserved1;
-    uint64_t plat_certs_address; /* In */
-    uint32_t plat_certs_len;     /* In */
+    uint64_t plat_certs_address;   /* In */
+    uint32_t plat_certs_len;       /* In */
     uint32_t reserved2;
-    uint64_t amd_certs_address;  /* In */
-    uint32_t amd_certs_len;     /* In */
+    uint64_t amd_certs_address;    /* In */
+    uint32_t amd_certs_len;        /* In */
     uint32_t reserved3;
-    uint64_t session_address; /* In */
-    uint32_t session_len;     /* In/Out */
+    uint64_t session_address;      /* In */
+    uint32_t session_len;          /* In/Out */
 } __packed;
 
 /**
@@ -534,6 +596,391 @@ struct sev_data_attestation_report {
     uint32_t len;       /* In/Out */
 } __packed;
 
+/**
+ * struct sev_data_snp_download_firmware - SNP_DOWNLOAD_FIRMWARE command params
+ *
+ * @address: physical address of firmware image
+ * @len: length of the firmware image
+ */
+struct sev_data_snp_download_firmware {
+    uint64_t address;				/* In */
+    uint32_t len;				/* In */
+} __packed;
+
+/**
+ * struct sev_data_snp_activate - SNP_ACTIVATE command params
+ *
+ * @gctx_paddr: system physical address guest context page
+ * @asid: ASID to bind to the guest
+ */
+struct sev_data_snp_activate {
+    uint64_t gctx_paddr;				/* In */
+    uint32_t asid;				/* In */
+} __packed;
+
+/**
+ * struct sev_data_snp_addr - generic SNP command params
+ *
+ * @address: physical address of generic data param
+ */
+struct sev_data_snp_addr {
+    uint64_t address;				/* In/Out */
+} __packed;
+
+/**
+ * struct sev_data_snp_launch_start - SNP_LAUNCH_START command params
+ *
+ * @gctx_paddr: system physical address of guest context page
+ * @policy: guest policy
+ * @ma_gctx_paddr: system physical address of migration agent
+ * @ma_en: the guest is associated with a migration agent
+ * @imi_en: launch flow is launching an IMI (Incoming Migration Image) for the
+ *          purpose of guest-assisted migration.
+ * @rsvd: reserved
+ * @desired_tsc_khz: hypervisor desired mean TSC freq in kHz of the guest
+ * @gosvw: guest OS-visible workarounds, as defined by hypervisor
+ */
+struct sev_data_snp_launch_start {
+    uint64_t gctx_paddr;				/* In */
+    uint64_t policy;				/* In */
+    uint64_t ma_gctx_paddr;			/* In */
+    uint32_t ma_en:1;				/* In */
+    uint32_t imi_en:1;				/* In */
+    uint32_t rsvd:30;
+    uint32_t desired_tsc_khz;			/* In */
+    uint8_t gosvw[16];				/* In */
+} __packed;
+
+/* SNP support page type */
+enum {
+    SNP_PAGE_TYPE_NORMAL    = 0x1,
+    SNP_PAGE_TYPE_VMSA		= 0x2,
+    SNP_PAGE_TYPE_ZERO		= 0x3,
+    SNP_PAGE_TYPE_UNMEASURED	= 0x4,
+    SNP_PAGE_TYPE_SECRET		= 0x5,
+    SNP_PAGE_TYPE_CPUID		= 0x6,
+
+    SNP_PAGE_TYPE_MAX
+};
+
+/**
+ * struct sev_data_snp_launch_update - SNP_LAUNCH_UPDATE command params
+ *
+ * @gctx_paddr: system physical address of guest context page
+ * @page_size: page size 0 indicates 4K and 1 indicates 2MB page
+ * @page_type: encoded page type
+ * @imi_page: indicates that this page is part of the IMI (Incoming Migration
+ *            Image) of the guest
+ * @rsvd: reserved
+ * @rsvd2: reserved
+ * @address: system physical address of destination page to encrypt
+ * @rsvd3: reserved
+ * @vmpl1_perms: VMPL permission mask for VMPL1
+ * @vmpl2_perms: VMPL permission mask for VMPL2
+ * @vmpl3_perms: VMPL permission mask for VMPL3
+ * @rsvd4: reserved
+ */
+struct sev_data_snp_launch_update {
+    uint64_t gctx_paddr;	/* In */
+    uint32_t page_size:1;	/* In */
+    uint32_t page_type:3;	/* In */
+    uint32_t imi_page:1;	/* In */
+    uint32_t rsvd:27;
+    uint32_t rsvd2;
+    uint64_t address;		/* In */
+    uint32_t rsvd3:8;
+    uint32_t vmpl1_perms:8;	/* In */
+    uint32_t vmpl2_perms:8;	/* In */
+    uint32_t vmpl3_perms:8;	/* In */
+    uint32_t rsvd4;
+} __packed;
+
+/**
+ * struct sev_data_snp_launch_finish - SNP_LAUNCH_FINISH command params
+ *
+ * @gctx_paddr: system physical address of guest context page
+ * @id_block_paddr: system physical address of ID block
+ * @id_auth_paddr: system physical address of ID block authentication structure
+ * @id_block_en: indicates whether ID block is present
+ * @auth_key_en: indicates whether author key is present in authentication structure
+ * @vcek_disabled: indicates whether use of VCEK is allowed for attestation reports
+ * @rsvd: reserved
+ * @host_data: host-supplied data for guest, not interpreted by firmware
+ */
+struct sev_data_snp_launch_finish {
+    uint64_t gctx_paddr;
+    uint64_t id_block_paddr;
+    uint64_t id_auth_paddr;
+    uint8_t id_block_en:1;
+    uint8_t auth_key_en:1;
+    uint8_t vcek_disabled:1;
+    uint64_t rsvd:61;
+    uint8_t host_data[32];
+} __packed;
+
+/**
+ * struct sev_data_snp_guest_status - SNP_GUEST_STATUS command params
+ *
+ * @gctx_paddr: system physical address of guest context page
+ * @address: system physical address of guest status page
+ */
+struct sev_data_snp_guest_status {
+    uint64_t gctx_paddr;
+    uint64_t address;
+} __packed;
+
+/**
+ * struct sev_data_snp_page_reclaim - SNP_PAGE_RECLAIM command params
+ *
+ * @paddr: system physical address of page to be claimed. The 0th bit in the
+ *         address indicates the page size. 0h indicates 4KB and 1h indicates
+ *         2MB page.
+ */
+struct sev_data_snp_page_reclaim {
+    uint64_t paddr;
+} __packed;
+
+/**
+ * struct sev_data_snp_page_unsmash - SNP_PAGE_UNSMASH command params
+ *
+ * @paddr: system physical address of page to be unsmashed. The 0th bit in the
+ *         address indicates the page size. 0h indicates 4 KB and 1h indicates
+ *         2 MB page.
+ */
+struct sev_data_snp_page_unsmash {
+    uint64_t paddr;
+} __packed;
+
+/**
+ * struct sev_data_snp_dbg - DBG_ENCRYPT/DBG_DECRYPT command parameters
+ *
+ * @gctx_paddr: system physical address of guest context page
+ * @src_addr: source address of data to operate on
+ * @dst_addr: destination address of data to operate on
+ */
+struct sev_data_snp_dbg {
+    uint64_t gctx_paddr; /* In */
+    uint64_t src_addr;	 /* In */
+    uint64_t dst_addr;	 /* In */
+} __packed;
+
+/**
+ * struct sev_data_snp_guest_request - SNP_GUEST_REQUEST command params
+ *
+ * @gctx_paddr: system physical address of guest context page
+ * @req_paddr: system physical address of request page
+ * @res_paddr: system physical address of response page
+ */
+struct sev_data_snp_guest_request {
+    uint64_t gctx_paddr; /* In */
+    uint64_t req_paddr;	 /* In */
+    uint64_t res_paddr;	 /* In */
+} __packed;
+
+/**
+ * struct sev_data_snp_init_ex - SNP_INIT_EX structure
+ *
+ * @init_rmp: indicate that the RMP should be initialized.
+ * @list_paddr_en: indicate that list_paddr is valid
+ * @rsvd: reserved
+ * @rsvd1: reserved
+ * @list_paddr: system physical address of range list
+ * @rsvd2: reserved
+ */
+struct sev_data_snp_init_ex {
+    uint32_t init_rmp:1;
+    uint32_t list_paddr_en:1;
+    uint32_t rapl_dis:1;
+    uint32_t ciphertext_hiding_en:1;
+    uint32_t tio_en:1;
+    uint32_t rsvd:27;
+    uint32_t rsvd1;
+    uint64_t list_paddr;
+    uint16_t max_snp_asid;
+    uint8_t  rsvd2[46];
+} __packed;
+
+/**
+ * struct sev_data_range - RANGE structure
+ *
+ * @base: system physical address of first byte of range
+ * @page_count: number of 4KB pages in this range
+ * @rsvd: reserved
+ */
+struct sev_data_range {
+    uint64_t base;
+    uint32_t page_count;
+    uint32_t rsvd;
+} __packed;
+
+/**
+ * struct sev_data_range_list - RANGE_LIST structure
+ *
+ * @num_elements: number of elements in RANGE_ARRAY
+ * @rsvd: reserved
+ * @ranges: array of num_elements of type RANGE
+ */
+struct sev_data_range_list {
+    uint32_t num_elements;
+    uint32_t rsvd;
+    struct sev_data_range ranges[];
+} __packed;
+
+/**
+ * struct sev_data_snp_shutdown_ex - SNP_SHUTDOWN_EX structure
+ *
+ * @len: length of the command buffer read by the PSP
+ * @iommu_snp_shutdown: Disable enforcement of SNP in the IOMMU
+ * @x86_snp_shutdown: Disable SNP on all cores
+ * @rsvd1: reserved
+ */
+struct sev_data_snp_shutdown_ex {
+    uint32_t len;
+    uint32_t iommu_snp_shutdown:1;
+    uint32_t x86_snp_shutdown:1;
+    uint32_t rsvd1:30;
+} __packed;
+
+/**
+ * struct sev_platform_init_args
+ *
+ * @error: SEV firmware error code
+ * @probe: True if this is being called as part of CCP module probe, which
+ *  will defer SEV_INIT/SEV_INIT_EX firmware initialization until needed
+ *  unless psp_init_on_probe module param is set
+ * @max_snp_asid: When non-zero, enable ciphertext hiding and specify the
+ *  maximum ASID that can be used for an SEV-SNP guest.
+ */
+struct sev_platform_init_args {
+    int error;
+    bool probe;
+    unsigned int max_snp_asid;
+};
+
+/**
+ * struct sev_data_snp_commit - SNP_COMMIT structure
+ *
+ * @len: length of the command buffer read by the PSP
+ */
+struct sev_data_snp_commit {
+    uint32_t len;
+} __packed;
+
+/**
+ * struct sev_data_snp_feature_info - SEV_SNP_FEATURE_INFO structure
+ *
+ * @length: len of the command buffer read by the PSP
+ * @ecx_in: subfunction index
+ * @feature_info_paddr : System Physical Address of the FEATURE_INFO structure
+ */
+struct sev_data_snp_feature_info {
+    uint32_t length;
+    uint32_t ecx_in;
+    uint64_t feature_info_paddr;
+} __packed;
+
+/**
+ * struct feature_info - FEATURE_INFO structure
+ *
+ * @eax: output of SNP_FEATURE_INFO command
+ * @ebx: output of SNP_FEATURE_INFO command
+ * @ecx: output of SNP_FEATURE_INFO command
+ * #edx: output of SNP_FEATURE_INFO command
+ */
+struct snp_feature_info {
+    uint32_t eax;
+    uint32_t ebx;
+    uint32_t ecx;
+    uint32_t edx;
+} __packed;
+
+/**
+ * struct sev_data_snp_status - SNP status
+ *
+ * @api_major: API major version
+ * @api_minor: API minor version
+ * @state: current platform state
+ * @is_rmp_initialized: whether RMP is initialized or not
+ * @rsvd: reserved
+ * @build_id: firmware build id for the API version
+ * @mask_chip_id: whether chip id is present in attestation reports or not
+ * @mask_chip_key: whether attestation reports are signed or not
+ * @vlek_en: VLEK (Version Loaded Endorsement Key) hashstick is loaded
+ * @feature_info: whether SNP_FEATURE_INFO command is available
+ * @rapl_dis: whether RAPL is disabled
+ * @ciphertext_hiding_cap: whether platform has ciphertext hiding capability
+ * @ciphertext_hiding_en: whether ciphertext hiding is enabled
+ * @rsvd1: reserved
+ * @guest_count: the number of guest currently managed by the firmware
+ * @current_tcb_version: current TCB version
+ * @reported_tcb_version: reported TCB version
+ */
+struct sev_data_snp_status {
+    uint8_t api_major;			   /* Out */
+    uint8_t api_minor;			   /* Out */
+    uint8_t state;			       /* Out */
+    uint8_t is_rmp_initialized:1;  /* Out */
+    uint8_t rsvd:7;
+    uint32_t build_id;			    /* Out */
+    uint32_t mask_chip_id:1;		/* Out */
+    uint32_t mask_chip_key:1;		/* Out */
+    uint32_t vlek_en:1;		        /* Out */
+    uint32_t feature_info:1;		/* Out */
+    uint32_t rapl_dis:1;		    /* Out */
+    uint32_t ciphertext_hiding_cap:1; /* Out */
+    uint32_t ciphertext_hiding_en:1;  /* Out */
+    uint32_t rsvd1:25;
+    uint32_t guest_count;		    /* Out */
+    uint64_t current_tcb_version;	/* Out */
+    uint64_t reported_tcb_version;	/* Out */
+} __packed;
+
+/* Feature bits in ECX */
+#define SNP_X86_SHUTDOWN_SUPPORTED		BIT(1)
+#define SNP_RAPL_DISABLE_SUPPORTED		BIT(2)
+#define SNP_CIPHER_TEXT_HIDING_SUPPORTED	BIT(3)
+#define SNP_AES_256_XTS_POLICY_SUPPORTED	BIT(4)
+#define SNP_CXL_ALLOW_POLICY_SUPPORTED		BIT(5)
+
+/* Feature bits in EBX */
+#define SNP_SEV_TIO_SUPPORTED			BIT(1)
+
+struct snp_guest_context {
+    uint64_t gctx_paddr;
+};
+
+/**
+ * struct sev_data_snp_config - system wide configuration value for SNP.
+ *
+ * @reported_tcb: the TCB version to report in the guest attestation report.
+ * @mask_chip_id: whether chip id is present in attestation reports or not
+ * @mask_chip_key: whether attestation reports are signed or not
+ * @rsvd: reserved
+ * @rsvd1: reserved
+ */
+struct sev_data_snp_config {
+    uint64_t reported_tcb;     /* In */
+    uint32_t mask_chip_id:1;   /* In */
+    uint32_t mask_chip_key:1;  /* In */
+    uint32_t rsvd:30;          /* In */
+    uint8_t rsvd1[52];
+} __packed;
+
+/**
+ * struct sev_data_snp_vlek_load - SNP_VLEK_LOAD structure
+ *
+ * @len: length of the command buffer read by the PSP
+ * @vlek_wrapped_version: version of wrapped VLEK hashstick (Must be 0h)
+ * @rsvd: reserved
+ * @vlek_wrapped_address: address of a wrapped VLEK hashstick
+ *                        (struct sev_user_data_snp_wrapped_vlek_hashstick)
+ */
+struct sev_data_snp_vlek_load {
+    uint32_t len;                   /* In */
+    uint8_t vlek_wrapped_version;   /* In */
+    uint8_t rsvd[3];                /* In */
+    uint64_t vlek_wrapped_address;  /* In */
+} __packed;
 
 /**
  * SEV platform commands
@@ -589,6 +1036,7 @@ typedef enum {
     SEV_RET_RESOURCE_LIMIT,
     SEV_RET_SECURE_DATA_INVALID,
     SEV_RET_MAX,
+    SEV_RET_SNP_UPDATE_FAILED = 0x24,
 } sev_ret_code;
 
 /**

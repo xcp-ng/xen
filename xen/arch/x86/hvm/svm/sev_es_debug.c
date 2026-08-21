@@ -131,24 +131,31 @@ struct sev_es_save_area {
 bool sev_vmsa_dump(struct vcpu *v)
 {
     struct domain *d = v->domain;
-    struct page_info *vmsa_page = v->arch.hvm.svm.sev.vmsa_page;
+		struct sev_vcpu *v_sev = &v->arch.hvm.svm.sev;
+    struct page_info *vmsa_page;
     struct sev_es_save_area *vmsa_dec = NULL;
     struct sev_data_dbg sd_dbg = {};
     struct cpu_user_regs *regs = &v->arch.user_regs;
+		struct sev_state *sev = &d->arch.hvm.svm.sev;
     unsigned int psp_ret;
     int rc = 0;
 
     if ( !is_sev_es_domain(d) )
 			return false;
 
-		if ( !vmsa_page || d->arch.hvm.svm.sev.asp_policy.no_debug )
+		if ( WARN_ON(v_sev->current_vmpl > SEV_MAX_VMPL) )
+			return false;
+
+		vmsa_page = v_sev->vmpl[v_sev->current_vmpl].vmsa_page;
+
+		if ( !vmsa_page || sev->legacy.policy.no_debug )
 			return true;
 
     vmsa_dec = alloc_xenheap_pages(0, 0);
     if ( !d )
        return true;
     
-    sd_dbg.handle = d->arch.hvm.svm.sev.asp_handle;
+    sd_dbg.handle = sev->legacy.asp_handle;
     sd_dbg.reserved = 0;
     sd_dbg.src_addr = page_to_maddr(vmsa_page);
     sd_dbg.dst_addr = virt_to_maddr(vmsa_dec);

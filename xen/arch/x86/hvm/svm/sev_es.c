@@ -14,14 +14,16 @@
 
 #include <asm/cpuid.h>
 #include <asm/cpu-policy.h>
+#include <asm/event.h>
 #include <asm/fastabi.h>
+#include <asm/mm.h>
 #include <asm/hvm/support.h>
 #include <asm/hvm/svm/sev_es.h>
+#include <asm/hvm/svm/sev_snp.h>
 #include <asm/p2m.h>
 
 #include "vmcb.h"
 #include "sev_es.h"
-#include "xen/coco.h"
 
 #define GHCB_VALID_BIT(field) \
 ({ \
@@ -44,24 +46,35 @@
 #define GHCB_CLEAR_VALID(ghcb) \
     bitmap_clear((ghcb)->save.valid_bitmap, 0, 128)
 
-static int sev_es_update_vmsa(struct vcpu *v, gfn_t vmsa_gfn, bool start)
+static int snp_ap_create(struct vcpu *v, gfn_t vmsa_gfn, bool start,
+                             uint64_t sev_features, unsigned int vmpl)
 {
     p2m_type_t p2mt;
-    struct page_info *vmsa_page;
+    struct page_info *vmsa_page, *old_vmsa_page;
     struct svm_vcpu *svm_v = &v->arch.hvm.svm;
+    struct sev_vmpl_state *vmpl_state;
     /* TODO: This needs some work to make it actually safe. */
 
-    gdprintk(XENLOG_DEBUG, "sev-es: GHCB AP Create v%d, vmsa=%"PRI_gfn", start=%d\n",
-             v->vcpu_id, gfn_x(vmsa_gfn), start);
+    gdprintk(XENLOG_DEBUG,
+             "sev-snp: GHCB AP Create v%d, vmsa=%"PRI_gfn", start=%d, vmpl=%u\n",
+             v->vcpu_id, gfn_x(vmsa_gfn), start, vmpl);
+    
+    if ( vmpl > SEV_MAX_VMPL )
+    {
+        gdprintk(XENLOG_DEBUG,
+                "sev-snp: GHCB AP Create v%d: Invalid VMPL %d\n",
+                v->vcpu_id, vmpl);
+        return -EINVAL;
+    }
 
-    /* If the vCPU is online, bail out. */
+    vmpl_state = &svm_v->sev.vmpl[vmpl];
+
     if ( v->is_initialised && is_vcpu_online(v) )
     {
-        gdprintk(XENLOG_DEBUG, "sev-es: GHCB AP Create v%d: vCPU is already up\n", v->vcpu_id);
+        gdprintk(XENLOG_DEBUG, "sev-snp: GHCB AP Create v%d: vCPU is already up\n", v->vcpu_id);
         return -EBUSY;
     }
 
-    /* Get the VMSA page */
     vmsa_page = get_page_from_gfn(v->domain, gfn_x(vmsa_gfn), &p2mt, P2M_ALLOC);
 
     if ( p2mt != p2m_ram_rw )
@@ -75,23 +88,25 @@ static int sev_es_update_vmsa(struct vcpu *v, gfn_t vmsa_gfn, bool start)
         return -EINVAL;
     }
 
-    /* If the vCPU already has a VMSA page, unregister it. */
-    if ( svm_v->sev.vmsa_page )
+    if ( !(vmsa_page->count_info & PGC_coco_restrict) )
     {
-        /* TODO: VMSA page is not always get_page()'d */
-        //struct page_info *old_vmsa_page = svm_v->sev.vmsa_page;
-        svm_v->vmcb->vmsa_pa = 0;
-        svm_v->sev.vmsa_page = 0;
-        smp_wmb();
-        //put_page(old_vmsa_page);
+        gprintk(XENLOG_WARNING,
+                "sev-es: Non coco restricted page given: gfn=%"PRI_xen_pfn"\n",
+                gfn_x(vmsa_gfn));
+
+        put_page(vmsa_page);
+        return -EINVAL;
     }
 
-    /* Register the new VMSA page */
-    svm_v->sev.vmsa_page = vmsa_page;
-    svm_v->vmcb->vmsa_pa = page_to_maddr(vmsa_page);
-    smp_wmb();
+    old_vmsa_page = xchg(&vmpl_state->vmsa_page, vmsa_page);
 
-    /* If the CPU hasn't been initialized, initialize it */
+    if ( old_vmsa_page )
+        put_page(old_vmsa_page);
+
+    svm_v->sev.current_vmpl = vmpl;
+    svm_v->vmcb->vmsa_pa = page_to_maddr(vmsa_page);
+    smp_mb();
+
     if ( !v->is_initialised )
     {
         paging_update_paging_modes(v);
@@ -108,16 +123,189 @@ static int sev_es_update_vmsa(struct vcpu *v, gfn_t vmsa_gfn, bool start)
     return 0;
 }
 
+static int snp_page_state_change_one(struct domain *d, gfn_t gfn, bool private)
+{
+    p2m_type_t p2mt;
+    struct rmp_entry rmp;
+    struct page_info *page = get_page_from_gfn(d, gfn_x(gfn), &p2mt, P2M_ALLOC);
+    int rc = 0;
+
+    if ( p2mt != p2m_ram_rw )
+    {
+        if ( page )
+            put_page(page);
+        return -EINVAL;
+    }
+
+    if ( private == !!(page->count_info & PGC_coco_restrict) )
+        /* Nothing to do */
+        return 0;
+
+    rmp = (struct rmp_entry){
+        .asid = private ? d->arch.hvm.asid.asid : 0,
+        .assigned = private,
+        .gpa = gfn_to_gaddr(gfn),
+    };
+
+    rc = rmpupdate(page, &rmp);
+
+    if ( !rc )
+    {
+        if ( private )
+            page->count_info |= PGC_coco_restrict;
+        else
+            page->count_info &= ~PGC_coco_restrict;
+    }
+
+    return rc;
+}
+
+static int snp_page_state_change(struct domain *d, union ghcb_psch_entry *req)
+{
+    int rc = 0;
+    int j = 0;
+
+    if ( req->pagesize > 1 ||
+         (req->pagesize == 0 && req->cur_page > 0) ||
+         (req->pagesize == 1 && req->cur_page >= 512) ||
+         req->reserved || !req->operation || req->operation > 4 )
+    {
+        gdprintk(XENLOG_WARNING, "sev-snp: Invalid PAGE_STATE_CHANGE request %08lx\n",
+                 req->raw);
+        return -EINVAL;
+    }
+
+    if ( req->operation == 3 || req->operation == 4 )
+    {
+        gdprintk(XENLOG_DEBUG, "sev-snp: TODO PSMASH/UNSMASH hints requests %08lx\n",
+                 req->raw);
+        return 0;
+    }
+
+    do {
+        gfn_t gfn = gfn_add(_gfn(req->gfn), req->cur_page);
+
+        rc = snp_page_state_change_one(d, gfn, req->operation == 1);
+        if ( rc )
+            break;
+
+        req->cur_page++;
+
+        if ( (++j & 0xf) && hypercall_preempt_check() )
+        {
+            rc = -EAGAIN;
+            break;
+        }
+    } while ( req->pagesize == 1 && req->cur_page < 512 );
+
+    return rc;
+}
+
+static void ghcb_page_state_change(struct vcpu *v, struct ghcb *ghcb)
+{
+    uint64_t psch_struct_gpa;
+    unsigned int psch_struct_offset;
+    struct ghcb_psch_header psch_header;
+    union ghcb_psch_entry psch_entry;
+    struct sev_vcpu *v_sev = &v->arch.hvm.svm.sev;
+    gfn_t ghcb_gfn;
+    uint64_t exitinfo2 = 0;
+    unsigned int j = 0;
+
+    if ( !is_sev_snp_domain(v->domain) )
+    {
+        gdprintk(XENLOG_WARNING,"sev-es: Rejecting PAGE_STATE_CHANGE on non-SNP guest\n");
+        GHCB_SET_FIELD(ghcb, sw_exitinfo1, 2); /* Malformed input */
+        GHCB_SET_FIELD(ghcb, sw_exitinfo2, 6); /* Invalid NAE event */
+        return;
+    }
+
+    ghcb_gfn = _gfn(v_sev->vmpl[v_sev->current_vmpl].ghcb_gfn);
+
+    psch_struct_gpa = ACCESS_ONCE(ghcb->save.sw_scratch);
+    psch_struct_offset = psch_struct_gpa & PAGE_MASK;
+    
+    /* 
+     * GHCB specification requires that gpa to reside inside GHCB Save area.
+     * That actually allows us to reuse the ghcb mapping we already have,
+     * saving us a bit of work.
+     */
+
+    if ( !gfn_eq(gaddr_to_gfn(psch_struct_gpa), ghcb_gfn)
+         /* Check if sw_scratch points outside of shared buffer. */
+         || psch_struct_offset < offsetof(struct ghcb, shared_buffer)
+         || psch_struct_offset > (offsetof(struct ghcb, shared_buffer)
+                                  + sizeof(ghcb->shared_buffer)) )
+    {
+        gdprintk(XENLOG_WARNING,
+                 "sev-snp: PAGE_STATE_CHANGE scratch points outside of shared buffer\n");
+        GHCB_SET_FIELD(ghcb, sw_exitinfo1, 2); /* Malformed input */
+        GHCB_SET_FIELD(ghcb, sw_exitinfo2, 3); /* Invalid SW_SCRATCH */
+        return;
+    }
+
+    /* We're a offset from the ghcb page, normalize into shared_buffer. */
+    psch_struct_offset -= offsetof(struct ghcb, shared_buffer);
+
+    if ( psch_struct_offset > sizeof(ghcb->shared_buffer) - sizeof(psch_header) )
+    {
+        gdprintk(XENLOG_WARNING,
+                 "sev-snp: PAGE_STATE_CHANGE header overflows shared buffer\n");
+        GHCB_SET_FIELD(ghcb, sw_exitinfo1, 2); /* Malformed input */
+        GHCB_SET_FIELD(ghcb, sw_exitinfo2, 1); /* Invalid SW_SCRATCH */
+        return;
+    }
+
+    memcpy(&psch_header, ghcb->shared_buffer + psch_struct_offset, sizeof(psch_header));
+    smp_rmb();
+
+    for (; psch_header.cur_entry < psch_header.end_entry; psch_header.cur_entry++)
+    {
+        int rc;
+        unsigned int psch_entry_offset = psch_struct_offset +
+                                         psch_header.cur_entry * sizeof(psch_entry);
+        /*
+         * GHCB specification allows this request to be interrupted; the guest is
+         * expected to retry the operation if it encounters exitinfo2=0 while
+         * psch_header.cur_entry != psch_header.end_entry
+         */
+        if ( (++j & 0xf) && hypercall_preempt_check() )
+            break;
+
+        if ( (psch_entry_offset + sizeof(psch_entry)) > sizeof(ghcb->shared_buffer) )
+        {
+            gdprintk(XENLOG_WARNING,
+                     "sev-snp: PAGE_STATE_CHANGE request %hu overflows shared buffer\n",
+                     psch_header.cur_entry);
+            exitinfo2 = 2ULL | (1ULL << 32); /* Invalid page state change header */
+            break;
+        }
+
+        memcpy(&psch_entry, ghcb->shared_buffer + psch_entry_offset, sizeof(psch_entry));
+        smp_rmb();
+
+        rc = snp_page_state_change(v->domain, &psch_entry);
+        memcpy(ghcb->shared_buffer + psch_entry_offset, &psch_entry, sizeof(psch_entry));
+        smp_wmb();
+        
+
+        if ( rc == -EAGAIN )
+            break;
+        else if ( rc )
+        {
+            /* FIXME: Add error handling */
+        }
+    }
+
+    memcpy(ghcb->shared_buffer + psch_struct_offset, &psch_header, sizeof(psch_header));
+    
+    GHCB_SET_FIELD(ghcb, sw_exitinfo1, 0);
+    GHCB_SET_FIELD(ghcb, sw_exitinfo2, exitinfo2);
+    smp_wmb();
+}
+
 static void ghcb_ap_creation(struct vcpu *v, struct ghcb *ghcb)
 {
-    /*
-     * On Xen, for SMP implementation purposes, we implement GHCB v2 "SNP AP Creation"
-     * for SEV-ES guests; in this case, rules slightly deviate from specification :
-     *  - there is no need to transition the VMSA page with RMPADJUST (since this
-     *    mechanism doesn't exist in SEV-ES), any "ram" guest page is accepted
-     *  - there is no VMPL support
-     *  - SEV_FEATURES is restricted to the ones available to SEV-ES guests (TODO)
-     */
     struct domain *currd = v->domain;
     struct vcpu *candidate_v, *target_v = NULL;
     /*
@@ -146,32 +334,16 @@ static void ghcb_ap_creation(struct vcpu *v, struct ghcb *ghcb)
     
     if ( param.mbz )
     {
-        gdprintk(XENLOG_WARNING, "sev-es: MBZ bit set in SW_EXITINFO1 in AP creation\n");
+        gdprintk(XENLOG_WARNING, "sev-snp: MBZ bit set in SW_EXITINFO1 in AP creation\n");
         GHCB_SET_FIELD(ghcb, sw_exitinfo1, 2); /* Malformed input */
         GHCB_SET_FIELD(ghcb, sw_exitinfo2, 5); /* Invalid input */
         return;
     }
 
-    if ( sev_features )
-    {
-        gdprintk(XENLOG_WARNING, "sev-es: TODO: support for SEV_FEATURES\n");
-        GHCB_SET_FIELD(ghcb, sw_exitinfo1, 2); /* Malformed input */
-        GHCB_SET_FIELD(ghcb, sw_exitinfo2, 5); /* Invalid input */
-    }
-
-    if ( param.vmpl )
-    {
-        /* TODO: SEV-SNP VMPL support */
-        gdprintk(XENLOG_WARNING, "sev-es: Rejecting AP creation with VMPL > 0\n");
-        GHCB_SET_FIELD(ghcb, sw_exitinfo1, 2); /* Malformed input */
-        GHCB_SET_FIELD(ghcb, sw_exitinfo2, 5); /* Invalid input */
-        return;
-    }
-
-    /* Find the matching vCPU */
+    /* Find the matching vCPU for this APIC ID */
     for_each_vcpu( currd, candidate_v )
     {
-        gdprintk(XENLOG_DEBUG, "sev-es:- %d == %d?\n", VLAPIC_ID(vcpu_vlapic(candidate_v)), param.apic_id);
+        gdprintk(XENLOG_DEBUG, "sev-snp:- %d == %d?\n", VLAPIC_ID(vcpu_vlapic(candidate_v)), param.apic_id);
         if ( VLAPIC_ID(vcpu_vlapic(candidate_v)) == param.apic_id )
         {
             target_v = candidate_v;
@@ -181,8 +353,7 @@ static void ghcb_ap_creation(struct vcpu *v, struct ghcb *ghcb)
 
     if ( !target_v )
     {
-        gdprintk(XENLOG_WARNING, "sev-es: Unknown APIC ID %"PRIu32"\n", param.apic_id);
-        /* No vCPU found. */
+        gdprintk(XENLOG_WARNING, "sev-snp: Unknown APIC ID %"PRIu32"\n", param.apic_id);
         GHCB_SET_FIELD(ghcb, sw_exitinfo1, 2); /* Malformed input */
         GHCB_SET_FIELD(ghcb, sw_exitinfo2, 5); /* Invalid input */
         return;
@@ -192,7 +363,8 @@ static void ghcb_ap_creation(struct vcpu *v, struct ghcb *ghcb)
     {
         case 0: /* Create/add */
         case 1: /* Create/add then run (VMPL) */
-            if ( sev_es_update_vmsa(target_v, gaddr_to_gfn(vmsa), param.cmd == 1) )
+            if ( snp_ap_create(target_v, gaddr_to_gfn(vmsa), param.cmd == 1,
+                               sev_features, param.vmpl) )
             {
                 GHCB_SET_FIELD(ghcb, sw_exitinfo1, 2); /* Malformed input */
                 GHCB_SET_FIELD(ghcb, sw_exitinfo2, 5); /* Invalid input */
@@ -200,7 +372,7 @@ static void ghcb_ap_creation(struct vcpu *v, struct ghcb *ghcb)
             break;
 
         case 2: /* Destroy/remove */
-            gprintk(XENLOG_WARNING, "sev-es: TODO: AP Creation cmd=%d\n", param.cmd);
+            gprintk(XENLOG_WARNING, "sev-snp: TODO: AP Creation cmd=%d\n", param.cmd);
             GHCB_SET_FIELD(ghcb, sw_exitinfo1, 2); /* Malformed input */
             GHCB_SET_FIELD(ghcb, sw_exitinfo2, 5); /* Invalid input */
             return;
@@ -211,16 +383,29 @@ static void ghcb_ap_creation(struct vcpu *v, struct ghcb *ghcb)
     smp_wmb();
 }
 
-int sev_es_build_vmsa(struct vcpu *v)
+uint64_t sev_es_default_ghcb_msr(struct domain *d)
+{
+    union ghcb_msr_data data = {
+        .info_resp = {
+            .min_version = 1UL,
+            .max_version = is_sev_snp_domain(d) ? 2UL : 1UL,
+            .c_bit = host_cpu_policy.extd.c_bit_pos
+        }
+    };
+
+    return (union ghcb_msr){
+        .info = GHCB_MSR_SEV_INFO_RESP,
+        .data_raw = data.raw,
+    }.raw;
+}
+
+int sev_es_build_vmsa(struct vcpu *v, struct page_info *vmsa_page)
 {
     struct vmcb_struct *vmcb = v->arch.hvm.svm.vmcb;
     struct cpu_user_regs *regs = &v->arch.user_regs;
     void *vmsa;
 
     if ( !is_sev_es_domain(v->domain) )
-        return -EINVAL;
-
-    if ( !v->arch.hvm.svm.sev.vmsa_page )
         return -EINVAL;
 
     /* Stash guest CPU registers into VMCB including VMSA fields */
@@ -245,11 +430,14 @@ int sev_es_build_vmsa(struct vcpu *v)
 
     vmcb->vmsa_regs.xcr0 = v->arch.xcr0 | X86_XCR0_X87;
 
+    if ( is_sev_snp_domain(v->domain) )
+        vmcb->vmsa_regs.sev_features.snp = true;
+
     /*
      * Copy VMCB Save Area into VMSA page.
      * SEV-ES VMSA uses the same layout as VMCB save area.
      */
-    vmsa = __map_domain_page(v->arch.hvm.svm.sev.vmsa_page);
+    vmsa = __map_domain_page(vmsa_page);
     memcpy(vmsa, &vmcb->vmsa_start,
             sizeof(struct vmcb_struct) - offsetof(struct vmcb_struct, vmsa_start));
     cache_flush(vmsa, PAGE_SIZE);
@@ -436,6 +624,10 @@ static void sev_es_ghcb_call(struct vcpu *v, struct ghcb *ghcb)
         GHCB_SET_FIELD(ghcb, sw_exitinfo1, 0);
         GHCB_SET_FIELD(ghcb, sw_exitinfo2, 0);
         break;
+    
+    case VMGEXIT_PAGE_STATE_CHANGE:
+        ghcb_page_state_change(v, ghcb);
+        break;
 
     case VMGEXIT_AP_CREATION:
         ghcb_ap_creation(v, ghcb);
@@ -463,37 +655,110 @@ static void sev_es_ghcb_call(struct vcpu *v, struct ghcb *ghcb)
     #endif
 }
 
+static int sev_es_register_ghcb(struct domain *d, struct sev_vmpl_state *vmpl_state,
+                                uint64_t ghcb_gfn, bool make_shared)
+{
+    struct page_info *ghcb_page;
+    p2m_type_t p2mt;
+
+    ghcb_page = get_page_from_gfn(d, ghcb_gfn, &p2mt, P2M_ALLOC);
+
+    if ( p2mt != p2m_ram_rw )
+    {
+        gprintk(XENLOG_WARNING,
+                "sev-es: Invalid GHCB page type: gfn=%"PRI_xen_pfn", %d != %d\n",
+                ghcb_gfn, p2mt, p2m_ram_rw);
+
+        if ( ghcb_page )
+            put_page(ghcb_page);
+
+        return -EINVAL;
+    }
+
+    if ( is_sev_snp_domain(d) && make_shared )
+    {
+        struct rmp_entry rmp = { 0 };
+        int rc = rmpupdate(ghcb_page, &rmp);
+
+        if ( rc )
+        {
+            gprintk(XENLOG_WARNING,
+                    "sev-snp: Can't make GHCB page shared: gfn=%"PRI_xen_pfn", rc=%d\n",
+                    gfn_x(ghcb_gfn), rc);
+            put_page(ghcb_page);
+            return rc;
+        }
+
+        ghcb_page->count_info &= PGC_coco_restrict;
+    }
+
+    if ( !get_page_type(ghcb_page, PGT_writable_page) )
+    {
+        gprintk(XENLOG_WARNING,
+                "sev-es: Can't get writable mapping to GHCB page: gfn=%"PRI_xen_pfn"\n",
+                gfn_x(ghcb_gfn));
+        put_page(ghcb_page);
+        return -EPERM;
+    }
+
+    if ( vmpl_state->ghcb_page )
+    {
+        UNMAP_DOMAIN_PAGE(vmpl_state->ghcb_map);
+        put_page(vmpl_state->ghcb_page);
+    }
+
+    vmpl_state->ghcb_map = __map_domain_page(ghcb_page);
+    vmpl_state->ghcb_page = ghcb_page;
+    vmpl_state->ghcb_gfn = ghcb_gfn;
+}
+
 void sev_es_do_vmgexit(struct vcpu *v)
 {
+    struct domain *currd = v->domain;
     struct vmcb_struct *vmcb = v->arch.hvm.svm.vmcb;
     struct sev_vcpu *sev = &v->arch.hvm.svm.sev;
     struct page_info *ghcb_page;
     struct ghcb *ghcb_map;
+    struct sev_vmpl_state *vmpl_state;
+    union ghcb_msr ghcb_msr;
 
     /* GHCB MSR Protocol (SEV-ES GHCB specification) */
-    uint64_t ghcb_info = GHCB_MSR_INFO(vmcb->ghcb_msr);
-    uint64_t ghcb_data = GHCB_DATA(vmcb->ghcb_msr);
     p2m_type_t p2mt;
 
-    if ( ghcb_info )
+    /* Only SEV-SNP domains can have VMPL > 0 */
+    ASSERT(is_sev_snp_domain(currd) || sev->current_vmpl == 0);
+    
+    if ( sev->current_vmpl > SEV_MAX_VMPL )
     {
-        switch ( ghcb_info )
+        printk(XENLOG_ERR "sev-es: Invalid guest VMPL %u\n", sev->current_vmpl);
+        ASSERT_UNREACHABLE();
+        domain_crash(currd);
+        return;
+    }
+
+    ghcb_msr.raw = vmcb->ghcb_msr;
+    vmpl_state = &sev->vmpl[sev->current_vmpl];
+
+    if ( ghcb_msr.info )
+    {
+        const union ghcb_msr_data ghcb_data = { .raw = ghcb_msr.data_raw };
+
+        switch ( ghcb_msr.info )
         {
         case GHCB_MSR_SEV_INFO_REQ:
-            vmcb->ghcb_msr = GHCB_MSR_SEV_INFO(GHCB_VERSION_MAX, GHCB_VERSION_MIN,
-                                               host_cpu_policy.extd.c_bit_pos);
+            vmcb->ghcb_msr = sev_es_default_ghcb_msr(currd);
             break;
 
         case GHCB_MSR_CPUID_REQ:
         {
-            uint32_t reg = GHCB_MSR_CPUID_REG(ghcb_data);
-            uint32_t leaf = GHCB_MSR_CPUID_FUNC(ghcb_data);
-            uint32_t value = 0;
+            unsigned int reg = ghcb_data.cpuid_req.reg;
+            uint32_t leaf = ghcb_data.cpuid_req.leaf, value = 0;
             struct cpuid_leaf res;
 
-            if ( reg > GHCB_CPUID_REQ_EDX )
+            if ( reg > GHCB_CPUID_REG_EDX )
                 gprintk(XENLOG_WARNING,
-                        "sev-es: Invalid GHCB CPUID register requested: 0x%x", reg);
+                        "sev-es: Invalid GHCB CPUID register requested: 0x%x",
+                        reg);
             else
             {
                 guest_cpuid(v, leaf, 0, &res);
@@ -501,16 +766,16 @@ void sev_es_do_vmgexit(struct vcpu *v)
 
                 switch (reg)
                 {
-                case GHCB_CPUID_REQ_EAX:
+                case GHCB_CPUID_REG_EAX:
                     value = res.a;
                     break;
-                case GHCB_CPUID_REQ_EBX:
+                case GHCB_CPUID_REG_EBX:
                     value = res.b;
                     break;
-                case GHCB_CPUID_REQ_ECX:
+                case GHCB_CPUID_REG_ECX:
                     value = res.c;
                     break;
-                case GHCB_CPUID_REQ_EDX:
+                case GHCB_CPUID_REG_EDX:
                     value = res.d;
                     break;
                 }
@@ -518,58 +783,105 @@ void sev_es_do_vmgexit(struct vcpu *v)
 
             gdprintk(XENLOG_DEBUG,
                      "sev-es: GHCB MSR CPUID: %08x[reg%u] = %08x\n", leaf, reg, value);
-            vmcb->ghcb_msr = GHCB_CPUID_RESP(value, reg);
+            
+            ghcb_msr.info = 
+            ghcb_msr.data_raw = (union ghcb_msr_data){
+                .cpuid_resp = {
+                    .reg = reg,
+                    .rsvd = 0,
+                    .value = value,
+                }
+            }.raw;
+            break;
+        }
+
+        case GHCB_MSR_PREF_GHCB_GPA_REQ:
+            ghcb_msr.info = GHCB_MSR_PREF_GHCB_GPA_RESP;
+            ghcb_msr.data_raw = 0xfffffffffffffULL; /* No prefered */
+            break;
+
+        case GHCB_MSR_REG_GHCB_GPA_REQ:
+            ghcb_msr.info = GHCB_MSR_REG_GHCB_GPA_RESP;
+
+            if ( sev_es_register_ghcb(currd, vmpl_state, ghcb_msr.data_raw, true) )
+                ghcb_msr.data_raw = 0xfffffffffffffULL;
+            else
+                ghcb_msr.data_raw = ghcb_data.raw; /* Untouched */
+            break;
+        
+        case GHCB_MSR_PAGE_STATE_CHG_REQ:
+        {
+            gfn_t gfn = _gfn(ghcb_data.psc_req.gfn);
+            unsigned long op = ghcb_data.psc_req.op;
+            int rc = 0;
+            unsigned int error_code;
+
+            if ( is_sev_snp_domain(currd) )
+                rc = snp_page_state_change_one(currd, gfn, op == 0x0001);
+            else
+            {
+                rc = -EINVAL;
+                gprintk(XENLOG_WARNING,
+                        "sev-es: Ignoring PSC request on SEV-ES guest\n");
+            }
+            
+            /* FIXME: GHCB specification doesn't specify the behavior in case
+             *        of preempting this operation (i.e rc == -EAGAIN).
+             */
+            if ( rc )
+                gprintk(XENLOG_WARNING,
+                        "sev-snp: GHCB_MSR_PAGE_STATE_CHG_REQ failure rc=%d",
+                        rc);
+
+            ghcb_msr.info = GHCB_MSR_PAGE_STATE_CHG_RESP;
+            ghcb_msr.data_raw = (union ghcb_msr_data){
+                .psc_resp = {
+                    .error_code = rc ? 1 : 0,
+                    .rsvd = 0,
+                }
+            }.raw;
+            break;
+        }
+
+        case GHCB_MSR_HYP_FEATURE_REQ:
+        {
+            unsigned long features = 0;
+
+            if ( is_sev_snp_domain(currd) )
+            {
+                features |= GHCB_FEAT_SNP;
+                // features |= GHCB_FEAT_SNP_AP_CREATION;
+                /* features |= GHCB_FEAT_SNP_MULTI_VMPL; */
+            }
+
             break;
         }
 
         case GHCB_MSR_TERM_REQ:
-        {
             gprintk(XENLOG_INFO,
-                    "sev-es: GHCB termination requested: data=0x%"PRIx64"\n", ghcb_data);
-            domain_shutdown(v->domain, 0);
+                    "sev-es: GHCB termination requested: data=0x%"PRIx64"\n", ghcb_msr.data_raw);
+            domain_shutdown(currd, 0);
             break;
-        }
-
+        
         default:
-            gprintk(XENLOG_WARNING, "sev-es: Unknown GHCB request %lu\n", ghcb_info);
+            gprintk(XENLOG_WARNING, "sev-es: Unknown GHCB request %u\n", ghcb_msr.info);
             break;
         }
 
+        vmcb->ghcb_msr = ghcb_msr.raw;
         return;
     }
 
     /* Standard GHCB call */
-    if ( likely(sev->ghcb_page && ghcb_data == sev->ghcb_gfn) )
+    if ( likely(vmpl_state->ghcb_page && ghcb_msr.raw == vmpl_state->ghcb_gfn) )
     {
         /* GHCB is already mapped and hasn't moved */
-        sev_es_ghcb_call(v, sev->ghcb_map);
+        sev_es_ghcb_call(v, vmpl_state->ghcb_map);
         return;
     }
 
-    ghcb_page = get_page_from_gfn(v->domain, ghcb_data, &p2mt, P2M_ALLOC);
-
-    if ( p2mt != p2m_ram_rw )
-    {
-        gprintk(XENLOG_WARNING,
-                "sev-es: Invalid GHCB page type: gfn=%"PRI_xen_pfn", %d != %d\n",
-                ghcb_data, p2mt, p2m_ram_rw);
-
-        if ( ghcb_page )
-            put_page(ghcb_page);
-
+    if ( sev_es_register_ghcb(currd, vmpl_state, ghcb_msr.raw, false) )
         return;
-    }
-
-    if ( sev->ghcb_page )
-    {
-        UNMAP_DOMAIN_PAGE(sev->ghcb_map);
-        put_page(sev->ghcb_page);
-    }
-
-    ghcb_map = __map_domain_page(ghcb_page);
-    sev->ghcb_map = ghcb_map;
-    sev->ghcb_page = ghcb_page;
-    sev->ghcb_gfn = ghcb_data;
 
     sev_es_ghcb_call(v, ghcb_map);
 }

@@ -1507,6 +1507,7 @@ static bool mark_page_free(struct page_info *pg, mfn_t mfn)
                    mfn_x(mfn), d ? d->domain_id : -1);
         else if ( d->coco_ops && d->coco_ops->reclaim_mem )
             d->coco_ops->reclaim_mem(d, pg);
+        ASSERT(!(pg->count_info & PGC_coco_restrict));
     }
 
     /*

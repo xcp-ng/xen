@@ -64,4 +64,12 @@ struct coco_prepare_initial_mem {
 typedef struct coco_prepare_initial_mem coco_prepare_initial_mem_t;
 DEFINE_XEN_GUEST_HANDLE(coco_prepare_initial_mem_t);
 
+#define XEN_COCO_platform_op 2
+
+/*
+ * XEN_COCO_arch_op: Architecture specific sub-operation.
+ *
+ * See arch_coco_op in arch-$arch/hvm/coco.h.
+ */
+
 #endif /* __XEN_PUBLIC_HVM_COCO_H__ */

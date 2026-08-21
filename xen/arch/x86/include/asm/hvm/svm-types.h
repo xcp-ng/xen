@@ -5,16 +5,26 @@
 #ifndef X86_SVM_TYPES_H
 #define X86_SVM_TYPES_H
 
+#include <xen/mm-frame.h>
 #include <xen/types.h>
 
 #include <asm/psp-sev.h>
 
 struct sev_state {
-    uint32_t asp_handle;
-    union sev_guest_policy asp_policy;
-    uint8_t  measure[48];
-    uint32_t measure_len; /* 48 bytes */
     unsigned long flags;
+
+    union {
+        struct {
+            uint32_t asp_handle;
+            union sev_guest_policy policy;
+            uint8_t  measure[32];
+            uint32_t measure_len;
+        } legacy;
+        struct {
+            struct page_info *gctx_page;
+            union snp_guest_policy policy;
+        } snp;
+    };
 };
 
 struct svm_domain {
@@ -33,11 +43,18 @@ struct svm_domain {
 
 struct ghcb;
 
-struct sev_vcpu {
+#define SEV_MAX_VMPL 4
+
+struct sev_vmpl_state {
     struct page_info *vmsa_page;
     struct page_info *ghcb_page;
     uint64_t ghcb_gfn;
     struct ghcb *ghcb_map;
+};
+
+struct sev_vcpu {
+    unsigned int current_vmpl;
+    struct sev_vmpl_state vmpl[SEV_MAX_VMPL];
 
     /*
      * Track if vCPU is in NMI, only used for SEV-ES.

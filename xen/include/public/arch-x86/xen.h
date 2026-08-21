@@ -312,6 +312,7 @@ struct xen_arch_domainconfig {
         struct {
 /* Use provided policy if set. If cleared, use default Xen policy. */
 #define XEN_X86_SEV_POLICY_VALID (1u << 0)
+#define XEN_X86_SEV_SNP          (1u << 1)
             uint32_t flags;
             uint64_t policy;
         } sev;

@@ -38,7 +38,7 @@ TODO:
 #define ASP_CMD_BUFF_SIZE    0x1000
 #define SEV_FW_BLOB_MAX_SIZE 0x4000
 
-#define SEV_ES_TMR_SIZE	 (1024 * 1024)
+#define SEV_ES_TMR_SIZE	MB(1)
 
 /*
  * SEV platform state
@@ -57,7 +57,7 @@ struct sev_vdata {
 };
 
 struct psp_vdata {
-    const unsigned short   base_offset;
+    const unsigned short base_offset;
     const struct sev_vdata *sev;
     const unsigned int feature_reg;
     const unsigned int inten_reg;
@@ -65,19 +65,19 @@ struct psp_vdata {
     const char* name;
 };
 
-static struct sev_vdata sevv1 = {
+const static struct sev_vdata sevv1 = {
     .cmdresp_reg         = 0x10580,     /* C2PMSG_32 */
     .cmdbuff_addr_lo_reg = 0x105e0,     /* C2PMSG_56 */
     .cmdbuff_addr_hi_reg = 0x105e4,     /* C2PMSG_57 */
 };
 
-static struct sev_vdata sevv2 = {
+const static struct sev_vdata sevv2 = {
     .cmdresp_reg         = 0x10980,     /* C2PMSG_32 */
     .cmdbuff_addr_lo_reg = 0x109e0,     /* C2PMSG_56 */
     .cmdbuff_addr_hi_reg = 0x109e4,     /* C2PMSG_57 */
 };
 
-static struct psp_vdata pspv1 = {
+const static struct psp_vdata pspv1 = {
     .base_offset = PCI_BASE_ADDRESS_2,
     .sev         = &sevv1,
     .feature_reg = 0x105fc,     /* C2PMSG_63 */
@@ -86,7 +86,7 @@ static struct psp_vdata pspv1 = {
     .name = "pspv1",
 };
 
-static struct psp_vdata pspv2 = {
+const static struct psp_vdata pspv2 = {
     .base_offset = PCI_BASE_ADDRESS_2,
     .sev         = &sevv2,
     .feature_reg = 0x109fc,     /* C2PMSG_63 */
@@ -95,7 +95,7 @@ static struct psp_vdata pspv2 = {
     .name = "pspv2",
 };
 
-static struct psp_vdata pspv4 = {
+const static struct psp_vdata pspv4 = {
     .base_offset = PCI_BASE_ADDRESS_2,
     .sev         = &sevv2,
     .feature_reg = 0x109fc,     /* C2PMSG_63 */
@@ -104,7 +104,7 @@ static struct psp_vdata pspv4 = {
     .name = "pspv4",
 };
 
-static struct psp_vdata pspv6 = {
+const static struct psp_vdata pspv6 = {
     .base_offset =  PCI_BASE_ADDRESS_2,
     .sev         = &sevv2,
     .feature_reg = 0x109fc,     /* C2PMSG_63 */
@@ -117,7 +117,7 @@ struct amd_sp_dev
 {
     struct list_head list;
     struct pci_dev   *pdev;
-    struct  psp_vdata *vdata;
+    const struct psp_vdata *vdata;
     struct page_info *es_tmr_region;
     void    *io_base;
     paddr_t io_pbase;
@@ -226,14 +226,49 @@ static unsigned int sev_cmd_buffer_len(int cmd)
             return sizeof(struct sev_data_attestation_report);
         case SEV_CMD_SEND_CANCEL:
             return sizeof(struct sev_data_send_cancel);
+        case SEV_CMD_SNP_INIT:
+        case SEV_CMD_SNP_INIT_EX:
+            return sizeof(struct sev_data_snp_init_ex);
+        case SEV_CMD_SNP_SHUTDOWN_EX:
+            return sizeof(struct sev_data_snp_shutdown_ex);
+        case SEV_CMD_SNP_PLATFORM_STATUS:
+            return sizeof(struct sev_data_snp_status);
+        case SEV_CMD_SNP_DECOMMISSION:
+            return sizeof(struct snp_guest_context);
+        case SEV_CMD_SNP_ACTIVATE:
+            return sizeof(struct sev_data_snp_activate);
+        case SEV_CMD_SNP_GUEST_STATUS:
+            return sizeof(struct sev_data_snp_guest_status);
+        case SEV_CMD_SNP_GCTX_CREATE:
+            return sizeof(struct snp_guest_context);
+        case SEV_CMD_SNP_GUEST_REQUEST:
+            return sizeof(struct sev_data_snp_guest_request);
+        case SEV_CMD_SNP_LAUNCH_START:
+            return sizeof(struct sev_data_snp_launch_start);
+        case SEV_CMD_SNP_LAUNCH_UPDATE:
+            return sizeof(struct sev_data_snp_launch_update);
+        case SEV_CMD_SNP_LAUNCH_FINISH:
+            return sizeof(struct sev_data_snp_launch_finish);
+        case SEV_CMD_SNP_DBG_DECRYPT:
+        case SEV_CMD_SNP_DBG_ENCRYPT:
+            return sizeof(struct sev_data_snp_dbg);
+        case SEV_CMD_SNP_PAGE_RECLAIM:
+            return sizeof(struct sev_data_snp_page_reclaim);
+        case SEV_CMD_SNP_PAGE_UNSMASH:
+            return sizeof(struct sev_data_snp_page_unsmash);
+        case SEV_CMD_SNP_CONFIG:
+            return sizeof(struct sev_data_snp_config);
+        case SEV_CMD_SNP_DOWNLOAD_FIRMWARE_EX:
+            return sizeof(struct sev_data_snp_download_firmware);
+        case SEV_CMD_SNP_COMMIT:
+            return sizeof(struct sev_data_snp_commit);
+        case SEV_CMD_SNP_VLEK_LOAD:
+            return sizeof(struct sev_data_snp_vlek_load);
+        case SEV_CMD_SNP_FEATURE_INFO:
+            return sizeof(struct sev_data_snp_feature_info);
         default:
             return 0;
     }
-}
-
-static void invalidate_cache(void *unused)
-{
-    wbinvd();
 }
 
 int _sev_do_cmd(struct amd_sp_dev *sp, int cmd, void *data, unsigned int *psp_ret)
@@ -468,6 +503,7 @@ static int __init sp_alloc_special_regions(struct amd_sp_dev *sp)
 {
     wbinvd();
     sp->es_tmr_region = alloc_domheap_pages(NULL, get_order_from_bytes(SEV_ES_TMR_SIZE), 0);
+    ;
     
     if ( !sp->es_tmr_region )
         dprintk(XENLOG_ERR, "asp-%pp: can't allocate TMR memory (ES unavailable)\n", &sp->pdev->sbdf);
@@ -556,7 +592,7 @@ static int __init sp_dev_init(struct amd_sp_dev *sp)
         return rc;
     }
 
-    on_each_cpu(invalidate_cache, NULL, 1);
+    flush_all(FLUSH_CACHE_EVICT);
 
     rc = sp_df_flush(sp);
     if ( rc )
@@ -658,88 +694,48 @@ static int __init sp_init_irq(struct amd_sp_dev *sp)
     return 0;
 }
 
-static int __init sp_map_iomem(struct amd_sp_dev *sp)
-{
-    uint32_t base_low;
-    uint32_t base_high;
-    uint16_t cmd;
-    size_t   size;
-    bool     high_space;
-
-    base_low = pci_conf_read32(sp->pdev->sbdf, sp->vdata->base_offset);
-
-    if ( (base_low & PCI_BASE_ADDRESS_SPACE) != PCI_BASE_ADDRESS_SPACE_MEMORY )
-        return -EINVAL;
-
-    if ( (base_low & PCI_BASE_ADDRESS_MEM_TYPE_MASK) == PCI_BASE_ADDRESS_MEM_TYPE_64 )
-    {
-        base_high = pci_conf_read32(sp->pdev->sbdf, sp->vdata->base_offset + 4);
-        high_space = true;
-    } else {
-        base_high = 0;
-        high_space = false;
-    }
-
-    sp->io_pbase = ((paddr_t)base_high << 32) | (base_low & PCI_BASE_ADDRESS_MEM_MASK);
-    ASSERT(sp->io_pbase);
-
-    pci_conf_write32(sp->pdev->sbdf, sp->vdata->base_offset, 0xFFFFFFFF);
-
-    if ( high_space ) {
-        pci_conf_write32(sp->pdev->sbdf, sp->vdata->base_offset + 4, 0xFFFFFFFF);
-        size = (size_t)pci_conf_read32(sp->pdev->sbdf, sp->vdata->base_offset + 4) << 32;
-    } else
-        size = ~0xffffffffUL;
-
-    size |= pci_conf_read32(sp->pdev->sbdf, sp->vdata->base_offset);
-    sp->io_size = ~(size & PCI_BASE_ADDRESS_MEM_MASK) + 1;
-
-    pci_conf_write32(sp->pdev->sbdf, sp->vdata->base_offset, base_low);
-
-    if ( high_space )
-          pci_conf_write32(sp->pdev->sbdf, sp->vdata->base_offset + 4, base_high);
-
-    cmd = pci_conf_read16(sp->pdev->sbdf, PCI_COMMAND);
-    pci_conf_write16(sp->pdev->sbdf, PCI_COMMAND, cmd | PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER);
-
-    sp->io_base = ioremap(sp->io_pbase, sp->io_size);
-    if ( !sp->io_base )
-        return -EFAULT;
-
-    if ( pci_ro_device(0, sp->pdev->bus, sp->pdev->devfn) )
-    {
-        dprintk(XENLOG_ERR, "asp-%pp: can't hide PCI device\n",&sp->pdev->sbdf);
-        return -EFAULT;
-    }
-
-    return 0;
-}
-
-static int  __init sp_dev_create(struct pci_dev *pdev, struct psp_vdata *vdata)
+static int  __init sp_dev_create(struct pci_dev *pdev, const struct psp_vdata *vdata)
 {
     struct amd_sp_dev *sp;
     int rc;
+    paddr_t io_base;
+    uint64_t io_size;
 
-    printk(XENLOG_INFO "asp: discovered asp-%pp device\n", &pdev->sbdf);
+    printk(XENLOG_INFO "asp: Found asp-%pp device\n", &pdev->sbdf);
 
-    sp = xzalloc(struct amd_sp_dev);
+    if ( pci_ro_device(0, pdev->bus, pdev->devfn) )
+    {
+        printk(XENLOG_ERR "asp-%pp: can't hide PCI device\n", &pdev->sbdf);
+        return -EFAULT;
+    }
+
+    sp = vzalloc(sizeof(*sp));
     if ( !sp )
         return -ENOMEM;
 
     sp->pdev = pdev;
     sp->vdata = vdata;
-    sp->state = SEV_STATE_UNINIT;
+
+    pci_size_mem_bar(pdev->sbdf, vdata->base_offset, &io_base, &io_size, 0);
+
+    if ( io_size == 0 )
+    {
+        vfree(sp);
+        return -EIO;
+    }
+
+    sp->pdev = pdev;
+
+    sp->io_pbase = io_base;
+    sp->io_size = io_size;
+
+    sp->io_base = ioremap(sp->io_pbase, sp->io_size);
+    if ( !sp->io_base )
+        return -EFAULT;
 
     init_timer(&sp->cmd_timer, do_sp_cmd_timer, (void*)sp, 0);
 
     init_waitqueue_head(&sp->cmd_in_progress);
-
-    rc = sp_map_iomem(sp);
-    if ( rc )
-    {
-        dprintk(XENLOG_ERR, "asp-%pp: can't map iomem %d\n", &sp->pdev->sbdf, rc);
-        return rc;
-    }
 
     rc = sp_init_irq(sp);
     if ( rc )
@@ -790,51 +786,47 @@ static void sp_devs_destroy(void)
     }
 }
 
+static int __init amd_sp_probe_one(struct pci_dev *pdev, void *arg)
+{
+    const struct psp_vdata *vdata;
+    
+    if ( pci_conf_read16(pdev->sbdf, PCI_VENDOR_ID) != PCI_VENDOR_ID_AMD )
+        return 0;
+
+    switch ( pci_conf_read16(pdev->sbdf, PCI_DEVICE_ID) )
+    {
+        case 0x1456:
+            vdata = &pspv1;
+            break;
+        case 0x1486:
+            vdata = &pspv2;
+            break;
+        case 0x14CA:
+            vdata = &pspv4;
+            break;
+        case 0x156E:
+            vdata = &pspv6;
+            break;
+        default:
+            return 0;
+    }
+    
+    return sp_dev_create(pdev, vdata);
+}
+
 static int __init amd_sp_probe(void)
 {
-    int bus = 0, devfn = 0, rc;
-    struct  amd_sp_dev *sp;
+    int rc;
+    struct amd_sp_dev *sp;
 
-     if ( boot_cpu_has(X86_FEATURE_XEN_SHSTK) )
-     {
+    if ( boot_cpu_has(X86_FEATURE_XEN_SHSTK) )
+    {
         force_sync = true;
         printk(XENLOG_INFO "asp: CET-SS detected - sync mode forced\n");
-     }
+    }
 
-    for ( bus = 0; bus < 256; ++bus )
-        for ( devfn = 0; devfn < 256; ++devfn )
-        {
-            struct pci_dev *pdev;
-            pcidevs_lock();
-            pdev = pci_get_pdev(NULL, PCI_SBDF(0, bus, devfn));
-            pcidevs_unlock();
-
-            if ( !pdev || pci_conf_read16(pdev->sbdf, PCI_VENDOR_ID) !=
-                 PCI_VENDOR_ID_AMD )
-                continue;
-
-            switch ( pci_conf_read16(pdev->sbdf, PCI_DEVICE_ID) )
-            {
-                case 0x1456:
-                    rc = sp_dev_create(pdev, &pspv1);
-                    break;
-                case 0x1486:
-                    rc = sp_dev_create(pdev, &pspv2);
-                    break;
-                case 0x14CA:
-                    rc = sp_dev_create(pdev, &pspv4);
-                    break;
-                case 0x156E:
-                    rc = sp_dev_create(pdev, &pspv6);
-                    break;
-                default:
-                    rc = 0;
-                    break;
-            }
-            if ( rc )
-                goto err;
-        }
-
+    rc = pci_iterate_devices(amd_sp_probe_one, NULL);
+    
     for_each_sp_unit(sp)
     {
         rc = sp_dev_init(sp);

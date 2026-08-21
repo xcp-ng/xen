@@ -620,7 +620,14 @@ struct vmcb_struct {
         u64 r13;
         u64 r14;
         u64 r15;
-        u64 res1[13];
+        u64 res1[6];
+        union {
+            struct {
+                bool snp:1;
+            };
+            u64 raw;
+        } sev_features;
+        u64 res2[6];
         u64 xcr0;
     } vmsa_regs;
     u64 res18[258];

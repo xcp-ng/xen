@@ -43,6 +43,7 @@
 
 #ifdef CONFIG_COCO_AMD_SEV
 #include <asm/hvm/svm/sev.h>
+#include <asm/hvm/svm/sev_snp.h>
 #endif
 
 static int update_domain_cpu_policy(struct domain *d,
@@ -156,8 +157,12 @@ void arch_get_domain_info(const struct domain *d,
     #ifdef CONFIG_COCO_AMD_SEV
     if ( is_sev_domain(d) )
     {
-        info->arch_config.coco.sev.flags = XEN_X86_SEV_POLICY_VALID;
-        info->arch_config.coco.sev.policy = d->arch.hvm.svm.sev.asp_policy.raw;
+        const struct sev_state *sev = &d->arch.hvm.svm.sev;
+
+        info->arch_config.coco.sev.flags = XEN_X86_SEV_POLICY_VALID | sev->flags;
+        info->arch_config.coco.sev.policy =
+            is_sev_snp_domain(d) ? sev->snp.policy.raw
+                                 : sev->legacy.policy.raw;
     }
     #endif
 }

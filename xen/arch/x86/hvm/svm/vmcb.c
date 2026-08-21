@@ -89,25 +89,12 @@ static int construct_vmcb(struct vcpu *v)
                                  CR_INTERCEPT_CR8_WRITE);
     }
 
-    if ( is_sev_es_domain(v->domain) )
-    {
-        svm->sev.vmsa_page = alloc_domheap_page(v->domain, MEMF_no_owner);
-        if ( svm->sev.vmsa_page == NULL )
-            return -ENOMEM;
-
-        vmcb->vmsa_pa = page_to_maddr(svm->sev.vmsa_page);
-    }
-
     svm->vmcb_sync_state = vmcb_needs_vmload;
 
     /* I/O and MSR permission bitmaps. */
     svm->msrpm = alloc_xenheap_pages(get_order_from_bytes(MSRPM_SIZE), 0);
     if ( svm->msrpm == NULL )
-    {
-        if ( is_sev_es_domain(v->domain) )
-            free_domheap_page(svm->sev.vmsa_page);
         return -ENOMEM;
-    }
     memset(svm->msrpm, 0xff, MSRPM_SIZE);
 
     svm_disable_intercept_for_msr(v, MSR_FS_BASE);
@@ -239,9 +226,7 @@ static int construct_vmcb(struct vcpu *v)
 
         svm_disable_intercept_for_msr(v, MSR_AMD64_SEV_ES_GHCB);
 
-        svm->vmcb->ghcb_msr = GHCB_MSR_SEV_INFO(GHCB_VERSION_MAX,
-                                                GHCB_VERSION_MIN,
-                                                raw_cpu_policy.extd.c_bit_pos);
+        vmcb->ghcb_msr = sev_es_default_ghcb_msr(v->domain);
     }
 
     return 0;
@@ -287,12 +272,6 @@ void svm_destroy_vmcb(struct vcpu *v)
         free_xenheap_pages(
             svm->msrpm, get_order_from_bytes(MSRPM_SIZE));
         svm->msrpm = NULL;
-    }
-
-    if ( svm->sev.vmsa_page != NULL )
-    {
-        free_domheap_page(svm->sev.vmsa_page);
-        svm->sev.vmsa_page = NULL;
     }
 
     nv->nv_n1vmcx = NULL;
