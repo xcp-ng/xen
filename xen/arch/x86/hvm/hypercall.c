@@ -170,7 +170,7 @@ int hvm_hypercall(struct cpu_user_regs *regs)
         fastabi_dispatch(index, regs);
 
         hvmemul_cache_restore(curr, token);
-        return HVM_HCALL_completed;
+        return curr->hcall_preempted ? HVM_HCALL_preempted : HVM_HCALL_completed;
     }
     #endif
 
