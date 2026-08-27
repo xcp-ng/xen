@@ -485,7 +485,7 @@ static void sev_es_ghcb_call(struct vcpu *v, struct ghcb *ghcb)
         guest_cpuid(v, leaf, subleaf, &res);
         TRACE(TRC_HVM_CPUID, leaf, subleaf, res.a, res.b, res.c, res.d);
 
-        v->arch.xcr0 = 0;
+        v->arch.xcr0 = X86_XCR0_X87;
 
         GHCB_CLEAR_VALID(ghcb);
 
@@ -710,6 +710,8 @@ static int sev_es_register_ghcb(struct domain *d, struct sev_vmpl_state *vmpl_st
     vmpl_state->ghcb_map = __map_domain_page(ghcb_page);
     vmpl_state->ghcb_page = ghcb_page;
     vmpl_state->ghcb_gfn = ghcb_gfn;
+
+    return 0;
 }
 
 void sev_es_do_vmgexit(struct vcpu *v)
@@ -717,13 +719,8 @@ void sev_es_do_vmgexit(struct vcpu *v)
     struct domain *currd = v->domain;
     struct vmcb_struct *vmcb = v->arch.hvm.svm.vmcb;
     struct sev_vcpu *sev = &v->arch.hvm.svm.sev;
-    struct page_info *ghcb_page;
-    struct ghcb *ghcb_map;
     struct sev_vmpl_state *vmpl_state;
     union ghcb_msr ghcb_msr;
-
-    /* GHCB MSR Protocol (SEV-ES GHCB specification) */
-    p2m_type_t p2mt;
 
     /* Only SEV-SNP domains can have VMPL > 0 */
     ASSERT(is_sev_snp_domain(currd) || sev->current_vmpl == 0);
@@ -738,7 +735,8 @@ void sev_es_do_vmgexit(struct vcpu *v)
 
     ghcb_msr.raw = vmcb->ghcb_msr;
     vmpl_state = &sev->vmpl[sev->current_vmpl];
-
+    
+    /* GHCB MSR Protocol (SEV-ES GHCB specification) */
     if ( ghcb_msr.info )
     {
         const union ghcb_msr_data ghcb_data = { .raw = ghcb_msr.data_raw };
@@ -782,7 +780,8 @@ void sev_es_do_vmgexit(struct vcpu *v)
             }
 
             gdprintk(XENLOG_DEBUG,
-                     "sev-es: GHCB MSR CPUID: %08x[reg%u] = %08x\n", leaf, reg, value);
+                     "sev-es: GHCB MSR CPUID: %08x[reg%u] = %08x\n", 
+                     leaf, reg, value);
             
             ghcb_msr.info = 
             ghcb_msr.data_raw = (union ghcb_msr_data){
@@ -814,7 +813,6 @@ void sev_es_do_vmgexit(struct vcpu *v)
             gfn_t gfn = _gfn(ghcb_data.psc_req.gfn);
             unsigned long op = ghcb_data.psc_req.op;
             int rc = 0;
-            unsigned int error_code;
 
             if ( is_sev_snp_domain(currd) )
                 rc = snp_page_state_change_one(currd, gfn, op == 0x0001);
@@ -850,21 +848,25 @@ void sev_es_do_vmgexit(struct vcpu *v)
             if ( is_sev_snp_domain(currd) )
             {
                 features |= GHCB_FEAT_SNP;
-                // features |= GHCB_FEAT_SNP_AP_CREATION;
+                /* features |= GHCB_FEAT_SNP_AP_CREATION; */
                 /* features |= GHCB_FEAT_SNP_MULTI_VMPL; */
             }
 
+            ghcb_msr.info = GHCB_MSR_HYP_FEATURE_RESP;
+            ghcb_msr.data_raw = features; 
             break;
         }
 
         case GHCB_MSR_TERM_REQ:
             gprintk(XENLOG_INFO,
-                    "sev-es: GHCB termination requested: data=0x%"PRIx64"\n", ghcb_msr.data_raw);
+                    "sev-es: GHCB termination requested: data=0x%"PRIx64"\n",
+                    (unsigned long)ghcb_msr.data_raw);
             domain_shutdown(currd, 0);
             break;
         
         default:
-            gprintk(XENLOG_WARNING, "sev-es: Unknown GHCB request %u\n", ghcb_msr.info);
+            gprintk(XENLOG_WARNING, "sev-es: Unknown GHCB request %u\n",
+                    (unsigned int)ghcb_msr.info);
             break;
         }
 
@@ -883,5 +885,5 @@ void sev_es_do_vmgexit(struct vcpu *v)
     if ( sev_es_register_ghcb(currd, vmpl_state, ghcb_msr.raw, false) )
         return;
 
-    sev_es_ghcb_call(v, ghcb_map);
+    sev_es_ghcb_call(v, vmpl_state->ghcb_map);
 }

@@ -311,10 +311,14 @@ struct xen_arch_domainconfig {
     union {
         struct {
 /* Use provided policy if set. If cleared, use default Xen policy. */
-#define XEN_X86_SEV_POLICY_VALID (1u << 0)
-#define XEN_X86_SEV_SNP          (1u << 1)
+#define XEN_X86_SEV_POLICY_VALID       (1u << 0)
+#define XEN_X86_SEV_SNP                (1u << 1)
+#define XEN_X86_SEV_FEATURES_VALID     (1u << 2)
+#define XEN_X86_SEV_GHCB_FEAT_VALID    (1u << 3)
             uint32_t flags;
             uint64_t policy;
+            uint64_t sev_features;
+            uint64_t ghcb_features;
         } sev;
     } coco;
 };
