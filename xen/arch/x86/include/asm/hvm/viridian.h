@@ -100,6 +100,9 @@ void viridian_synic_poll(struct vcpu *v);
 bool viridian_synic_is_auto_eoi_sint(const struct vcpu *v,
                                      unsigned int vector);
 
+void viridian_dump_domain_info(struct domain *d);
+void viridian_dump_vcpu_info(struct vcpu *v);
+
 #endif /* __ASM_X86_HVM_VIRIDIAN_H__ */
 
 /*

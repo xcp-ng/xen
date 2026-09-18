@@ -1222,6 +1222,92 @@ static int __init cf_check parse_viridian_version(const char *arg)
 }
 custom_param("viridian-version", parse_viridian_version);
 
+void viridian_dump_domain_info(struct domain *d)
+{
+    const struct viridian_domain *vd;
+
+    if ( !is_viridian_domain(d) )
+        return;
+
+    vd = d->arch.hvm.viridian;
+
+    printk("Viridian domain %u: hypercall_gpa %#" PRIx64
+           " guest_os_id %#" PRIx64 " time_ref_count %#" PRIx64
+           " reference_tsc %#" PRIx64 "\n",
+           d->domain_id,
+           vd->hypercall_gpa.raw,
+           vd->guest_os_id.raw,
+           vd->time_ref_count.val,
+           vd->reference_tsc.msr.raw);
+}
+
+void viridian_dump_vcpu_info(struct vcpu *v)
+{
+    const struct viridian_vcpu *vv;
+    unsigned int i;
+
+    if ( !is_viridian_vcpu(v) )
+        return;
+
+    vv = v->arch.hvm.viridian;
+
+    printk("    Viridian VCPU state: vp_assist %#" PRIx64
+           " assist_pending %u polled %u\n",
+           vv->vp_assist.msr.raw,
+           vv->apic_assist_pending,
+           vv->polled);
+    printk("        scontrol %#" PRIx64 " siefp %#" PRIx64
+           " simp %#" PRIx64 "\n",
+           vv->scontrol,
+           vv->siefp,
+           vv->simp.msr.raw);
+
+    for ( i = 0; i < ARRAY_SIZE(vv->sint); i++ )
+        printk("        sint%u raw %#" PRIx64 " vector %u %c%c%c\n",
+               i,
+               vv->sint[i].as_uint64,
+               vv->sint[i].vector,
+               vv->sint[i].masked ? 'M' : '_',
+               vv->sint[i].auto_eoi ? 'A' : '_',
+               vv->sint[i].polling ? 'P' : '_');
+
+    for ( i = 0; i < ARRAY_SIZE(vv->stimer); i++ )
+    {
+        const struct viridian_stimer *vs = &vv->stimer[i];
+        bool enabled = vv->stimer_enabled & (1u << i);
+        bool pending = vv->stimer_pending & (1u << i);
+
+        printk("        stimer %u: ", i);
+
+        if ( !enabled )
+        {
+            printk("disabled pending %u\n", pending);
+            continue;
+        }
+
+        printk("config %#" PRIx64 " (%c%c%c%c%c vector %u sintx %u)\n",
+               vs->config.as_uint64,
+               vs->config.enable ? 'E' : '_',
+               vs->config.periodic ? 'P' : '_',
+               vs->config.lazy ? 'L' : '_',
+               vs->config.auto_enable ? 'A' : '_',
+               vs->config.direct_mode ? 'D' : '_',
+               vs->config.apic_vector,
+               vs->config.sintx);
+        printk("            count %#" PRIx64 " expire %#" PRIx64
+               " started %u pending %u\n",
+               vs->count,
+               vs->expiration,
+               vs->started,
+               pending);
+    }
+
+    printk("        crash:");
+    for ( i = 0; i < ARRAY_SIZE(vv->crash_param); i++ )
+        printk(" %#" PRIx64, vv->crash_param[i]);
+    printk("\n");
+}
+
 /*
  * Local variables:
  * mode: C

@@ -2494,6 +2494,7 @@ void arch_dump_domain_info(struct domain *d)
         vpic_dump_domain_info(d);
         vioapic_dump(d);
         hpet_dump(d);
+        viridian_dump_domain_info(d);
     }
 #endif
 }
@@ -2506,7 +2507,10 @@ void arch_dump_vcpu_info(struct vcpu *v)
 
 #ifdef CONFIG_HVM
     if ( is_hvm_vcpu(v) )
+    {
         vlapic_dump_vcpu_info(v);
+        viridian_dump_vcpu_info(v);
+    }
 #endif
 }
 
