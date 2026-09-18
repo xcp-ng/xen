@@ -154,4 +154,6 @@ static inline void vlapic_sync_pir_to_irr(struct vcpu *v)
         alternative_vcall(hvm_funcs.sync_pir_to_irr, v);
 }
 
+void vlapic_dump_vcpu_info(struct vcpu *v);
+
 #endif /* __ASM_X86_HVM_VLAPIC_H__ */

@@ -53,6 +53,7 @@
 #include <asm/hvm/nestedhvm.h>
 #include <asm/hvm/support.h>
 #ifdef CONFIG_HVM
+#include <asm/hvm/vlapic.h>
 #include <asm/hvm/vpic.h>
 #include <asm/hvm/vioapic.h>
 #include <asm/hvm/vpt.h>
@@ -2502,6 +2503,11 @@ void arch_dump_vcpu_info(struct vcpu *v)
     paging_dump_vcpu_info(v);
 
     vpmu_dump(v);
+
+#ifdef CONFIG_HVM
+    if ( is_hvm_vcpu(v) )
+        vlapic_dump_vcpu_info(v);
+#endif
 }
 
 void vcpu_kick(struct vcpu *v)

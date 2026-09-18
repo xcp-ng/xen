@@ -1718,6 +1718,196 @@ void vlapic_destroy(struct vcpu *v)
     free_domheap_page(vlapic->regs_page);
 }
 
+union vlapic_lvt_entry {
+    uint32_t bits;
+    struct {
+        uint8_t vector;
+        uint8_t delivery_mode:4;
+        uint8_t delivery_status:1;
+        uint8_t polarity:1;
+        uint8_t remote_irr:1;
+        uint8_t trig_mode:1;
+        uint8_t mask:1;
+        uint8_t reserved:7;
+        uint8_t reserved2;
+    } fields;
+};
+
+static const char * const vlapic_delivery_modes[] = {
+    [0] = "normal",
+    [1] = "lowprio",
+    [2] = "smi",
+    [3] = "reserved",
+    [4] = "nmi",
+    [5] = "init",
+    [6] = "sipi",
+    [7] = "external",
+};
+
+static const char * const vlapic_lvt_names[] = {
+    [0] = "timer",
+    [1] = "thermal",
+    [2] = "pmc",
+    [3] = "lint0",
+    [4] = "lint1",
+    [5] = "err",
+};
+
+static const char * const vlapic_timer_modes[] = {
+    [0] = "one-shot",
+    [1] = "periodic",
+    [2] = "tsc-deadline",
+    [3] = "reserved",
+};
+
+static const char * const vlapic_reg_names[] = {
+    [0x00] = "",        [0x01] = "",        [0x02] = "id",
+    [0x03] = "version", [0x04] = "",        [0x05] = "",
+    [0x06] = "",        [0x07] = "",        [0x08] = "tpr",
+    [0x09] = "apr",     [0x0a] = "ppr",     [0x0b] = "eoi",
+    [0x0c] = "rrd",     [0x0d] = "ldr",     [0x0e] = "dfr",
+    [0x0f] = "sivr",    [0x10] = "isr0",    [0x11] = "isr1",
+    [0x12] = "isr2",    [0x13] = "isr3",    [0x14] = "isr4",
+    [0x15] = "isr5",    [0x16] = "isr6",    [0x17] = "isr7",
+    [0x18] = "tmr0",    [0x19] = "tmr1",    [0x1a] = "tmr2",
+    [0x1b] = "tmr3",    [0x1c] = "tmr4",    [0x1d] = "tmr5",
+    [0x1e] = "tmr6",    [0x1f] = "tmr7",    [0x20] = "irr0",
+    [0x21] = "irr1",    [0x22] = "irr2",    [0x23] = "irr3",
+    [0x24] = "irr4",    [0x25] = "irr5",    [0x26] = "irr6",
+    [0x27] = "irr7",    [0x28] = "esr",     [0x29] = "",
+    [0x2a] = "",        [0x2b] = "",        [0x2c] = "",
+    [0x2d] = "",        [0x2e] = "",        [0x2f] = "cmci",
+    [0x30] = "icr0",    [0x31] = "icr1",    [0x32] = "lvtt",
+    [0x33] = "thermal", [0x34] = "pmc",     [0x35] = "lint0",
+    [0x36] = "lint1",   [0x37] = "lerr",    [0x38] = "tmict",
+    [0x39] = "tmcct",   [0x3a] = "",        [0x3b] = "",
+    [0x3c] = "",        [0x3d] = "",        [0x3e] = "dcr",
+    [0x3f] = "",
+};
+
+static const char *vlapic_delivery_mode_name(unsigned int mode)
+{
+    return mode < ARRAY_SIZE(vlapic_delivery_modes) ?
+           vlapic_delivery_modes[mode] : "reserved";
+}
+
+void vlapic_dump_vcpu_info(struct vcpu *v)
+{
+    struct vlapic *vlapic;
+    uint32_t reg_id, reg_ver, reg_ppr, reg_ldr, reg_dfr;
+    uint32_t reg_tmict, reg_tmcct, reg_dcr;
+    unsigned int dcr_val, dcr_divisor, max_lvt, i;
+
+    if ( !has_vlapic(v->domain) )
+        return;
+
+    vlapic = vcpu_vlapic(v);
+    if ( !vlapic->regs )
+        return;
+
+    reg_id = vlapic_get_reg(vlapic, APIC_ID);
+    reg_ver = vlapic_get_reg(vlapic, APIC_LVR);
+    reg_ppr = vlapic_read_aligned(vlapic, APIC_PROCPRI);
+    reg_ldr = vlapic_get_reg(vlapic, APIC_LDR);
+    reg_dfr = vlapic_get_reg(vlapic, APIC_DFR);
+    reg_tmict = vlapic_get_reg(vlapic, APIC_TMICT);
+    reg_tmcct = vlapic_read_aligned(vlapic, APIC_TMCCT);
+    reg_dcr = vlapic_get_reg(vlapic, APIC_TDCR);
+
+    printk("    LAPIC: base_msr %#" PRIx64 ", disabled %#x"
+           ", timer_divisor %#x, tdt_msr %#" PRIx64 ", pending_esr %#x\n",
+           vlapic->hw.apic_base_msr,
+           vlapic->hw.disabled,
+           vlapic->hw.timer_divisor,
+           vlapic->hw.tdt_msr,
+           vlapic->hw.pending_esr);
+    printk("           base_msr: %s, global %s, base address %#" PRIx64 "\n",
+           vlapic->hw.apic_base_msr & APIC_BASE_BSP ? "BSP" : "AP",
+           vlapic->hw.apic_base_msr & APIC_BASE_ENABLE ? "enabled" :
+                                                          "disabled",
+           (uint64_t)vlapic_base_address(vlapic));
+
+    printk("    LAPIC registers:\n");
+    for ( i = 0; i < sizeof(vlapic->regs->data); i += 0x20 )
+        printk("          %5.5s 0x%03x: 0x%08x   %5.5s 0x%03x: 0x%08x\n",
+               vlapic_reg_names[i >> 4],
+               i,
+               vlapic_get_reg(vlapic, i),
+               vlapic_reg_names[(i + 0x10) >> 4],
+               i + 0x10,
+               vlapic_get_reg(vlapic, i + 0x10));
+
+    printk("        lapic id: %x, version: 0x%02x, ppr: 0x%02x\n",
+           reg_id >> 24, reg_ver & 0xff, reg_ppr & 0xff);
+
+    printk("        dfr %s model, ldr logical apic id = 0x%02x\n",
+           (reg_dfr & APIC_DFR_FLAT) == APIC_DFR_FLAT ? "flat" : "cluster",
+           GET_xAPIC_LOGICAL_ID(reg_ldr));
+
+    dcr_val = ((reg_dcr & 8) >> 1) | (reg_dcr & 3);
+    dcr_divisor = 1u << ((dcr_val + 1) & 7);
+    printk("        dcr = 0x%x (divisor = %u)\n", reg_dcr & 0xf,
+           dcr_divisor);
+
+    max_lvt = GET_APIC_MAXLVT(reg_ver) + 1;
+    if ( max_lvt > VLAPIC_LVT_NUM )
+        max_lvt = VLAPIC_LVT_NUM;
+    printk("        max %u lvt entries\n", max_lvt);
+
+    for ( i = 0; i < max_lvt; i++ )
+    {
+        uint32_t lvt_offset = APIC_LVTT + 0x10 * i;
+        uint32_t reg_lvt = vlapic_get_reg(vlapic, lvt_offset);
+        union vlapic_lvt_entry entry = { .bits = reg_lvt };
+
+        printk("        lvt 0x%03x %7s", lvt_offset,
+               vlapic_lvt_names[i]);
+        if ( entry.fields.mask )
+            printk(" (masked)\n");
+        else
+        {
+            printk(" %s delivery to vector 0x%02x"
+                   " %s-triggered active-%s",
+                   vlapic_delivery_mode_name(entry.fields.delivery_mode),
+                   entry.fields.vector,
+                   entry.fields.trig_mode ? "level" : "edge",
+                   entry.fields.polarity ? "low" : "high");
+            if ( entry.fields.trig_mode && entry.fields.remote_irr )
+                printk(" (active)");
+            if ( entry.fields.delivery_status )
+                printk(" (waiting delivery)");
+            printk("\n");
+        }
+
+        if ( i == 0 && !entry.fields.mask )
+        {
+            uint64_t init_cycles = (uint64_t)reg_tmict * dcr_divisor;
+            uint64_t current_cycles = (uint64_t)reg_tmcct * dcr_divisor;
+            uint64_t init_us = 0, init_hz = 0, current_us = 0;
+
+            if ( v->domain->arch.tsc_khz )
+            {
+                init_us = init_cycles * 1000 / v->domain->arch.tsc_khz;
+                current_us = current_cycles * 1000 /
+                             v->domain->arch.tsc_khz;
+                if ( init_cycles )
+                    init_hz = (uint64_t)v->domain->arch.tsc_khz * 1000 /
+                              init_cycles;
+            }
+
+            printk("                          mode %s\n",
+                   vlapic_timer_modes[(reg_lvt >> 17) & 3]);
+            printk("                          initcount    = 0x%08x"
+                   " (%" PRIu64 " us, %" PRIu64 " Hz, %" PRIu64
+                   " cycles)\n",
+                   reg_tmict, init_us, init_hz, init_cycles);
+            printk("                          currentcount = 0x%08x"
+                   " (%" PRIu64 " us, %" PRIu64 " cycles)\n",
+                   reg_tmcct, current_us, current_cycles);
+        }
+    }
+}
+
 /*
  * Local variables:
  * mode: C
