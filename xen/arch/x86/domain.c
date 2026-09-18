@@ -53,6 +53,7 @@
 #include <asm/hvm/nestedhvm.h>
 #include <asm/hvm/support.h>
 #ifdef CONFIG_HVM
+#include <asm/hvm/vpic.h>
 #include <asm/hvm/vioapic.h>
 #include <asm/hvm/vpt.h>
 #endif
@@ -2489,6 +2490,7 @@ void arch_dump_domain_info(struct domain *d)
 #ifdef CONFIG_HVM
     if ( is_hvm_domain(d) )
     {
+        vpic_dump_domain_info(d);
         vioapic_dump(d);
         hpet_dump(d);
     }

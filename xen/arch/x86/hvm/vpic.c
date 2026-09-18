@@ -530,6 +530,51 @@ int vpic_ack_pending_irq(struct vcpu *v)
     return vpic[irq >> 3].irq_base + (irq & 7);
 }
 
+void vpic_dump_domain_info(struct domain *d)
+{
+    struct hvm_hw_vpic state[ARRAY_SIZE(d->arch.hvm.vpic)];
+    unsigned long flags;
+    unsigned int pic, i;
+
+    if ( !has_vpic(d) )
+        return;
+
+    /* Keep the interrupt lock hold time independent of console output. */
+    spin_lock_irqsave(&d->arch.hvm.irq_lock, flags);
+    for ( pic = 0; pic < ARRAY_SIZE(state); pic++ )
+        state[pic] = d->arch.hvm.vpic[pic];
+    spin_unlock_irqrestore(&d->arch.hvm.irq_lock, flags);
+
+    for ( pic = 0; pic < ARRAY_SIZE(state); pic++ )
+    {
+        const struct hvm_hw_vpic *vpic = &state[pic];
+
+        printk("PIC%u: IRQ base %#x, init_state %u, priority_add %u, "
+               "flags %c%c%c%c%c%c%c, int_output %#x\n",
+               pic,
+               vpic->irq_base,
+               vpic->init_state,
+               vpic->priority_add,
+               vpic->readsel_isr ? 'S' : 'R',
+               vpic->poll ? 'P' : '_',
+               vpic->auto_eoi ? 'A' : '_',
+               vpic->rotate_on_auto_eoi ? 'O' : '_',
+               vpic->special_fully_nested_mode ? 'N' : '_',
+               vpic->special_mask_mode ? 'K' : '_',
+               vpic->is_master ? 'M' : 's',
+               vpic->int_output);
+
+        for ( i = 0; i < 8; i++ )
+            printk("    IRQ %u (%u): %c%c%c%c\n",
+                   pic * 8 + i,
+                   pic * 8 + i + vpic->irq_base,
+                   vpic->irr & (1u << i) ? 'R' : '_',
+                   vpic->imr & (1u << i) ? 'M' : '_',
+                   vpic->isr & (1u << i) ? 'S' : '_',
+                   vpic->elcr & (1u << i) ? 'E' : 'L');
+    }
+}
+
 /*
  * Local variables:
  * mode: C
