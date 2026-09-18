@@ -400,6 +400,7 @@ static void get_flags(struct flags *f)
     f->viridian_apic_assist = xenstore_get("platform/viridian_apic_assist");
     f->viridian_crash_ctl = xenstore_get("platform/viridian_crash_ctl");
     f->viridian_stimer = xenstore_get_value(&stimer_set, "platform/viridian_stimer");
+    f->viridian_hcall_ipi = xenstore_get("platform/viridian_hcall_ipi");
 
     /*
      * For vGPU-enabled VMs, it is unsafe to migrate VMs with time_ref_count
