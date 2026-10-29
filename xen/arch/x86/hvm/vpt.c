@@ -329,7 +329,7 @@ int pt_update_irq(struct vcpu *v)
 {
     struct list_head *head = &v->arch.hvm.tm_list;
     struct periodic_time *pt, *temp, *earliest_pt;
-    uint64_t max_lag;
+    uint64_t max_lag, generation;
     int irq, pt_vector = -1;
     bool level;
 
@@ -368,6 +368,7 @@ int pt_update_irq(struct vcpu *v)
     }
 
     earliest_pt->irq_issued = 1;
+    generation = earliest_pt->generation;
     irq = earliest_pt->irq;
     level = earliest_pt->level;
 
@@ -424,6 +425,9 @@ int pt_update_irq(struct vcpu *v)
         list_for_each_entry ( pt, &v->arch.hvm.tm_list, list )
             if ( pt == earliest_pt )
             {
+                if ( pt->generation != generation )
+                    break;
+
                 pt_irq_fired(v, pt);
                 cb = pt->cb;
                 cb_priv = pt->priv;
@@ -562,6 +566,7 @@ void create_periodic_time(
     set_timer(&pt->timer, pt->scheduled);
 
     pt_vcpu_lock(v);
+    pt->generation++;
     pt->on_list = 1;
     list_add(&pt->list, &v->arch.hvm.tm_list);
     pt_vcpu_unlock(v);
